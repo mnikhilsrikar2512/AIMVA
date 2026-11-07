@@ -103,7 +103,7 @@ def test_update_default_and_delete(auth_client):
 
 def test_providers_are_private(auth_client, other_client):
     c = add(auth_client, "openai")
-    assert other_client.get("/api/providers").json() == []
+    assert other_client.get("/api/providers").status_code == 404  # AI providers are the platform owner's only
     assert other_client.patch(f"/api/providers/{c['id']}", json={"name": "x"}).status_code == 404
     assert other_client.post("/api/content/image", json={"prompt": "a cat", "provider": f"conn:{c['id']}"}).status_code == 404
     assert other_client.post("/api/sites", json={"business": "XY", "offer": "Free trial", "writer": f"conn:{c['id']}"}).status_code == 404
@@ -112,7 +112,7 @@ def test_providers_are_private(auth_client, other_client):
 def test_options_list_builtins_and_own(auth_client):
     add(auth_client, "replicate_image")
     refs = [o["ref"] for o in auth_client.get("/api/providers/options?kind=image").json()]
-    assert refs[:2] == ["builtin:pollinations", "builtin:fal"] and refs[2].startswith("conn:")
+    assert refs[:2] == ["builtin:free", "builtin:studio"] and refs[2].startswith("conn:")
     assert auth_client.get("/api/providers/options?kind=nope").status_code == 422
 
 
@@ -185,7 +185,7 @@ def test_replicate_image_polls_and_keeps_a_copy(auth_client, mock_http):
         json={"id": "p1", "status": "succeeded", "output": ["https://replicate.delivery/out.png"]})
     mock_http.get("https://replicate.delivery/out.png").respond(content=png_bytes())
     a = auth_client.post("/api/content/image", json={"prompt": "a cat", "provider": f"conn:{c['id']}", "seed": 7}).json()[0]
-    assert a["url"].startswith("/api/files/") and a["model"] == "black-forest-labs/flux-schnell"
+    assert a["url"].startswith("/api/files/") and "flux" not in a["model"].lower()  # engine shown under a neutral name
 
 
 def test_stability_returns_bytes(auth_client, mock_http):

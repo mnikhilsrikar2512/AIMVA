@@ -55,7 +55,7 @@ def test_free_engine_redraws_with_same_seed_and_keeps_the_rest(auth_client, mock
     route = mock_http.get(url__startswith=POLL).respond(200, content=png((250, 10, 10)), headers={"content-type": "image/png"})
     info = auth_client.get("/api/content/image/edit-engines").json()
     engines = info["engines"]
-    assert [e["ref"] for e in engines] == ["builtin:pollinations"] and engines[0]["precise"] is False
+    assert [e["ref"] for e in engines] == ["builtin:free"] and engines[0]["precise"] is False
     assert info["select_objects"] is False and info["replace_background"] is False
     r = auth_client.post(f"/api/content/image/{a['id']}/edit", json={"pins": [PIN]})
     assert r.status_code == 200, r.text
@@ -283,7 +283,8 @@ def test_models_can_be_swapped_from_env(auth_client, mock_http, monkeypatch):
     assert r.status_code == 200 and better.call_count == 1
     info = auth_client.get("/api/content/image/edit-engines").json()
     m = {x["task"]: x for x in info["models"]}
-    assert m["remove"]["model"] == "fal-ai/better-eraser" and m["remove"]["default"] is False and m["fill"]["default"] is True
+    assert m["remove"]["default"] is False and m["fill"]["default"] is True  # the swapped model is used (call_count above)
+    assert "fal" not in m["remove"]["model"].lower()  # but never named to the customer
 
 
 def test_upload_your_own_photo_and_edit_it(auth_client, mock_http):

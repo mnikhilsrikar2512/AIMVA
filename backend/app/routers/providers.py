@@ -3,11 +3,12 @@ import json
 import logging
 from typing import Callable, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from .. import discreet
 from .. import providers as P
 from ..config import settings
 from ..db import get_db
@@ -19,6 +20,14 @@ router = APIRouter(prefix="/api/providers", tags=["providers"])
 log = logging.getLogger("aimva.providers")
 MAX_CONNECTIONS = 30
 MAX_WORKFLOW_BYTES = 400_000
+
+
+def owner_user(request: Request, user: User = Depends(current_user)) -> User:
+    """Supplier keys and engines are managed by the platform owner only. Everyone else gets a plain 404."""
+    person = getattr(request.state, "person", None) or user
+    if (person.email or "").lower() not in settings.admin_emails:
+        raise HTTPException(404, "Not found.")
+    return user
 
 
 def http_error(e: P.ProviderError) -> HTTPException:
@@ -39,35 +48,48 @@ def _as_dict(c: ProviderConnection) -> dict:
 
 
 # ---- built-ins & lookup -----------------------------------------------------------------
+def studio_key(db: Session, user: User) -> str:
+    """The platform's studio key (app/ai_registry.py); a user's own key only when ALLOW_USER_AI_KEYS is on."""
+    from .. import ai_registry
+    own = integration_secret(db, user.id, "fal").get("api_key") if ai_registry.user_keys_allowed() else ""
+    return own or ai_registry.key_for("image", "fal") or ai_registry.key_for("video", "fal")
+
+
 def builtin_options(db: Session, user: User, kind: str) -> list:
-    fal = bool(integration_secret(db, user.id, "fal").get("api_key") or settings.fal_key)
+    """AIMVA's own engines, under neutral names and ids (see app/discreet.py); suppliers stay on the server."""
+    D = discreet
+    pick = lambda ms: [{"id": D.out_model(m), "label": D.model_label(m)} for m in ms]
+    studio = bool(studio_key(db, user))
     if kind == "image":
         return [
-            {"ref": "builtin:pollinations", "name": "Free FLUX (Pollinations)", "free": True, "available": True,
-             "model": "flux", "models": ["flux", "turbo"], "max_count": 1},
-            {"ref": "builtin:fal", "name": "fal.ai (your fal key)", "available": fal, "model": "fal-ai/flux/schnell",
-             "models": P.PRESETS["fal_image"]["models"], "max_count": 4},
+            {"ref": D.out_ref("builtin:pollinations"), "name": "AIMVA images (free)", "free": True, "available": True,
+             "model": D.out_model("flux"), "models": [D.out_model("flux"), D.out_model("turbo")], "choices": pick(["flux", "turbo"]), "max_count": 1},
+            {"ref": D.out_ref("builtin:fal"), "name": "AIMVA Studio images", "available": studio, "model": D.out_model("fal-ai/flux/schnell"),
+             "models": [D.out_model(m) for m in P.PRESETS["fal_image"]["models"]], "choices": pick(P.PRESETS["fal_image"]["models"]), "max_count": 4},
         ]
     if kind == "video":
-        return [{"ref": "builtin:fal", "name": "fal.ai (your fal key)", "available": fal, "model": "fal-ai/ltx-2/text-to-video",
-                 "models": P.PRESETS["fal_video"]["models"]}]
+        return [{"ref": D.out_ref("builtin:fal"), "name": "AIMVA video", "available": studio, "model": D.out_model("fal-ai/ltx-2/text-to-video"),
+                 "models": [D.out_model(m) for m in P.PRESETS["fal_video"]["models"]], "choices": pick(P.PRESETS["fal_video"]["models"])}]
     if kind == "text":
-        g = bool(gemini_key(db, user.id))
-        return [{"ref": "builtin:gemini", "name": "Google Gemini (Integrations key)", "available": g,
-                 "model": settings.gemini_model, "models": P.PRESETS["gemini"]["models"]}]
+        return [{"ref": D.out_ref("builtin:gemini"), "name": "AIMVA writer", "available": bool(gemini_key(db, user.id)),
+                 "model": D.out_model(settings.gemini_model), "models": [D.out_model(m) for m in P.PRESETS["gemini"]["models"]], "choices": pick(P.PRESETS["gemini"]["models"])}]
     return []
 
 
 def resolve(db: Session, user: User, ref: str, kind: str, model: str = "") -> dict:
     """Turn a provider reference into a connection dict for the adapters. Raises HTTPException."""
+    ref, model = discreet.in_ref(ref), discreet.in_model(model)
     model = P.check_model(model) if model else ""
     if ref == "builtin:fal":
-        key = integration_secret(db, user.id, "fal").get("api_key") or settings.fal_key
+        key = studio_key(db, user)
         if not key:
-            raise HTTPException(400, "Connect fal.ai in Settings → Integrations, or pick another provider.")
+            raise HTTPException(400, f"{'Video' if kind == 'video' else 'Studio images'} isn't switched on for your account yet.")
         return {"adapter": "fal", "base_url": "https://fal.run", "name": "fal.ai", "api_key": key, "extra": {},
                 "model": model or ("fal-ai/flux/schnell" if kind == "image" else "fal-ai/ltx-2/text-to-video")}
     if ref.startswith("conn:"):
+        from .. import ai_registry
+        if not (ai_registry.user_keys_allowed() or (user.email or "").lower() in settings.admin_emails):
+            raise HTTPException(400, "Pick one of AIMVA's engines.")  # own engines are off for this version
         try:
             c = db.get(ProviderConnection, int(ref.split(":", 1)[1]))
         except ValueError:
@@ -97,21 +119,24 @@ def writer(db: Session, user_id: int, ref: str = "auto", agent: str = "general")
 
 # ---- catalogue & CRUD -------------------------------------------------------------------
 @router.get("/presets")
-def presets(user: User = Depends(current_user)):
+def presets(user: User = Depends(owner_user)):
     return [{"id": k, **{x: v.get(x) for x in ("kind", "adapter", "label", "base_url", "model", "models", "docs")},
              "key_optional": bool(v.get("key_optional")), "needs_workflow": bool(v.get("needs_workflow"))}
             for k, v in P.PRESETS.items()]
 
 
 @router.get("")
-def list_connections(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def list_connections(user: User = Depends(owner_user), db: Session = Depends(get_db)):
     q = select(ProviderConnection).where(ProviderConnection.user_id == user.id).order_by(ProviderConnection.kind, ProviderConnection.id)
     return [conn_out(c) for c in db.scalars(q)]
 
 
 @router.get("/options")
-def options(kind: Literal["text", "image", "video"], user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Everything the user can pick in a generator: built-ins plus their own providers."""
+def options(kind: Literal["text", "image", "video"], request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Everything the user can pick in a generator: AIMVA's engines, plus (owner only) extra engines they connected."""
+    person = getattr(request.state, "person", None) or user
+    if (person.email or "").lower() not in settings.admin_emails:
+        return builtin_options(db, user, kind)
     own = db.scalars(select(ProviderConnection).where(ProviderConnection.user_id == user.id, ProviderConnection.kind == kind)
                      .order_by(ProviderConnection.is_default.desc(), ProviderConnection.id))
     return builtin_options(db, user, kind) + [
@@ -147,7 +172,7 @@ def _workflow(text: Optional[str]) -> Optional[dict]:
 
 
 @router.post("")
-def add_connection(body: ConnIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def add_connection(body: ConnIn, user: User = Depends(owner_user), db: Session = Depends(get_db)):
     rate_limit(f"provadd:{user.id}", 20, 600)
     preset = P.PRESETS.get(body.preset)
     if not preset:
@@ -205,7 +230,7 @@ class ConnPatch(BaseModel):
 
 
 @router.patch("/{cid}")
-def update_connection(cid: int, body: ConnPatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_connection(cid: int, body: ConnPatch, user: User = Depends(owner_user), db: Session = Depends(get_db)):
     c = _own(db, user, cid)
     try:
         if body.model is not None:
@@ -231,7 +256,7 @@ def update_connection(cid: int, body: ConnPatch, user: User = Depends(current_us
 
 
 @router.post("/{cid}/test")
-def test_connection(cid: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def test_connection(cid: int, user: User = Depends(owner_user), db: Session = Depends(get_db)):
     rate_limit(f"provtest:{user.id}", 20, 300)
     c = _own(db, user, cid)
     try:
@@ -247,7 +272,7 @@ def test_connection(cid: int, user: User = Depends(current_user), db: Session = 
 
 
 @router.delete("/{cid}")
-def delete_connection(cid: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def delete_connection(cid: int, user: User = Depends(owner_user), db: Session = Depends(get_db)):
     db.delete(_own(db, user, cid))
     db.commit()
     return {"ok": True}

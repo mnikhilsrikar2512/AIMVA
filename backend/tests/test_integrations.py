@@ -45,7 +45,7 @@ def test_reconnect_replaces_instead_of_duplicating(auth_client, db):
 
 def test_oauth_refuses_when_app_not_configured(auth_client):
     r = auth_client.get("/api/integrations/meta/connect")
-    assert r.status_code == 400 and "not configured" in r.json()["detail"]
+    assert r.status_code == 400 and "isn't switched on yet" in r.json()["detail"] and ".env" not in r.json()["detail"]
 
 
 def test_oauth_full_flow(auth_client, mock_http, monkeypatch, db):
@@ -103,7 +103,7 @@ def test_update_meta_and_disconnect(auth_client, db):
 
 def test_integrations_are_per_user(auth_client, other_client):
     auth_client.post("/api/integrations/fal/key", json={"values": {"api_key": "k"}})
-    assert not next(i for i in other_client.get("/api/integrations").json() if i["provider"] == "fal")["connected"]
+    assert "fal" not in {i["provider"] for i in other_client.get("/api/integrations").json()}  # platform engines: owner only
     other_client.delete("/api/integrations/fal")
     assert next(i for i in auth_client.get("/api/integrations").json() if i["provider"] == "fal")["connected"]
 

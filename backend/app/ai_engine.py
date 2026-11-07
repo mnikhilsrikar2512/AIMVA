@@ -124,24 +124,31 @@ def engines(db: Session, user_id: Optional[int], agent: str, ref: str = "auto") 
     info = TASKS.get(agent, {"free": True})
     pref = db.scalar(select(AgentPref).where(AgentPref.user_id == user_id, AgentPref.agent == agent)) if user_id else None
     choice = ref if ref not in ("", "auto") else (pref.engine if pref else "auto")
+    from . import discreet
+    choice = discreet.in_ref(choice)  # the browser sends neutral refs ("builtin:writer")
     if choice == "rules":
         return []
     chain = []
     conn = None
-    if choice.startswith("conn:") and choice[5:].isdigit():
+    from . import ai_registry
+    byok = ai_registry.user_keys_allowed()  # customers' own AI keys: off for this version
+    if not byok:
+        pass
+    elif choice.startswith("conn:") and choice[5:].isdigit():
         conn = db.get(ProviderConnection, int(choice[5:]))
         if not conn or conn.user_id != user_id or conn.kind != "text":
             conn = None
-    elif choice != "builtin:gemini" and user_id:
+    elif choice != "builtin:gemini" and user_id and byok:
         conn = db.scalar(select(ProviderConnection).where(ProviderConnection.user_id == user_id, ProviderConnection.kind == "text",
                                                           ProviderConnection.is_default.is_(True)))
     if conn:
         chain.append(("yours", f"{conn.name}{' · ' + conn.model if conn.model else ''}", _provider_fn(_conn_dict(conn))))
-    own_gemini = integration_secret(db, user_id, "gemini").get("api_key") if user_id else ""
+    own_gemini = integration_secret(db, user_id, "gemini").get("api_key") if (user_id and byok) else ""
     if own_gemini:
         chain.append(("yours", "Your Gemini key", lambda p, s="", m=2048, k=own_gemini: llm(p, s, m, key=k)))
-    if settings.gemini_api_key:
-        chain.append(("platform", "AIMVA shared key", lambda p, s="", m=2048: llm(p, s, m, key=settings.gemini_api_key)))
+    platform_key = ai_registry.key_for("text", "gemini")
+    if platform_key:
+        chain.append(("platform", "AIMVA writer", lambda p, s="", m=2048, k=platform_key: llm(p, s, m, key=k)))
     if info.get("free") and free_available():
         chain.append(("free", "AIMVA free AI (shared, limited)", free_chat))
     return chain

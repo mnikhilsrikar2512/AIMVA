@@ -216,7 +216,7 @@ def test_protected_routes_require_login(client, method, path):
 
 def test_health(client):
     r = client.get("/api/health")
-    assert r.json() == {"ok": True, "smtp": False, "gemini": False}
+    assert r.json() == {"ok": True}  # says nothing about which services are configured
 
 
 # ---- account takeover through verify-email (regression) ----------------------------------------

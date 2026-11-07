@@ -5,11 +5,13 @@ FAL_KEY = {"values": {"api_key": "fal-test"}}
 
 def test_models_mark_fal_unavailable_without_key(auth_client):
     m = auth_client.get("/api/content/models").json()
-    assert m["fal_connected"] is False
-    avail = {x["id"]: x["available"] for x in m["image"]}
-    assert avail["pollinations/flux"] is True and avail["fal-ai/flux/schnell"] is False
+    assert m["studio_available"] is False
+    avail = {x["id"]: x["available"] for x in m["image"]}  # neutral public ids, no supplier or model names
+    assert avail["free-standard"] is True and avail["studio-fast"] is False
+    from app.discreet import leaks
+    assert not leaks(str(m))  # no supplier, model or setting names
     auth_client.post("/api/integrations/fal/key", json=FAL_KEY)
-    assert auth_client.get("/api/content/models").json()["fal_connected"] is True
+    assert auth_client.get("/api/content/models").json()["studio_available"] is True
 
 
 def jpeg(size=(64, 64)):
@@ -38,7 +40,7 @@ def test_free_image_rate_limit_is_explained_not_saved(auth_client, mock_http):
     mock_http.get(url__startswith="https://image.pollinations.ai/prompt/").respond(
         402, content=jpeg(), headers={"content-type": "image/jpeg", "retry-after": "19"})
     r = auth_client.post("/api/content/image", json={"prompt": "red sports car"})
-    assert r.status_code == 429 and "19 seconds" in r.json()["detail"] and "fal.ai" in r.json()["detail"]
+    assert r.status_code == 429 and "19 seconds" in r.json()["detail"] and "fal" not in r.json()["detail"].lower()
     assert auth_client.get("/api/content/assets?kind=image").json() == []
     mock_http.get(url__startswith="https://image.pollinations.ai/prompt/").respond(200, text="<html>oops</html>",
                                                                                   headers={"content-type": "text/html"})
@@ -52,7 +54,7 @@ def test_image_prompt_validation(auth_client):
 
 def test_fal_model_needs_key(auth_client):
     r = auth_client.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell"})
-    assert r.status_code == 400 and "fal.ai" in r.json()["detail"]
+    assert r.status_code == 400 and "isn't switched on" in r.json()["detail"]
 
 
 def test_fal_image_generation(auth_client, mock_http):
@@ -135,8 +137,8 @@ def _fal_job(mock_http, model, name, video_url):
 
 def test_models_describe_audio_and_durations(auth_client):
     vids = {m["id"]: m for m in auth_client.get("/api/content/models").json()["video"]}
-    assert vids["fal-ai/ltx-2/text-to-video"]["audio"] is True
-    assert vids["fal-ai/luma-dream-machine/ray-2"]["audio"] is False and vids["fal-ai/luma-dream-machine/ray-2"]["durations"] == ["5s", "9s"]
+    assert vids["video-sound"]["audio"] is True
+    assert vids["video-cinematic"]["audio"] is False and vids["video-cinematic"]["durations"] == ["5s", "9s"]
 
 
 def test_ltx2_generates_with_audio_and_valid_payload(auth_client, mock_http):

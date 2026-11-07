@@ -57,7 +57,7 @@ export default function BrandControls({ brand, value, onChange, mode = "image", 
             <Toggle label="Add my logo" disabled={!logo} checked={value.add_logo && !!logo} onChange={(v) => set("add_logo", v)} />
           </div>
           {value.add_logo && logo && freeModel && (
-            <p className="mt-3 text-xs text-muted">Free models stamp a small pollinations.ai mark bottom-right, so a top corner works best. Connect fal.ai for clean images.</p>
+            <p className="mt-3 text-xs text-muted">Free images carry a small mark in the bottom-right corner, so a top corner works best. Studio images have no mark.</p>
           )}
           {value.add_logo && logo && (
             <div className="mt-3 grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Logo position">

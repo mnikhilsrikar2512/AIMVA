@@ -74,23 +74,17 @@ function ListEditor({ items, onChange, blank, render, addLabel, max }) {
 }
 
 function AiStatus({ ai, writer, writers }) {
-  if (writer && writer !== "auto" && writer !== "builtin:gemini") {
+  // Neutral wording only: which supplier or key writes the page stays on the server.
+  if (writer && writer !== "auto" && writer !== "builtin:writer") {
     return <span className="text-emerald-600">Written by {writers.find((w) => w.ref === writer)?.name || "your chosen AI"}.</span>;
   }
-  if (writers.some((w) => w.is_default) && writer === "auto") return <span className="text-emerald-600">Using your default AI writer.</span>;
-  if (ai?.source === "yours") return <span className="text-emerald-600">Using your Gemini key.</span>;
-  if (ai?.source === "server") return <span className="text-emerald-600">Using AIMVA's shared Gemini key.</span>;
+  if (ai?.full) return <span className="text-emerald-600">Written by the AIMVA writer.</span>;
   if (ai?.free) return (
     <span>
-      <span className="text-emerald-600">Using AIMVA free AI, no key needed.</span> It's shared and limited, so when it's busy the built-in template is used.
+      <span className="text-emerald-600">Written by the AIMVA writer.</span> When it's busy, the built-in template is used.
     </span>
   );
-  return (
-    <span>
-      No AI writer connected yet, so the built-in template is used.{" "}
-      <Link to="/app/settings?tab=providers" className="font-semibold text-brand hover:underline">Add one</Link>
-    </span>
-  );
+  return <span>The built-in template is used for now; the AI writer isn't switched on for your account yet.</span>;
 }
 
 const asLines = (v) => (Array.isArray(v) ? v.join("\n") : v || "");

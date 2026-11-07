@@ -10,11 +10,12 @@ from xml.sax.saxutils import escape
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import ai_registry, speech
 from ..config import settings
 from ..db import get_db
 from ..models import Call, User, VoiceAgent
@@ -62,7 +63,13 @@ def _agent(db: Session, user: User, aid: int) -> VoiceAgent:
 
 @router.get("/api/voice/languages")
 def languages():
-    return LANGS
+    """Codes and names only. The list grows on its own when the multilingual voice engine is switched on."""
+    return ai_registry.voice_languages()
+
+
+def call_lang(agent: VoiceAgent, call: Call) -> str:
+    """The language this call speaks: chosen when it started (from the lead), or switched on their first reply."""
+    return (call.transcript[0].get("lang") if call.transcript else None) or agent.language
 
 
 @router.get("/api/voice/agents")
@@ -105,7 +112,7 @@ def _next_reply(agent: VoiceAgent, call: Call, user_text: str, write=None) -> st
     history = "\n".join(f"{t['role']}: {t['text']}" for t in call.transcript[-12:])
     ai = write and write(f"Conversation so far:\n{history}\nuser: {user_text}\n\n"
              f"Questions still to ask, in order: {remaining or 'none - wrap up, confirm next steps and say goodbye'}.\n"
-             f"Reply in {LANGS.get(agent.language, 'English')} as the agent. Acknowledge briefly, then ask the next question.",
+             f"Reply in {ai_registry.voice_languages().get(call_lang(agent, call), LANGS.get(agent.language, 'English'))} as the agent. Acknowledge briefly, then ask the next question.",
              system=agent.instructions, max_tokens=200)
     if ai:
         return ai
@@ -217,8 +224,11 @@ def place_phone_call(db: Session, user: User, agent: VoiceAgent, to: str, lead_i
     if not (sid and tok and frm):
         raise HTTPException(400, "Connect Twilio in Settings → Integrations to place real phone calls.")
     first = agent.questions[0] if agent.questions else ""
+    from ..models import Lead
+    lead = db.get(Lead, lead_id) if lead_id else None
+    lang = speech.call_language(agent.language, (lead.message if lead and lead.user_id == user.id else "") or "")
     c = Call(user_id=user.id, agent_id=agent.id, channel="phone", to_number=to, lead_id=lead_id,
-             transcript=[{"role": "agent", "text": f"{agent.greeting} {first}".strip()}])
+             transcript=[{"role": "agent", "text": f"{agent.greeting} {first}".strip(), "lang": lang}])
     db.add(c)
     db.commit()
     r = httpx.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json", auth=(sid, tok), timeout=30,
@@ -236,8 +246,10 @@ def dial(aid: int, body: DialIn, user: User = Depends(current_user), db: Session
 
 
 def _twiml(agent: VoiceAgent, call: Call, say: str, gather: bool) -> Response:
-    lang = escape(agent.language)
-    body = f'<Say language="{lang}">{escape(say)}</Say>'
+    code = call_lang(agent, call)
+    lang = escape(code)
+    url = speech.audio_url(say, code) if speech.speaks(code) else None  # natural multilingual voice when switched on
+    body = f"<Play>{escape(url)}</Play>" if url else f'<Say language="{lang}">{escape(say)}</Say>'
     if call.status == "handoff" and agent.handoff_number:
         body += f"<Dial>{escape(agent.handoff_number)}</Dial>"
     elif gather:
@@ -249,6 +261,15 @@ def _twiml(agent: VoiceAgent, call: Call, say: str, gather: bool) -> Response:
 
 def _twilio_token(db: Session, user_id: int) -> str:
     return integration_secret(db, user_id, "twilio").get("auth_token") or settings.twilio_auth_token
+
+
+@router.get("/api/public/voice/audio/{token}")
+def voice_audio(token: str):
+    """Short-lived, signed audio for the phone network to <Play>. Nothing else is reachable here."""
+    path = speech.audio_file(token)
+    if not path:
+        raise HTTPException(404)
+    return FileResponse(path, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=900"})
 
 
 @router.post("/api/public/voice/twilio/{cid}/start")
@@ -270,6 +291,11 @@ def twilio_turn(cid: int, bg: BackgroundTasks, SpeechResult: str = Form(""), tw:
     agent = db.get(VoiceAgent, c.agent_id)
     if not SpeechResult:
         return _twiml(agent, c, "Sorry, I didn't catch that. Could you repeat?", True)
+    # First reply in another language the call can speak? Carry on in theirs.
+    if c.transcript and len([t for t in c.transcript if t["role"] == "user"]) == 0:
+        switched = speech.call_language(call_lang(agent, c), SpeechResult)
+        if switched != call_lang(agent, c):
+            c.transcript = [{**c.transcript[0], "lang": switched}] + c.transcript[1:]
     out = _process_turn(db, agent, c, SpeechResult)
     if c.status != "active":
         _finish(db, c.user_id, c, bg)

@@ -5,6 +5,7 @@ Two connection styles:
 - API key (fal, netlify, vercel, cloudflare, whatsapp, twilio, github): the user pastes a token in the UI;
   it is stored Fernet-encrypted and never returned to the browser.
 """
+import logging
 import secrets
 import time
 from typing import Optional
@@ -12,7 +13,7 @@ from urllib.parse import urlencode
 
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -24,6 +25,7 @@ from ..models import Integration, User, utcnow
 from ..security import current_user, encrypt_json
 from ..services import get_integration
 
+log = logging.getLogger("aimva.integrations")
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
 OAUTH = {
@@ -77,6 +79,13 @@ API_KEY = {
     "github": {"label": "GitHub Pages", "fields": ["api_token"], "docs": "https://github.com/settings/tokens"},
 }
 NON_SECRET = {"phone_number_id", "account_id", "from_number"}
+# AIMVA's own suppliers: configured by the platform owner (or the server's .env), never shown to customers.
+PLATFORM = {"fal", "gemini"}
+
+
+def _is_owner(request: Request) -> bool:
+    person = getattr(request.state, "person", None)
+    return bool(person and (person.email or "").lower() in settings.admin_emails)
 
 
 def _redirect_uri(provider: str) -> str:
@@ -84,13 +93,16 @@ def _redirect_uri(provider: str) -> str:
 
 
 @router.get("")
-def list_integrations(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def list_integrations(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     rows = {i.provider: i for i in db.scalars(select(Integration).where(Integration.user_id == user.id))}
     out = []
+    owner = _is_owner(request)
     for key, p in {**OAUTH, **API_KEY}.items():
+        if key in PLATFORM and not owner:
+            continue
         i = rows.get(key)
         out.append({
-            "provider": key, "label": p["label"], "type": "oauth" if key in OAUTH else "api_key",
+            "provider": key, "label": p["label"], "type": "oauth" if key in OAUTH else "api_key", "platform": key in PLATFORM,
             "fields": p.get("fields", []), "hints": p.get("hints", {}), "docs": p["docs"],
             "app_configured": bool(p["client_id"]()) if key in OAUTH else True,
             "connected": bool(i), "account_name": i.account_name if i else "", "meta": i.meta if i else {},
@@ -137,9 +149,9 @@ def verify_key(provider: str, values: dict) -> None:
 
 
 @router.post("/{provider}/key")
-def save_key(provider: str, body: KeyIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def save_key(provider: str, body: KeyIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     spec = API_KEY.get(provider)
-    if not spec:
+    if not spec or (provider in PLATFORM and not _is_owner(request)):
         raise HTTPException(404, "Unknown provider.")
     values = {k: str(body.values.get(k, "")).strip() for k in spec["fields"]}
     if missing := [k for k, v in values.items() if not v]:
@@ -158,9 +170,10 @@ def save_key(provider: str, body: KeyIn, user: User = Depends(current_user), db:
 @router.get("/ai/status")
 def ai_status(user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Which Gemini key AI features will use for this user: their own, the server's, or none (templates)."""
-    own = bool(get_integration(db, user.id, "gemini"))
-    return {"gemini": own or bool(settings.gemini_api_key), "source": "yours" if own else ("server" if settings.gemini_api_key else None),
-            "model": settings.gemini_model, "free": settings.free_ai}
+    from .. import ai_registry
+    own = ai_registry.user_keys_allowed() and bool(get_integration(db, user.id, "gemini"))
+    on = own or ai_registry.resolve("text").live
+    return {"ai": on or settings.free_ai, "full": on, "free": settings.free_ai}  # neutral: no supplier, model or key source
 
 
 @router.get("/{provider}/connect")
@@ -169,7 +182,8 @@ def oauth_start(provider: str, user: User = Depends(current_user)):
     if not p:
         raise HTTPException(404, "Unknown provider.")
     if not p["client_id"]():
-        raise HTTPException(400, f"{p['label']} app is not configured yet. Add its client id/secret to backend/.env.")
+        log.warning("OAuth app for %s has no client id/secret in backend/.env", provider)
+        raise HTTPException(400, f"Connecting {p['label']} isn't switched on yet. Please check back soon.")
     state = jwt.encode({"uid": user.id, "p": provider, "n": secrets.token_urlsafe(8),
                         "exp": int(time.time()) + 600}, settings.secret_key, "HS256")
     params = {"client_id": p["client_id"](), "redirect_uri": _redirect_uri(provider), "response_type": "code",

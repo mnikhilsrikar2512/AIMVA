@@ -13,10 +13,11 @@ from urllib.parse import quote
 import httpx
 from PIL import Image
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import discreet
 from ..config import settings
 from ..db import get_db
 from .. import providers as P
@@ -54,7 +55,10 @@ SIZES = {"1:1": (1024, 1024), "4:5": (896, 1120), "9:16": (768, 1344), "16:9": (
 
 
 def _fal_key(db: Session, user: User) -> str:
-    return integration_secret(db, user.id, "fal").get("api_key") or settings.fal_key
+    """The platform's studio key (app/ai_registry.py); a user's own key only when ALLOW_USER_AI_KEYS is on."""
+    from .. import ai_registry
+    own = integration_secret(db, user.id, "fal").get("api_key") if ai_registry.user_keys_allowed() else ""
+    return own or ai_registry.key_for("image", "fal") or ai_registry.key_for("video", "fal") or ai_registry.key_for("image_edit", "fal")
 
 
 def _fal_failed(r: httpx.Response) -> HTTPException:
@@ -72,17 +76,39 @@ def _fal_failed(r: httpx.Response) -> HTTPException:
     return HTTPException(502, f"fal.ai error ({r.status_code}): {r.text[:200]}")
 
 
+def _public_label(label: str, kind: str) -> str:
+    """What a customer sees as the engine name: neutral, never a supplier or model name."""
+    if not label:
+        return label
+    if discreet.is_builtin_model(label):
+        return discreet.model_label(label)
+    known = {m["label"]: m["id"] for m in IMAGE_MODELS + VIDEO_MODELS}
+    if label in known:
+        return discreet.model_label(known[label])
+    if discreet.leaks(label) or label.startswith("Free "):
+        return "AIMVA video" if kind == "video" else "AIMVA images"
+    return label
+
+
 def asset_out(a: Asset) -> dict:
-    return {"id": a.id, "kind": a.kind, "prompt": a.prompt, "model": a.model, "url": a.url,
-            "status": a.status, "params": {k: v for k, v in (a.params or {}).items() if not k.endswith("_url") and k != "job"},
-            "created_at": a.created_at.isoformat()}
+    params = {k: v for k, v in (a.params or {}).items() if not k.endswith("_url") and k not in ("job", "endpoint", "model_id")}
+    if "provider" in params:
+        params["provider"] = discreet.out_ref(params["provider"])
+    if "provider_label" in params:
+        params["provider_label"] = _public_label(params["provider_label"], a.kind)
+    if isinstance(params.get("model"), str):
+        params["model"] = discreet.out_model(params["model"])
+    return {"id": a.id, "kind": a.kind, "prompt": a.prompt, "model": _public_label(a.model, a.kind), "url": a.url,
+            "status": a.status, "params": params, "created_at": a.created_at.isoformat()}
 
 
 @router.get("/models")
 def models(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    has_fal = bool(_fal_key(db, user))
-    mark = lambda ms: [{**m, "available": m["provider"] != "fal" or has_fal} for m in ms]
-    return {"image": mark(IMAGE_MODELS), "video": mark(VIDEO_MODELS), "sizes": list(SIZES), "fal_connected": has_fal}
+    studio = bool(_fal_key(db, user))
+    public = lambda ms: [{**{k: v for k, v in m.items() if k != "provider"}, "id": discreet.out_model(m["id"]),
+                          "label": discreet.model_label(m["id"], m["label"]), "free": m["provider"] == "pollinations",
+                          "available": m["provider"] != "fal" or studio} for m in ms]
+    return {"image": public(IMAGE_MODELS), "video": public(VIDEO_MODELS), "sizes": list(SIZES), "studio_available": studio}
 
 
 LogoPosition = Literal["bottom-right", "bottom-left", "top-right", "top-left"]
@@ -115,6 +141,9 @@ class ImageIn(BaseModel):
     use_brand: bool = False  # fold the saved Brand Kit (style, colours, audience, avoid) into the prompt
     add_logo: bool = False  # composite the primary brand logo onto each result
     logo_position: LogoPosition = "bottom-right"
+
+    _inbound = field_validator("provider", mode="before")(lambda v: discreet.in_ref(v) if isinstance(v, str) else v)
+    _inbound_model = field_validator("model", mode="before")(lambda v: discreet.in_model(v) if isinstance(v, str) else v)
 
 
 def _styled(prompt: str, style: Optional[str], negative: str = "", inline_negative: bool = False) -> str:
@@ -176,9 +205,8 @@ def _pollinations(url: str) -> bytes:
         raise HTTPException(502, "Couldn't reach the free image service. Try again in a moment.")
     if r.status_code in (402, 429):
         wait = r.headers.get("retry-after", "")
-        raise HTTPException(429, "The free image service is busy (it allows about one image every 45 seconds). "
-                                 f"Try again {'in ' + wait + ' seconds' if wait.isdigit() else 'in a minute'}, or connect fal.ai "
-                                 "or another provider in Settings → AI providers for unlimited images.")
+        raise HTTPException(429, "The free image engine is busy (it makes about one image every 45 seconds). "
+                                 f"Try again {'in ' + wait + ' seconds' if wait.isdigit() else 'in a minute'}, or use Studio images.")
     if r.status_code >= 400 or not r.headers.get("content-type", "").startswith("image/"):
         log.warning("Pollinations returned %s %s: %s", r.status_code, r.headers.get("content-type"), r.text[:200] if "image" not in r.headers.get("content-type", "") else "")
         if r.status_code >= 500:
@@ -280,6 +308,9 @@ class VideoIn(BaseModel):
     negative_prompt: str = Field("", max_length=1000)
     seed: Optional[int] = Field(None, ge=0, le=2**31 - 1)
     camera: Optional[Camera] = None
+
+    _inbound = field_validator("provider", mode="before")(lambda v: discreet.in_ref(v) if isinstance(v, str) else v)
+    _inbound_model = field_validator("model", mode="before")(lambda v: discreet.in_model(v) if isinstance(v, str) else v)
     style: Optional[Style] = None
     generate_audio: Optional[bool] = None  # for custom models that support it
     use_brand: bool = False
@@ -703,7 +734,9 @@ class EditIn(BaseModel):
     pins: List[EditPin] = Field(default_factory=list, max_length=8)
     instruction: str = Field("", max_length=500)  # a change to the whole image ("make it night"), applied after the pins
     style: str = Field("", max_length=40)  # a whole-image style preset id from /image/styles ("skeleton", "portrait")
-    engine: str = Field("auto", max_length=40)  # auto | builtin:fal | builtin:pollinations | conn:<id>
+    engine: str = Field("auto", max_length=40)  # auto | builtin:studio | builtin:free | conn:<id> (public refs)
+
+    _inbound = field_validator("engine", mode="before")(lambda v: discreet.in_ref(v) if isinstance(v, str) else v)
 
 
 def _edit_engines(db: Session, user: User) -> list:
@@ -712,9 +745,11 @@ def _edit_engines(db: Session, user: User) -> list:
     out = []
     if _fal_key(db, user):
         out.append({"ref": "builtin:fal", "name": "FLUX Fill (fal.ai)", "precise": True})
-    for c in db.scalars(select(ProviderConnection).where(ProviderConnection.user_id == user.id, ProviderConnection.kind == "image",
+    from .. import ai_registry
+    own_conns = ai_registry.user_keys_allowed() or (user.email or "").lower() in settings.admin_emails
+    for c in ([] if not own_conns else db.scalars(select(ProviderConnection).where(ProviderConnection.user_id == user.id, ProviderConnection.kind == "image",
                                                          ProviderConnection.adapter.in_(("openai_images", "fal")))
-                        .order_by(ProviderConnection.is_default.desc(), ProviderConnection.id)):
+                        .order_by(ProviderConnection.is_default.desc(), ProviderConnection.id))):
         if c.adapter == "openai_images" and "together" in (c.base_url or ""):
             continue  # Together has no /images/edits
         out.append({"ref": f"conn:{c.id}", "name": f"{c.name}{' · ' + c.model if c.model else ''}", "precise": True})
@@ -770,8 +805,10 @@ def edit_engines(user: User = Depends(current_user), db: Session = Depends(get_d
     """The editing engines, plus which extra tools work: object selection, background swap and AI upscaling need fal.ai."""
     from .. import image_edit as IE
     fal = bool(_fal_key(db, user))
-    return {"engines": _edit_engines(db, user), "select_objects": fal, "replace_background": fal, "ai_upscale": fal,
-            "models": IE.models()}
+    names = {"builtin:fal": "AIMVA Studio edit (precise)", "builtin:pollinations": "AIMVA quick edit (approximate)"}
+    engines = [{**e, "ref": discreet.out_ref(e["ref"]), "name": names.get(e["ref"], e["name"])} for e in _edit_engines(db, user)]
+    tasks = [{**t, "model": discreet.model_label(t["model"], "AIMVA Studio")} for t in IE.models()]
+    return {"engines": engines, "select_objects": fal, "replace_background": fal, "ai_upscale": fal, "models": tasks}
 
 
 def _own_image(db: Session, user: User, asset_id: int) -> Asset:
@@ -869,6 +906,8 @@ def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), 
 class ExtendIn(BaseModel):
     size: Literal["1:1", "4:5", "9:16", "16:9", "1.91:1"]
     engine: str = Field("auto", max_length=40)
+
+    _inbound = field_validator("engine", mode="before")(lambda v: discreet.in_ref(v) if isinstance(v, str) else v)
 
 
 @router.post("/image/{asset_id}/extend")

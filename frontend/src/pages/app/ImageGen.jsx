@@ -23,7 +23,7 @@ export default function ImageGen() {
   const [tab, setTab] = useState("create");
   const [current, setCurrent] = useState([]);  // only the latest generation is shown in Create
   const [q, setQ] = useState("");
-  const [prov, setProv] = useState({ provider: "builtin:pollinations", model: "flux" });
+  const [prov, setProv] = useState({ provider: "builtin:free", model: "free-standard" });
   const { data: brandKit } = useApi("/api/brand");
   const [brandOpts, setBrandOpts] = useState({ use_brand: true, add_logo: false, logo_position: "top-right" });
   const [busy, run] = useAction();
@@ -45,7 +45,7 @@ export default function ImageGen() {
   };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const option = options.find((o) => o.ref === prov.provider);
-  const free = prov.provider === "builtin:pollinations";
+  const free = prov.provider === "builtin:free";
   const maxCount = option?.max_count || 1;
 
   const tpl = useTemplateTracker("image");
@@ -54,7 +54,7 @@ export default function ImageGen() {
     e.preventDefault();
     const custom = form.size === "custom";
     const out = await run(() => post("/api/content/image", {
-      prompt: form.prompt, provider: prov.provider, model: free ? `pollinations/${prov.model || "flux"}` : (prov.model || option?.model || ""),
+      prompt: form.prompt, provider: prov.provider, model: prov.model || option?.model || "",
       size: custom ? "1:1" : form.size, width: custom ? Number(form.width) : null, height: custom ? Number(form.height) : null,
       count: Math.min(Number(form.count), maxCount), negative_prompt: form.negative_prompt, seed: form.seed,
       style: form.style || null, reference: form.reference,
@@ -140,7 +140,7 @@ export default function ImageGen() {
               <Field label="Avoid (negative prompt)"><input className="input" value={form.negative_prompt} onChange={set("negative_prompt")} maxLength={1000} placeholder="text, watermark, blurry, extra fingers" /></Field>
               <SeedField value={form.seed} onChange={(v) => setForm((f) => ({ ...f, seed: v }))} />
               <LibraryImagePicker label="Reference image" value={form.reference} onChange={(v) => setForm((f) => ({ ...f, reference: v }))}
-                hint="Guides the result with image-to-image models (e.g. fal-ai/flux/dev/image-to-image or Replicate models with an image input)." />
+                hint="Guides the look and layout of the result." />
             </Advanced>
             <BrandControls brand={brandKit} value={brandOpts} onChange={setBrandOpts} freeModel={free} />
             <Button type="submit" busy={busy} className="h-11 w-full"><Wand2 className="size-4" /> Generate</Button>

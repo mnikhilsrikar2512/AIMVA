@@ -18,6 +18,11 @@ os.environ.update({
     "META_APP_ID": "", "META_APP_SECRET": "test-meta-app-secret", "GOOGLE_CLIENT_ID": "", "LINKEDIN_CLIENT_ID": "", "MICROSOFT_CLIENT_ID": "",
     "TWILIO_ACCOUNT_SID": "", "TWILIO_AUTH_TOKEN": "", "TWILIO_FROM_NUMBER": "",
     "PUBLIC_URL": "http://testserver", "FRONTEND_URL": "http://frontend.test",
+    # Platform AI keys (app/ai_registry.py): none by default; tests set what they need.
+    **{k: "" for k in ("AI_PROVIDER", "AI_API_KEY", "SARVAM_API_KEY", "TTS_VOICE") + tuple(
+        f"{p}_{x}" for p in ("TEXT", "IMAGE", "IMAGE_EDIT", "VIDEO", "TTS", "STT", "VOICE_CALL") for x in ("PROVIDER", "API_KEY", "MODEL"))},
+    # The older suites exercise bring-your-own-key flows, kept behind this flag (off in production for this version).
+    "ALLOW_USER_AI_KEYS": "true",
 })
 
 import pytest  # noqa: E402
@@ -29,6 +34,22 @@ from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 
 PASSWORD = "Sup3r-secret!"
+
+
+# Suites that save their own AI keys act as the platform owner (only the owner may manage AI engines now).
+BYOK_SUITES = {"test_content", "test_gemini", "test_image_edit", "test_providers", "test_ai_engine", "test_brand", "test_flow",
+               "test_quality", "test_showcase", "test_templates", "test_onboarding", "test_integrations"}
+
+
+NON_OWNER_TESTS = {"test_owner_metrics", "test_platform_review_publishes_for_everyone"}
+
+
+@pytest.fixture(autouse=True)
+def byok_owner(request, monkeypatch):
+    # Tests that prove non-owners are blocked keep the ordinary (non-owner) user.
+    if request.module.__name__.rsplit(".", 1)[-1] in BYOK_SUITES and request.node.name not in NON_OWNER_TESTS:
+        from app.config import settings
+        monkeypatch.setattr(settings, "admin_emails", {"owner@example.com"})
 
 
 @pytest.fixture(autouse=True)

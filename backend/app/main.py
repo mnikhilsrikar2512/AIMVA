@@ -2,13 +2,17 @@ import logging
 
 import httpx
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 
+from . import discreet
 from .config import BASE_DIR, settings
 from .db import check_database, migrate
+from .security import current_user
 from .domains import CustomDomainMiddleware, router as domains_router
 from .observability import RequestContextMiddleware, request_id_var, setup_logging, setup_sentry
 from .routers import agents, analytics, auth, brand, campaigns, command, templates, providers, references, content, events, feedback, integrations, leads, onboarding, sites, voice, whatsapp
@@ -56,7 +60,14 @@ def stop_background():
 @app.get("/api/health")
 def health():
     """Liveness: the process answers. Cheap, no database, safe for an uptime checker to hit every minute."""
-    return {"ok": True, "smtp": settings.smtp_configured, "gemini": bool(settings.gemini_api_key)}
+    return {"ok": True}  # public: says nothing about which services or keys are configured
+
+
+@app.get("/api/capabilities")
+def capabilities(user=Depends(current_user)):
+    """What's switched on, for the app to enable features: booleans and language codes only, never a supplier or key."""
+    from .ai_registry import capabilities as caps
+    return caps()
 
 
 @app.get("/api/ready")
@@ -68,6 +79,25 @@ def ready():
         log.exception("Readiness check: database unreachable")
         return JSONResponse({"ok": False, "database": False}, status_code=503)
     return {"ok": True, "database": True}
+
+
+# Owner-only screens keep the real wording (the owner configures the suppliers); everyone else gets neutral text.
+OWNER_PATHS = ("/api/providers", "/api/admin", "/api/integrations/fal", "/api/integrations/gemini")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def discreet_http_errors(request: Request, exc: StarletteHTTPException):
+    """No error a customer sees names a supplier, a model or a server setting; the real text goes to the log."""
+    path = request.url.path
+    try:  # the request's session may be closed by now; a detached user can't always be read
+        person = getattr(request.state, "person", None)
+        owner = bool(person and (person.email or "").lower() in settings.admin_emails)
+    except Exception:
+        owner = False
+    if isinstance(exc.detail, str) and not owner and not path.startswith(OWNER_PATHS) and discreet.leaks(exc.detail):
+        log.warning("Supplier detail hidden from the client on %s (%s): %s", path, exc.status_code, exc.detail)
+        exc = StarletteHTTPException(exc.status_code, discreet.neutral_error(path, exc.detail), headers=exc.headers)
+    return await http_exception_handler(request, exc)
 
 
 @app.exception_handler(httpx.HTTPError)

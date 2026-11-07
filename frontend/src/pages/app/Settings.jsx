@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, ExternalLink, KeyRound, Link2, Palette, Settings as SettingsIcon, Unplug } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +7,8 @@ import { del, get, patch, post } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useAction, useApi } from "../../lib/hooks";
 import { useOnboarding } from "../../components/AppLayout";
-import ProvidersPanel from "../../components/ProvidersPanel";
+// Owner-only, and its own chunk: customers never download the AI providers screen.
+const ProvidersPanel = lazy(() => import("../../components/ProvidersPanel"));
 import { TeamPanel } from "../../components/Team";
 
 function Profile() {
@@ -63,12 +64,12 @@ function Integrations() {
   const groups = [
     ["Advertising & data", ["meta", "google", "linkedin", "microsoft"]],
     ["Messaging & voice", ["whatsapp", "twilio"]],
-    ["AI writing & content", ["gemini", "fal"]],
+    ["AIMVA engines (owner only)", data.filter((i) => i.platform).map((i) => i.provider)],
     ["Hosting", ["netlify", "vercel", "cloudflare", "github"]],
   ];
   return (
     <div className="space-y-8">
-      {groups.map(([title, keys]) => (
+      {groups.filter(([, keys]) => data.some((i) => keys.includes(i.provider))).map(([title, keys]) => (
         <section key={title}>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-faint">{title}</h2>
           <div className="card divide-y divide-line px-5 sm:px-6">
@@ -121,7 +122,9 @@ function Integrations() {
 
 export default function Settings() {
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") || "profile";
+  const { user } = useAuth();
+  const owner = !!user?.is_admin;  // AI providers are the platform owner's business, not the customer's
+  const tab = (params.get("tab") === "providers" && !owner ? "profile" : params.get("tab")) || "profile";
   useEffect(() => {
     if (params.get("connected")) toast.success(`${params.get("connected")} connected`);
     if (params.get("error")) toast.error(`Connection failed: ${params.get("error")}`);
@@ -130,8 +133,8 @@ export default function Settings() {
     <div>
       <PageHeader icon={SettingsIcon} tone="slate" title="Settings" subtitle="Your profile, team and connected accounts."
         actions={<Link to="/app/brand" className="btn-ghost"><Palette className="size-4" /> Brand kit</Link>} />
-      <div className="mb-6"><Tabs value={tab} onChange={(v) => setParams({ tab: v })} tabs={[{ value: "profile", label: "Profile" }, { value: "team", label: "Team" }, { value: "integrations", label: "Accounts" }, { value: "providers", label: "AI providers" }]} /></div>
-      {tab === "profile" ? <Profile /> : tab === "team" ? <TeamPanel /> : tab === "providers" ? <ProvidersPanel /> : <Integrations />}
+      <div className="mb-6"><Tabs value={tab} onChange={(v) => setParams({ tab: v })} tabs={[{ value: "profile", label: "Profile" }, { value: "team", label: "Team" }, { value: "integrations", label: "Accounts" }, ...(owner ? [{ value: "providers", label: "AI providers" }] : [])]} /></div>
+      {tab === "profile" ? <Profile /> : tab === "team" ? <TeamPanel /> : tab === "providers" ? <Suspense fallback={<ListSkeleton />}><ProvidersPanel /></Suspense> : <Integrations />}
       <p className="mt-10 flex items-center gap-2 text-xs text-faint"><Chip>v1.0</Chip> AIMVA</p>
     </div>
   );

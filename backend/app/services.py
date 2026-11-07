@@ -24,12 +24,13 @@ GEMINI_FALLBACK_MODEL = "gemini-flash-latest"  # Google's alias for the current 
 
 
 def gemini_key(db: Session, user_id: Optional[int]) -> str:
-    """The user's own Gemini key (Settings → Integrations) if connected, else the server-wide key from .env."""
-    if user_id is not None:
+    """The platform's writing key (app/ai_registry.py). A user's own key only when ALLOW_USER_AI_KEYS is on."""
+    from . import ai_registry
+    if user_id is not None and ai_registry.user_keys_allowed():
         own = integration_secret(db, user_id, "gemini").get("api_key")
         if own:
             return own
-    return settings.gemini_api_key
+    return ai_registry.key_for("text", "gemini")
 
 
 def llm(prompt: str, system: str = "", max_tokens: int = 2048, key: Optional[str] = None) -> Optional[str]:
@@ -37,7 +38,9 @@ def llm(prompt: str, system: str = "", max_tokens: int = 2048, key: Optional[str
 
     Pass `key=gemini_key(db, user.id)` to use the signed-in user's key; without it the server key is used.
     """
-    key = key if key is not None else settings.gemini_api_key
+    if key is None:
+        from . import ai_registry
+        key = ai_registry.key_for("text", "gemini")
     if not key:
         return None
     body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],

@@ -39,7 +39,7 @@ function AgentEditor({ agent, languages, onSaved, onDelete }) {
         </Field>
       </div>
       <Field label="Greeting"><textarea className="input" rows={2} value={a.greeting} onChange={set("greeting")} /></Field>
-      <Field label="Personality & instructions" hint="Used by the AI model when Gemini is configured.">
+      <Field label="Personality & instructions" hint="How the assistant should sound and behave when it writes its replies.">
         <textarea className="input" rows={3} value={a.instructions} onChange={set("instructions")} />
       </Field>
       <Field label="Qualification questions" hint="One per line, asked in order. Include name and phone/email so a lead can be created.">
@@ -267,7 +267,7 @@ export default function VoiceAgent() {
                 onDelete={() => run(async () => { await del(`/api/voice/agents/${agent.id}`); setAgents((x) => x.filter((y) => y.id !== agent.id)); setSelId(null); })} />}
               {tab === "phone" && (
                 <div className="max-w-md space-y-4">
-                  <p className="text-sm text-muted">Place a real outbound call. Requires a Twilio account connected in Settings, and the backend reachable from the internet (set <code className="text-ink">PUBLIC_URL</code>, e.g. via ngrok or cloudflared).</p>
+                  <p className="text-sm text-muted">Place a real outbound call from your Twilio number. Connect it in Settings → Accounts first.</p>
                   <Field label="Phone number (E.164)"><input className="input" value={dialTo} onChange={(e) => setDialTo(e.target.value)} placeholder="+919876543210" /></Field>
                   <Button busy={busy} onClick={() => run(async () => { await post(`/api/voice/agents/${agent.id}/dial`, { to: dialTo }); reloadCalls(); }, "Calling…")}><Phone className="size-4" /> Call now</Button>
                 </div>

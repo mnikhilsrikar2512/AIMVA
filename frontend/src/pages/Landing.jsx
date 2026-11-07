@@ -18,7 +18,7 @@ const STEPS = [
 
 const FEATURES = [
   { icon: Globe, name: "Pages", text: "Landing pages with a lead form, written for your business. Your domain, Netlify or Vercel.", tour: "page" },
-  { icon: Image, name: "Pictures and videos", text: "Ad pictures from a sentence, free and in your brand's colours. Short promo videos when you add a fal.ai key.", tour: "page" },
+  { icon: Image, name: "Pictures and videos", text: "Ad pictures and short promo videos from a sentence, in your brand's colours.", tour: "page" },
   { icon: Megaphone, name: "Campaigns", text: "AI-written ads for Meta, Google and LinkedIn, created in your ad account as paused drafts to finish and launch. Spend syncs back.", tour: "page" },
   { icon: AudioLines, name: "Calls", text: "Practise in your browser, then connect Twilio and it rings new leads back, asks your questions and hands over to you.", tour: "reply" },
   { icon: MessageCircle, name: "WhatsApp", text: "Connect your WhatsApp Business number: a welcome within seconds, follow-ups on day 2 and day 7, and one inbox for replies.", tour: "reply" },

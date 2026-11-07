@@ -33,11 +33,11 @@ def test_gemini_key_verified_before_saving(auth_client, mock_http):
 
 
 def test_ai_status_reports_key_source(auth_client, monkeypatch):
-    assert auth_client.get("/api/integrations/ai/status").json()["source"] is None
+    assert auth_client.get("/api/integrations/ai/status").json() == {"ai": False, "full": False, "free": False}
     monkeypatch.setattr(settings, "gemini_api_key", "server-key")
-    assert auth_client.get("/api/integrations/ai/status").json() == {"gemini": True, "source": "server", "model": settings.gemini_model, "free": False}
+    assert auth_client.get("/api/integrations/ai/status").json() == {"ai": True, "full": True, "free": False}  # no supplier, model or key source
     connect(auth_client)
-    assert auth_client.get("/api/integrations/ai/status").json()["source"] == "yours"
+    assert auth_client.get("/api/integrations/ai/status").json()["full"] is True
 
 
 def test_ad_copy_uses_the_users_own_key(auth_client, mock_http):

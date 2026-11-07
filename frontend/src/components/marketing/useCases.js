@@ -39,7 +39,7 @@ export const USE_CASES = [
     ],
     how: [
       ["Start from one sentence", "Paste your website or describe what you sell. The Launch agent drafts the page, the ads and the call-back script in one go."],
-      ["Pictures and short videos", "Ad pictures from a sentence, free and in your brand's colours. Short promo videos when you add a fal.ai key."],
+      ["Pictures and short videos", "Ad pictures and short promo videos from a sentence, in your brand's colours."],
       ["Your own name, your voice", "Pages and scripts speak as you, not as a company. Practise calls in your browser in English, Hindi, Telugu, Tamil and more; phone calls are in English today."],
       ["Small, clear numbers", "Home tells you in one sentence how the week went; Results shows which ad or page brought the leads."],
     ],

@@ -91,7 +91,7 @@ export default function VideoGen() {
   const [tab, setTab] = useState("create");
   const [currentIds, setCurrentIds] = useState([]);  // renders started in this session, shown in Create
   const [q, setQ] = useState("");
-  const [prov, setProv] = useState({ provider: "builtin:fal", model: "fal-ai/ltx-2/text-to-video" });
+  const [prov, setProv] = useState({ provider: "builtin:studio", model: "video-sound" });
   const [sound, setSound] = useState({ add_sound: true, sound_prompt: "" });
   const [busy, run] = useAction();
   const { data: brandKit } = useApi("/api/brand");
@@ -100,13 +100,13 @@ export default function VideoGen() {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const queued = assets.filter((a) => a.status === "queued").map((a) => a.id).join(",");
 
-  const isFal = prov.provider === "builtin:fal";
+  const isFal = prov.provider === "builtin:studio";  // AIMVA video (neutral id from the backend)
   const known = isFal ? models?.video.find((m) => m.id === prov.model) : null;
   const durations = known ? known.durations : GENERIC_DURATIONS;
   const duration = durations.includes(form.duration) ? form.duration : durations[0] || "";
   const makesSound = known ? known.audio : form.generate_audio;
   const anyAvailable = options.some((o) => o.available);
-  const falConnected = models?.fal_connected;
+  const falConnected = models?.studio_available;
 
   // Poll queued renders every 6s (also picks up the "adding sound" stage).
   useEffect(() => {
@@ -154,8 +154,8 @@ export default function VideoGen() {
         actions={<Button variant="ghost" onClick={startNew}><Plus className="size-4" /> Start new</Button>} />
       <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${assets.length ? ` (${assets.length})` : ""}` }]} /></div>
       {options.length > 0 && !anyAvailable && (
-        <Notice tone="amber" icon={KeyRound} action={<Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect fal.ai</Link>}>
-          Connect fal.ai, or add Replicate / your own ComfyUI in Settings → AI providers, to start rendering.
+        <Notice tone="amber" icon={KeyRound}>
+          Video isn't switched on for your account yet.
         </Notice>
       )}
       {tab === "history" ? (
@@ -181,7 +181,7 @@ export default function VideoGen() {
                 onEnhanced={(r) => setForm((f) => ({ ...f, prompt: r.prompt, negative_prompt: f.negative_prompt || r.negative_prompt || "" }))} />
             </div>
             <ProviderPicker kind="video" value={prov} onChange={setProv}
-              models={isFal ? [...(models?.video || []).map((m) => m.id), "fal-ai/veo3", "fal-ai/wan/v2.2-a14b/text-to-video"] : undefined}
+              models={isFal ? (models?.video || []).map((m) => m.id) : undefined}
               modelHint={known ? (known.audio ? "Generates video and matching audio together." : "This model makes silent video.") : "Any model this provider offers. Settings below are passed through."} />
             <div className="grid grid-cols-2 gap-3">
               <Field label="Aspect ratio">
@@ -217,7 +217,7 @@ export default function VideoGen() {
                 <label className="flex items-center gap-2 text-sm text-ink">
                   <input type="checkbox" className="size-4 accent-violet-500" checked={form.generate_audio}
                     onChange={(e) => setForm((f) => ({ ...f, generate_audio: e.target.checked }))} />
-                  This model generates its own audio (e.g. Veo 3, LTX-2)
+                  This engine renders its own sound
                 </label>
               )}
             </Advanced>
@@ -231,7 +231,7 @@ export default function VideoGen() {
                   <Volume2 className="size-4 text-brand" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-strong">Add sound</p>
-                    <p className="text-xs text-muted">Adds matching ambience and music after rendering (MMAudio on fal.ai).</p>
+                    <p className="text-xs text-muted">Adds matching ambience and music after rendering.</p>
                   </div>
                   <Switch label="Add sound" checked={sound.add_sound} onChange={(v) => setSound((s) => ({ ...s, add_sound: v }))} />
                 </div>

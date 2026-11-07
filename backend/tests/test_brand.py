@@ -126,7 +126,8 @@ def test_video_uses_brand_and_start_image(auth_client, other_client, mock_http):
     v = auth_client.post("/api/content/video", json={"prompt": "slow pan", "model": "fal-ai/luma-dream-machine/ray-2", "use_brand": True, "start_image_id": img["id"]}).json()
     sent = json.loads(route.calls[0].request.content)
     assert sent["image_url"].startswith("data:image/png;base64,") and "cinematic" in sent["prompt"]
-    assert v["model"].endswith("image-to-video")
+    assert any("image-to-video" in str(c.request.url) for c in mock_http.calls)  # the start image picks the image-to-video engine
+    assert "fal" not in v["model"].lower()  # the customer sees a neutral engine name
     theirs = upload(other_client, png(), kind="image").json()["asset"]
     assert auth_client.post("/api/content/video", json={"prompt": "slow pan", "model": "fal-ai/luma-dream-machine/ray-2", "start_image_id": theirs["id"]}).status_code == 404
 

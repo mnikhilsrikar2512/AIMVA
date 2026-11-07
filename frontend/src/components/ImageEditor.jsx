@@ -374,7 +374,7 @@ function EngineSelect({ engines, engine, setEngine, chosen }) {
       {chosen && !chosen.precise && (
         <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
           The free model can't repaint one spot, so it redraws the picture and AIMVA keeps only the parts you marked.
-          Results can look patched. Connect fal.ai in Settings for precise edits and object selection.
+          Quick edits can look patched. Precise edits and object selection aren't switched on for your account yet.
         </p>
       )}
     </>
@@ -411,11 +411,11 @@ function MorePanel({ busy, chosen, info, source, onExtend, onBackground, onUpsca
             <input className="input text-sm" value={bg} onChange={(e) => setBg(e.target.value)} minLength={3} maxLength={500} required placeholder="e.g. a sunny beach terrace" />
             <Button type="submit" busy={busy} size="sm">Go</Button>
           </form>
-        ) : <p className="rounded-xl bg-ink/[0.03] p-3 text-xs text-muted">Needs fal.ai. Connect it in Settings → Integrations.</p>}
+        ) : <p className="rounded-xl bg-ink/[0.03] p-3 text-xs text-muted">Not switched on for your account yet.</p>}
       </section>
       <section>
         <p className="flex items-center gap-1.5 text-sm font-semibold text-strong"><Wand2 className="size-4" /> Upscale</p>
-        <p className="mb-2 mt-0.5 text-xs text-muted">{info?.ai_upscale ? "AI upscaling adds real detail (fal.ai)." : "Basic high-quality resize. Connect fal.ai for AI upscaling that adds detail."}</p>
+        <p className="mb-2 mt-0.5 text-xs text-muted">{info?.ai_upscale ? "AI upscaling adds real detail." : "Basic high-quality resize. AI upscaling isn't switched on for your account yet."}</p>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => onUpscale(2)}>2× larger</Button>
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => onUpscale(4)}>4× larger</Button>
