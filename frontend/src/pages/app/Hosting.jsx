@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { CloudUpload, ExternalLink, Globe2, Server } from "lucide-react";
-import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, ListSkeleton } from "../../components/ui";
-import { patch, post } from "../../lib/api";
+import { toast } from "sonner";
+import { AlertTriangle, CheckCircle2, CloudUpload, ExternalLink, Globe2, Server } from "lucide-react";
+import { Button, Card, Chip, Empty, Field, Modal, PageHeader, ListSkeleton } from "../../components/ui";
+import { get, patch, post } from "../../lib/api";
 import { useAction, useApi } from "../../lib/hooks";
 
 const TARGETS = [
@@ -16,7 +17,6 @@ export default function Hosting() {
   const { data: sites, setData, loading } = useApi("/api/sites", []);
   const { data: integrations } = useApi("/api/integrations", []);
   const [domainSite, setDomainSite] = useState(null);
-  const [domain, setDomain] = useState("");
   const [busy, run] = useAction();
   const [deploying, setDeploying] = useState("");
   const connected = new Set(integrations.filter((i) => i.connected).map((i) => i.provider));
@@ -65,8 +65,10 @@ export default function Hosting() {
                         <span className="truncate">{(s.deploy_url || s.url).replace(/^https?:\/\//, "")}</span><ExternalLink className="size-3 shrink-0" /></a> : <span className="text-faint">—</span>}
                     </td>
                     <td className="px-5 py-4">
-                      <button className="text-left text-muted hover:text-strong" onClick={() => { setDomainSite(s); setDomain(s.custom_domain); }}>
-                        {s.custom_domain || <span className="text-brand-2">Add domain</span>}
+                      <button className="text-left text-muted hover:text-strong" onClick={() => setDomainSite(s)}>
+                        {s.custom_domain ? <span className="flex flex-col gap-1">{s.custom_domain}
+                          {s.domain_verified ? <Chip tone="green">Connected</Chip> : <Chip tone="amber">Not live yet</Chip>}</span>
+                          : <span className="text-brand-2">Add domain</span>}
                       </button>
                     </td>
                     <td className="px-5 py-4">
@@ -91,24 +93,106 @@ export default function Hosting() {
           </div>
         )}
       </Card>
-      <Modal open={!!domainSite} onClose={() => setDomainSite(null)} title="Custom domain">
-        <div className="space-y-4">
-          <Field label="Domain" hint="e.g. offers.yourbrand.com">
+      <DomainDialog site={domainSite} onClose={() => setDomainSite(null)} onChange={update} />
+    </div>
+  );
+}
+
+const PROVIDER_CNAME = { netlify: "<your-site>.netlify.app", vercel: "cname.vercel-dns.com" };
+
+/** Add a domain, show the exact DNS record from the server, and run the DNS check that makes the domain go live. */
+function DomainDialog({ site, onClose, onChange }) {
+  const [domain, setDomain] = useState("");
+  const [info, setInfo] = useState(null); // GET /api/sites/{id}/domain
+  const [problem, setProblem] = useState("");
+  const [saving, runSave] = useAction();
+  const [checking, runCheck] = useAction();
+  const provider = PROVIDER_CNAME[site?.deploy_target] && site?.published ? site.deploy_target : null;
+  const saved = info?.domain || "";
+  const dirty = domain !== saved;
+
+  useEffect(() => {
+    if (!site) return;
+    setDomain(site.custom_domain || ""); setInfo(null); setProblem("");
+    get(`/api/sites/${site.id}/domain`).then(setInfo).catch(() => setProblem("Couldn't load this domain's status. Close and try again."));
+  }, [site]);
+
+  const sync = (d) => { setInfo(d); onChange({ id: site.id, custom_domain: d.domain, domain_verified: d.verified }); };
+
+  const save = () => runSave(async () => {
+    setProblem("");
+    const s = await patch(`/api/sites/${site.id}`, { custom_domain: domain });
+    onChange(s);
+    setInfo(await get(`/api/sites/${site.id}/domain`));
+  }, domain ? "Domain saved" : "Domain removed");
+
+  const check = () => runCheck(async () => {
+    setProblem("");
+    const d = await post(`/api/sites/${site.id}/domain/verify`);
+    sync(d);
+    if (d.detail) setProblem(d.detail);
+    else if (d.verified) toast.success(`${d.domain} is connected`);
+  });
+
+  return (
+    <Modal open={!!site} onClose={onClose} title="Custom domain">
+      <div className="space-y-4">
+        <Field label="Domain" hint="e.g. offers.yourbrand.com">
+          <div className="flex gap-2">
             <input className="input" value={domain} onChange={(e) => setDomain(e.target.value.trim().toLowerCase())} />
-          </Field>
+            <Button variant={dirty ? "primary" : "ghost"} busy={saving} disabled={!dirty} onClick={save}>{domain || !saved ? "Save" : "Remove"}</Button>
+          </div>
+        </Field>
+
+        {saved && !dirty && info && (provider ? (
           <div className="rounded-2xl bg-surface-2/60 p-4 text-sm text-muted">
             <p className="mb-2 font-semibold text-ink">DNS setup</p>
-            <p>At your domain registrar (GoDaddy, Google Domains, Cloudflare…), add:</p>
-            <pre className="mt-2 overflow-x-auto rounded-lg bg-black/40 p-3 text-xs text-ink">{`Type   Name                  Value
-CNAME  ${domain.split(".")[0] || "offers"}  ${domainSite?.deploy_target === "netlify" ? "<your-site>.netlify.app" : domainSite?.deploy_target === "vercel" ? "cname.vercel-dns.com" : "your AIMVA server host"}`}</pre>
-            <p className="mt-2 text-xs">For Netlify/Vercel deploys, also add the domain in that provider's dashboard so it issues HTTPS.</p>
+            <p>At your domain registrar, add this record, then add <b>{saved}</b> in your {provider === "netlify" ? "Netlify" : "Vercel"} dashboard so it issues HTTPS:</p>
+            <RecordTable records={[{ type: "CNAME", name: saved.split(".")[0], value: PROVIDER_CNAME[provider] }]} />
           </div>
-          <Button busy={busy} onClick={() => run(async () => {
-            update(await patch(`/api/sites/${domainSite.id}`, { custom_domain: domain }));
-            setDomainSite(null);
-          }, "Domain saved")}>Save domain</Button>
-        </div>
-      </Modal>
+        ) : info.verified ? (
+          <div className="flex items-start gap-2.5 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-800">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+            <div>
+              <p className="font-semibold">{saved} points to AIMVA.</p>
+              {info.published ? <a href={info.url} target="_blank" rel="noreferrer" className="text-brand-2 hover:underline">Open {saved}</a>
+                : <p>Publish this site on AIMVA hosting and it will show on your domain.</p>}
+              <p className="mt-1 text-xs">The secure (https) certificate is issued on the first visit, which can take a minute.</p>
+            </div>
+          </div>
+        ) : info.setup_issue ? (
+          <div className="flex items-start gap-2.5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" /><p>{info.setup_issue}</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-surface-2/60 p-4 text-sm text-muted">
+            <p className="mb-2 font-semibold text-ink">DNS setup</p>
+            <p>At your domain registrar (GoDaddy, Hostinger, Cloudflare…), add:</p>
+            <RecordTable records={info.records} />
+            <p className="mt-2 text-xs">Changes can take up to an hour. On Cloudflare, set the record to DNS only (grey cloud).</p>
+            {!info.published && <p className="mt-1 text-xs">This site isn't published yet. Publish it on AIMVA hosting so the domain has something to show.</p>}
+          </div>
+        ))}
+
+        {problem && <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{problem}</p>}
+
+        {saved && !dirty && info?.target_ready && !provider && !info.verified && (
+          <Button busy={checking} onClick={check}>Check DNS</Button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function RecordTable({ records }) {
+  return (
+    <div className="mt-2 overflow-x-auto rounded-lg bg-black/40 p-3 text-xs text-ink">
+      <table className="w-full font-mono">
+        <thead className="text-left text-muted"><tr><th className="pr-4 font-normal">Type</th><th className="pr-4 font-normal">Name</th><th className="font-normal">Value</th></tr></thead>
+        <tbody>{records.map((r) => (
+          <tr key={`${r.type}-${r.value}`}><td className="pr-4">{r.type}</td><td className="pr-4">{r.name}</td><td className="select-all break-all">{r.value}</td></tr>
+        ))}</tbody>
+      </table>
     </div>
   );
 }

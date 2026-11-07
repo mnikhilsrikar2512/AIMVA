@@ -8,6 +8,7 @@
 4. Caddy asks /api/public/domains/allowed before issuing an HTTPS certificate, so it only gets certificates for
    verified domains (otherwise anyone could point a domain at the server and make it request certificates).
 """
+import ipaddress
 import re
 import socket
 import time
@@ -34,6 +35,22 @@ def app_host() -> str:
     return (urlsplit(settings.public_url).hostname or "localhost").lower()
 
 
+NOT_SET_UP = ("Custom domains aren't switched on yet: this AIMVA server doesn't have its public web address set. "
+              "Ask your AIMVA admin to finish server setup, then come back and check again.")
+
+
+def target_ready() -> bool:
+    """True when the app has a real public host for customers to point DNS at (not localhost or a private address)."""
+    host = app_host()
+    if host in ("localhost", "0.0.0.0") or host.endswith((".localhost", ".local", ".internal")):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_unspecified)
+
+
 def normalize(domain: str) -> str:
     d = (domain or "").strip().lower().removeprefix("https://").removeprefix("http://").split("/")[0].rstrip(".")
     return d
@@ -52,23 +69,40 @@ def _addresses(host: str) -> set:
 
 def records_for(domain: str) -> list:
     """The DNS record the owner should add at their registrar."""
+    if not target_ready():
+        return []  # there is no real address to point at yet; domain_out explains why
     if domain.count(".") == 1:  # a bare domain (brand.com) can't have a CNAME
-        ips = sorted(_addresses(app_host())) or ["<your server's IP address>"]
+        ips = sorted(_addresses(app_host()))
         return [{"type": "A", "name": "@", "value": ip} for ip in ips if ":" not in ip] or \
-               [{"type": "A", "name": "@", "value": ips[0]}]
+               [{"type": "A", "name": "@", "value": ip} for ip in ips[:1]]
     return [{"type": "CNAME", "name": domain.split(".")[0], "value": app_host()}]
 
 
 def points_here(domain: str) -> bool:
+    if not target_ready():
+        return False
     mine = _addresses(app_host())
     return bool(mine) and bool(_addresses(domain) & mine)
 
 
+def setup_issue(domain: str = "") -> Optional[str]:
+    """Why no DNS record can be shown yet, in words for the business owner, or None when records are ready."""
+    if not target_ready():
+        return NOT_SET_UP
+    if domain and not records_for(domain):
+        return ("AIMVA couldn't look up its own server address just now, so it can't show the record for a bare domain. "
+                "Use a subdomain like offers.yourbrand.com, or try again in a few minutes.")
+    return None
+
+
 def domain_out(s: Site) -> dict:
     d = s.custom_domain or ""
-    return {"domain": d, "verified": bool(d and s.domain_verified_at), "records": records_for(d) if d else [],
+    records = records_for(d) if d else []
+    return {"domain": d, "verified": bool(d and s.domain_verified_at), "records": records,
             "url": f"https://{d}" if d and s.domain_verified_at else None,
-            "verified_at": s.domain_verified_at.isoformat() if s.domain_verified_at else None}
+            "verified_at": s.domain_verified_at.isoformat() if s.domain_verified_at else None,
+            "target_host": app_host() if target_ready() else None, "target_ready": target_ready(),
+            "published": bool(s.published), "setup_issue": setup_issue(d) if d else (None if target_ready() else NOT_SET_UP)}
 
 
 def set_domain(db: Session, s: Site, domain: str) -> None:
@@ -101,10 +135,15 @@ def verify_domain(site_id: int, user: User = Depends(current_user), db: Session 
     s = _own(db, user, site_id)
     if not s.custom_domain:
         raise HTTPException(400, "Add a domain to this site first.")
+    if not target_ready():
+        out = domain_out(s)
+        out["detail"] = NOT_SET_UP
+        return out
     if not points_here(s.custom_domain):
         out = domain_out(s)
         out["detail"] = (f"{s.custom_domain} doesn't point to AIMVA yet. Add the record below at your domain registrar; "
-                         "DNS changes can take up to an hour to show up.")
+                         "DNS changes can take up to an hour to show up. If you use Cloudflare, set this record to "
+                         "DNS only (grey cloud), or the check can't see it.")
         return out
     s.domain_verified_at = utcnow()
     db.commit()

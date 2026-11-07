@@ -94,3 +94,40 @@ def test_unpublished_site_is_not_served_on_its_domain(auth_client, client, dns):
     domains._cache.clear()
     assert client.get("/", headers={"Host": "skyline.example"}).status_code == 404
     assert client.get("/api/public/domains/allowed?domain=skyline.example").status_code == 404
+
+
+def test_domain_status_names_the_real_target_host(auth_client, dns):
+    s = published(auth_client)
+    auth_client.patch(f"/api/sites/{s['id']}", json={"custom_domain": "offers.skyline.example"})
+    d = auth_client.get(f"/api/sites/{s['id']}/domain").json()
+    assert d["target_ready"] and d["target_host"] == "testserver" and d["setup_issue"] is None and d["published"]
+    assert all("AIMVA server host" not in r["value"] for r in d["records"])
+
+
+@pytest.mark.parametrize("url", ["http://localhost:8000", "http://127.0.0.1:8000", "http://192.168.1.20", "http://aimva.local"])
+def test_no_records_and_no_verify_when_the_server_has_no_public_host(auth_client, client, dns, monkeypatch, url):
+    s = published(auth_client)
+    auth_client.patch(f"/api/sites/{s['id']}", json={"custom_domain": "offers.skyline.example"})
+    monkeypatch.setattr(domains.settings, "public_url", url)
+    dns["offers.skyline.example"] = {"127.0.0.1", "192.168.1.20"}  # even if it happens to resolve to the same place
+    d = auth_client.get(f"/api/sites/{s['id']}/domain").json()
+    assert d["records"] == [] and not d["target_ready"] and d["target_host"] is None
+    assert "isn't" in d["setup_issue"] or "aren't" in d["setup_issue"]
+    assert "PUBLIC_URL" not in d["setup_issue"] and ".env" not in d["setup_issue"]
+    v = auth_client.post(f"/api/sites/{s['id']}/domain/verify").json()
+    assert not v["verified"] and v["detail"] == domains.NOT_SET_UP
+
+
+def test_bare_domain_without_server_address_explains_instead_of_placeholder(auth_client, dns):
+    s = published(auth_client)
+    auth_client.patch(f"/api/sites/{s['id']}", json={"custom_domain": "skyline.example"})
+    dns.pop("testserver")  # the app's own host can't be looked up right now
+    d = auth_client.get(f"/api/sites/{s['id']}/domain").json()
+    assert d["records"] == [] and "subdomain" in d["setup_issue"]
+
+
+def test_unpublished_site_reports_it(auth_client, dns):
+    from .test_sites_leads import make_site
+    s = make_site(auth_client)
+    auth_client.patch(f"/api/sites/{s['id']}", json={"custom_domain": "offers.skyline.example"})
+    assert auth_client.get(f"/api/sites/{s['id']}/domain").json()["published"] is False
