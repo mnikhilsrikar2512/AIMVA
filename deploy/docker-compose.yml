@@ -1,0 +1,82 @@
+# AIMVA on one server: the app, Postgres, Caddy (automatic HTTPS) and nightly backups.
+#   cd deploy && cp .env.example .env   (fill it in)
+#   docker compose up -d --build
+# Full steps, restore and upgrades: docs/DEPLOY.md
+name: aimva
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aimva
+      POSTGRES_USER: aimva
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aimva -d aimva"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ..
+      args:
+        RELEASE: ${RELEASE:-}
+    image: aimva:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://aimva:${POSTGRES_PASSWORD}@db:5432/aimva
+      PUBLIC_URL: https://${DOMAIN:?set DOMAIN in deploy/.env}
+      FRONTEND_URL: https://${DOMAIN}
+      UPLOADS_DIR: /app/backend/data/uploads
+    volumes:
+      - appdata:/app/backend/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: aimva
+      PGDATABASE: aimva
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-21}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+      - appdata:/appdata:ro
+    entrypoint: ["sh", "/backup.sh", "loop"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  appdata:
+  caddy_data:
+  caddy_config:

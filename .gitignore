@@ -1,0 +1,27 @@
+# dependencies and builds
+node_modules/
+frontend/dist/
+.venv/
+__pycache__/
+.pytest_cache/
+
+# secrets and local data (never pushed)
+.env
+.env.*
+!.env.example
+backend/data/
+
+# machine-specific
+.DS_Store
+.claude/
+
+# deploy
+deploy/backups/
+
+# local-only folders (never pushed)
+_backup_*/
+_tmp_stage/
+_samples/
+legacy/
+docs/Claude.pdf
+*.pyc

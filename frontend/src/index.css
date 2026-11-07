@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+/*
+ * AIMVA light design system: warm off-white canvas, white surfaces separated by soft shadow
+ * (not borders), generous radius, one lavender → peach accent used sparingly.
+ */
+@theme {
+  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Geist", "Inter", ui-sans-serif, sans-serif;
+  /* Soft serif for moments only (greetings, first-visit headlines). Never for working UI. */
+  --font-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Tighter corners: every rounded-3xl/2xl/xl in the app shrinks with these. */
+  --radius-3xl: 1rem;
+  --radius-2xl: 0.75rem;
+  --radius-xl: 0.625rem;
+
+  --color-bg: #f7f4ee;
+  --color-surface: #fffdf9;
+  --color-surface-2: #f0ebe3;
+  --color-line: rgb(70 50 30 / 0.09);
+  --color-line-strong: rgb(70 50 30 / 0.17);
+  --color-strong: #1e1913;
+  --color-ink: #38302a;
+  --color-muted: #675d52;
+  /* was #9a97a8 (2.85:1, failed WCAG AA); now 4.9:1 on the page background */
+  --color-faint: #6f655a;
+  /* Warm accent: only for what needs attention (urgent next step, hot lead, greeting). */
+  --color-warm: #a34d22;
+  --color-warm-soft: #fbeadf;
+  --color-brand: #6d5dfc;
+  /* was #0e9fb8 (3.1:1 as link text, failed WCAG AA); now 4.6–5.4:1 on every warm surface */
+  --color-brand-2: #087485;
+  --color-peach: #ff9f7a;
+  --color-lavender: #ece8ff;
+
+  /* Calm: hairlines instead of floating shadows; lift only for menus and dialogs. */
+  --shadow-soft: 0 0 0 1px rgb(70 50 30 / 0.09);
+  --shadow-lift: 0 0 0 1px rgb(70 50 30 / 0.09), 0 18px 40px -20px rgb(70 40 15 / 0.28);
+}
+
+@layer base {
+  html { color-scheme: light; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    min-height: 100vh;
+  }
+  h1, h2, h3 { @apply font-display text-strong; letter-spacing: -0.022em; }
+  ::selection { background: var(--color-warm-soft); color: var(--color-strong); }
+  kbd { font-family: var(--font-mono); }
+  *:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; border-radius: 8px; }
+}
+
+@utility card {
+  @apply rounded-3xl bg-surface;
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow 0.3s ease;
+}
+@utility card-pad { @apply p-4 sm:p-5; }
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 h-9 text-sm font-medium
+    transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer;
+  &:active:not(:disabled) { transform: scale(0.97); }
+}
+@utility btn-primary {
+  @apply btn text-white bg-strong font-semibold;
+  &:hover:not(:disabled) { background: #3a3129; }
+}
+@utility btn-ghost { @apply btn bg-surface text-strong ring-1 ring-line-strong hover:ring-strong/30 hover:bg-surface-2; }
+@utility btn-subtle { @apply btn text-muted hover:text-strong hover:bg-ink/[0.05]; }
+@utility btn-danger { @apply btn text-rose-600 hover:bg-rose-500/10; }
+@utility btn-sm { @apply h-8 px-3 text-xs; }
+@utility input {
+  /* 16px on phones: iPhone Safari zooms the page into any field smaller than that. */
+  @apply w-full rounded-2xl bg-surface px-4 text-base sm:text-sm text-strong ring-1 ring-line-strong
+    placeholder:text-faint focus:ring-2 focus:ring-brand/50 focus:outline-none transition;
+  /* Fixed height for single-line controls only, so textareas keep their rows / h-* utilities. */
+  &:where(:not(textarea)) { height: 2.5rem; }
+  &:where(textarea) { padding-top: 0.7rem; padding-bottom: 0.7rem; line-height: 1.6; }
+}
+select.input { @apply pr-9; }
+@utility label { @apply block text-xs font-semibold text-muted mb-1.5; }
+@utility chip { @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium; }
+@utility gradient-text {
+  background: linear-gradient(95deg, #6d5dfc 0%, #b05cf0 45%, #ff8a65 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* Soft lavender/peach glow used behind heroes instead of boxes. */
+@utility aura {
+  background:
+    radial-gradient(40% 50% at 20% 10%, rgb(196 181 253 / 0.55), transparent 70%),
+    radial-gradient(35% 45% at 85% 0%, rgb(255 190 160 / 0.5), transparent 70%),
+    radial-gradient(45% 40% at 60% 60%, rgb(165 243 252 / 0.25), transparent 70%);
+}
+
+/* Inside the app the window is locked to the screen; the content panel (#app-scroll) does the scrolling. */
+html.app-locked, html.app-locked body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+/* clip, not hidden: hidden makes body a scroll container and breaks position: sticky (top bars, sticky columns) */
+html, body { overflow-x: clip; }
+
+/* Thin scrollbars */
+* { scrollbar-width: thin; scrollbar-color: rgb(20 18 31 / 0.18) transparent; }
+
+@keyframes slidein { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+}
+@keyframes adin { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes storybar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes pop { 0% { transform: scale(0.4); } 100% { transform: scale(1); } }
+@keyframes flash { 0% { background-color: rgb(52 211 153 / 0.18); } 100% { background-color: transparent; } }
+
+/* Serif for moments: add className="serif-moment" to a greeting or first-visit headline. */
+@utility serif-moment { font-family: var(--font-serif); font-weight: 450; font-variation-settings: "SOFT" 100, "opsz" 48; letter-spacing: -0.02em; }
+
+/*
+ * Phones (under 640px): page-level cards become full-width bands with hairlines top and bottom, instead of floating
+ * boxes inset from the screen edge. Same padding inside, so nothing reflows; nested cards keep their shape.
+ * Desktop and tablet are untouched.
+ */
+@media (max-width: 639px) {
+  #app-scroll .card:not(.card .card) {
+    margin-left: -1rem; margin-right: -1rem;
+    border-radius: 0;
+    box-shadow: 0 -1px 0 var(--color-line), 0 1px 0 var(--color-line);
+  }
+}
+/* Landscape phones with a notch: keep content clear of the rounded corners. */
+@supports (padding: env(safe-area-inset-left)) {
+  body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+}
+
+/* Tables that turn into stacked rows on phones and tablets: header hidden, each cell on its own line. */
+@media (max-width: 1023px) {
+  .table-stack thead { display: none; }
+  .table-stack, .table-stack tbody, .table-stack tr, .table-stack td { display: block; width: 100%; max-width: none; }
+  .table-stack tr { padding: 0.75rem 1rem; }
+  .table-stack td { padding: 0.2rem 0 !important; }
+  .table-stack td:empty { display: none; }
+}
+
+/*
+ * Touch screens up to tablet size: every tap target is at least 40px tall (WCAG 2.5.8 asks 24, Apple 44; 40 is
+ * the rule in design.md). Buttons keep their look; only the hit area and segmented tabs grow.
+ */
+@media (pointer: coarse) and (max-width: 1023px) {
+  [role="tab"], [role="radio"] { min-height: 2.25rem; }
+  .btn:not(.btn-sm) { min-height: 2.5rem; }
+  #app-scroll .btn-sm::after, #app-scroll [role="radio"] { touch-action: manipulation; }
+}
+
+/*
+ * Touch screens: small inline controls (filter chips, "Add domain", "Browse all", tag chips) keep their compact look
+ * but get a hit area that reaches about 40px tall. Selects and checkboxes, which can't take a pseudo-element, grow.
+ */
+/* In the base layer, so a button's own "absolute"/"fixed" utility still wins over the "relative" here. */
+@layer base {
+  @media (pointer: coarse) {
+    #app-scroll :is(button:not([role="tab"]):not([role="radio"]), .btn-sm):not(.absolute, .fixed, .sticky) { position: relative; }
+    #app-scroll :is(button:not(.btn):not([role="tab"]):not([role="radio"]))::after { content: ""; position: absolute; inset: -8px 0; }
+    #app-scroll .btn-sm::after { content: ""; position: absolute; inset: -4px 0; }
+  }
+}
+@media (pointer: coarse) {
+  #app-scroll select.chip { min-height: 2rem; }
+  #app-scroll input[type="checkbox"] { width: 1.125rem; height: 1.125rem; }
+}
+
+/* No 300ms tap delay on touch screens for anything tappable (double-tap zoom stays available on text). */
+@layer base {
+  a, button, [role="button"], [role="tab"], [role="radio"], label, summary, select { touch-action: manipulation; }
+}

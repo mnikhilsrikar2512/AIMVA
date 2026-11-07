@@ -1,0 +1,16 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.env
+**/.env.*
+!**/.env.example
+backend/data
+frontend/dist
+legacy
+_backup_*
+.git
+.DS_Store
+_tmp_stage
+docs
+.claude
