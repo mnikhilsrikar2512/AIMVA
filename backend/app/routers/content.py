@@ -141,6 +141,8 @@ class ImageIn(BaseModel):
     use_brand: bool = False  # fold the saved Brand Kit (style, colours, audience, avoid) into the prompt
     add_logo: bool = False  # composite the primary brand logo onto each result
     logo_position: LogoPosition = "bottom-right"
+    keep_product: bool = False  # the reference is a product photo: build a new scene around its real pixels
+    smart_prompt: bool = True  # expand the idea into a structured brief (subject, setting, light, camera...) first
 
     _inbound = field_validator("provider", mode="before")(lambda v: discreet.in_ref(v) if isinstance(v, str) else v)
     _inbound_model = field_validator("model", mode="before")(lambda v: discreet.in_model(v) if isinstance(v, str) else v)
@@ -217,6 +219,46 @@ def _pollinations(url: str) -> bytes:
     return r.content
 
 
+def _image_prompt(db: Session, user: User, body: "ImageIn", kit, product: bool = False):
+    """(prompt, brief): the user's idea expanded into a structured brief when an AI writer is available."""
+    from .. import image_brief
+    if not body.smart_prompt:
+        return brand_prompt(body.prompt, kit), None
+    from ..quality import PLAYBOOKS, match_playbook
+    hint = PLAYBOOKS[match_playbook(fallback=user.industry)]["image_hint"]
+    brand = brand_prompt("", kit).strip(", ") if kit else ""
+    prompt, brief = image_brief.brief_prompt(writer(db, user.id, agent="prompt_artist"), body.prompt, hint, brand, product=product)
+    return (prompt if brief else brand_prompt(body.prompt, kit)), brief
+
+
+def _reference_bytes(ref: str) -> bytes:
+    import base64
+    if ref.startswith("data:"):
+        return base64.b64decode(ref.split(",", 1)[1])
+    try:
+        return fetch_image(ref)
+    except (httpx.HTTPError, BadImage):
+        raise HTTPException(502, "Couldn't load that product photo. Try uploading it again.")
+
+
+def _product_images(db: Session, user: User, body: "ImageIn", reference: Optional[str], kit, w: int, h: int):
+    """New scenes around the user's real product: cut it out, paint the scene, put the original pixels back."""
+    from .. import image_edit as IE
+    if not reference:
+        raise HTTPException(400, "Pick your product photo as the reference image first, then turn on “Keep my product exactly”.")
+    key = _fal_key(db, user)
+    if not key:
+        raise HTTPException(400, "Keeping your product exactly needs Studio images, which aren't switched on yet.")
+    prompt, brief = _image_prompt(db, user, body, kit, product=True)
+    try:
+        product = IE.open_rgb(_reference_bytes(reference))
+        out = [("bytes", IE.png_bytes(IE.product_scene(key, product, (w, h), _styled(prompt, body.style))))
+               for _ in range(body.count)]
+    except IE.EditFailed as e:
+        raise HTTPException(e.status, e.message)
+    return out, prompt, brief
+
+
 def _snap(v: int) -> int:
     return max(256, min(2048, int(round(v / 16) * 16)))  # most models want multiples of 16
 
@@ -233,18 +275,25 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
     reference = _reference(db, user, body.reference)
     results = []  # ("url", str) | ("bytes", bytes)
     seed = body.seed
-    if ref == "builtin:pollinations":
+    brief, sent = None, None
+    if body.keep_product:
+        results, sent, brief = _product_images(db, user, body, reference, kit, w, h)
+        model_label = "product-keep"
+    elif ref == "builtin:pollinations":
         variant = body.model.split("/", 1)[1] if body.model.startswith("pollinations/") else (body.model or "flux")
         if variant not in ("flux", "turbo"):
             raise HTTPException(400, "The free provider supports the “flux” and “turbo” models.")
-        prompt = _styled(brand_prompt(body.prompt, kit), body.style, body.negative_prompt, inline_negative=True)
+        base, brief = _image_prompt(db, user, body, kit)
+        prompt = _styled(base, body.style, body.negative_prompt, inline_negative=True)
+        sent = prompt
         seed = body.seed if body.seed is not None else random.randint(1, 10**9)
         results.append(("bytes", _pollinations(f"https://image.pollinations.ai/prompt/{quote(prompt)}?width={w}&height={h}"
                                                f"&seed={seed}&model={variant}&nologo=true")))  # free tier: one at a time
         model_label = f"pollinations/{variant}"
     else:
         conn = resolve(db, user, ref, "image", "" if body.model.startswith("pollinations/") else body.model)
-        prompt = _styled(brand_prompt(body.prompt, kit), body.style)
+        base, brief = _image_prompt(db, user, body, kit)
+        prompt = sent = _styled(base, body.style)
         aspect = next((k for k, v in SIZES.items() if v == (w, h)), body.size if body.size in SIZES else "1:1")
         opts = {"prompt": prompt, "negative_prompt": body.negative_prompt, "width": w, "height": h, "count": body.count,
                 "seed": body.seed, "aspect_ratio": aspect, "image_data_uri": reference}
@@ -283,7 +332,9 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
                   params={"size": body.size if not body.width else f"{w}x{h}", "width": w, "height": h, "brand": bool(kit),
                           "logo": bool(logo), "provider": ref, "style": body.style, "seed": seed,
                           "negative_prompt": body.negative_prompt, "reference": bool(reference), "batch": batch,
-                          "provider_label": "Free FLUX" if ref == "builtin:pollinations" else model_label})
+                          "kept_product": body.keep_product, "brief": brief, "prompt_sent": sent,
+                          "provider_label": "Your product, new scene" if body.keep_product
+                          else "Free FLUX" if ref == "builtin:pollinations" else model_label})
         db.add(a)
         assets.append(a)
     db.commit()
@@ -900,6 +951,43 @@ def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), 
                                            "edit_engine": engine["name"],
                                            "edit_precise": engine["precise"], "edit_kind": "style" if style and not pins else "comments"},
                        f"{style['name']} style" if style and not pins else f"Edited · {engine['name']}")
+    return asset_out(a)
+
+
+class TextLayerIn(BaseModel):
+    text: str = Field("", max_length=160)
+    x: float = Field(0.5, ge=0, le=1)
+    y: float = Field(0.5, ge=0, le=1)
+    size: float = Field(0.06, ge=0.02, le=0.2)  # letter height as a share of the image width
+    color: str = Field("#ffffff", pattern=r"^#[0-9a-fA-F]{6}$")
+    weight: Literal["regular", "bold"] = "bold"
+    bg: Literal["none", "band", "pill"] = "none"
+
+
+class TextIn(BaseModel):
+    layers: List[TextLayerIn] = Field(default_factory=list, max_length=8)
+
+
+@router.post("/image/{asset_id}/text")
+def set_text(asset_id: int, body: TextIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Typeset headlines, prices and buttons on the image ourselves, so they're always spelled right (any Indian script
+    too). Text is drawn on the image underneath the last text version, so editing it again replaces the old text."""
+    from .. import image_edit as IE
+    from .. import text_layers as TL
+    rate_limit(f"imgedit:{user.id}", 40, 300)
+    src = _own_image(db, user, asset_id)
+    base_id = (src.params or {}).get("text_base")
+    base = db.get(Asset, base_id) if base_id else None
+    if not base or base.user_id != user.id or base.kind != "image" or not base.url:
+        base = src
+    layers = [l.model_dump() for l in body.layers if l.text.strip()]
+    try:
+        out = TL.render(IE.open_rgb(_asset_bytes(base)), layers)
+    except IE.EditFailed as e:
+        raise _edit_error(e)
+    label = f"Text · {layers[0]['text'][:24]}" if layers else "Text removed"
+    a = _save_version(db, user, src, out, {"text_layers": layers, "text_base": base.id, "text_base_url": base.url, "edit_kind": "text",
+                                           "edit_engine": "AIMVA text", "edit_precise": True}, label)
     return asset_out(a)
 
 

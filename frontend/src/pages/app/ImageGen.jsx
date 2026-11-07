@@ -18,7 +18,7 @@ const SIZE_OPTIONS = [["1:1", "Square 1:1"], ["4:5", "Portrait 4:5"], ["9:16", "
 export default function ImageGen() {
   const { data: assets, setData: setAssets, loading } = useApi("/api/content/assets?kind=image", []);
   const { data: options } = useApi("/api/providers/options?kind=image", []);
-  const EMPTY = { prompt: "", size: "1:1", width: 1024, height: 1024, count: 1, negative_prompt: "", seed: null, style: "", reference: "" };
+  const EMPTY = { prompt: "", size: "1:1", width: 1024, height: 1024, count: 1, negative_prompt: "", seed: null, style: "", reference: "", keep_product: false };
   const [form, setForm] = useState(EMPTY);
   const [tab, setTab] = useState("create");
   const [current, setCurrent] = useState([]);  // only the latest generation is shown in Create
@@ -57,7 +57,7 @@ export default function ImageGen() {
       prompt: form.prompt, provider: prov.provider, model: prov.model || option?.model || "",
       size: custom ? "1:1" : form.size, width: custom ? Number(form.width) : null, height: custom ? Number(form.height) : null,
       count: Math.min(Number(form.count), maxCount), negative_prompt: form.negative_prompt, seed: form.seed,
-      style: form.style || null, reference: form.reference,
+      style: form.style || null, reference: form.reference, keep_product: !!form.reference && !free && form.keep_product,
       ...brandOpts, use_brand: !!brandKit?.is_set_up && brandOpts.use_brand,
     }));
     if (out) {
@@ -140,7 +140,15 @@ export default function ImageGen() {
               <Field label="Avoid (negative prompt)"><input className="input" value={form.negative_prompt} onChange={set("negative_prompt")} maxLength={1000} placeholder="text, watermark, blurry, extra fingers" /></Field>
               <SeedField value={form.seed} onChange={(v) => setForm((f) => ({ ...f, seed: v }))} />
               <LibraryImagePicker label="Reference image" value={form.reference} onChange={(v) => setForm((f) => ({ ...f, reference: v }))}
-                hint="Guides the look and layout of the result." />
+                hint={form.keep_product ? "Your product photo. It's cut out and placed in a new scene, unchanged." : "Guides the look and layout of the result."} />
+              {form.reference && (
+                <label className={cx("flex items-start gap-2 rounded-xl border border-ink/10 p-3 text-sm", free && "opacity-60")}>
+                  <input type="checkbox" className="mt-0.5" disabled={free} checked={!free && form.keep_product}
+                    onChange={(e) => setForm((f) => ({ ...f, keep_product: e.target.checked }))} />
+                  <span><b className="text-strong">Keep my product exactly</b>
+                    <span className="block text-xs text-muted">{free ? "Needs Studio images. The free engine redraws the product." : "AI paints only the scene around it, so labels and shape stay true."}</span></span>
+                </label>
+              )}
             </Advanced>
             <BrandControls brand={brandKit} value={brandOpts} onChange={setBrandOpts} freeModel={free} />
             <Button type="submit" busy={busy} className="h-11 w-full"><Wand2 className="size-4" /> Generate</Button>

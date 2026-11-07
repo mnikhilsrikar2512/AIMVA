@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, ChevronDown, Expand, Eye, ImageUp, MousePointerClick, Palette, Redo2, Search, SlidersHorizontal, Undo2, Wand2, X } from "lucide-react";
+import { ArrowUp, ChevronDown, Expand, Eye, ImageUp, MousePointerClick, Palette, Plus, Redo2, Search, SlidersHorizontal, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
 import { Button, Field, Modal, Tabs, cx } from "./ui";
 import { post } from "../lib/api";
 import { useAction, useApi } from "../lib/hooks";
@@ -18,6 +18,12 @@ const TRY_STYLES = ["portrait", "skeleton", "anime", "cinematic", "watercolor"];
 const PLACEMENTS = [["1:1", "Feed square"], ["4:5", "Feed portrait"], ["9:16", "Stories & Reels"], ["16:9", "YouTube & display"], ["1.91:1", "Link ads & Google"]];
 const SLASH = /(^|\s)\/([\w-]*)$/; // "/ske" at the end of what's typed opens the style menu
 const hasText = (p) => p.text.trim().length >= 2;
+// Text layers are typeset by the server (app/text_layers.py), never drawn by the image model.
+const TEXT_SIZES = [["S", 0.04], ["M", 0.06], ["L", 0.09], ["XL", 0.13]];
+const TEXT_COLOURS = ["#ffffff", "#141414", "#ffcc00", "#6655f2", "#e5484d"];
+const TEXT_LOOKS = [["none", "Plain"], ["band", "Band"], ["pill", "Button"]];
+const onColour = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150 ? "#141414" : "#ffffff"; };
+const newLayer = (x = 0.5, y = 0.5) => ({ id: Date.now() + Math.random(), text: "", x, y, size: 0.06, color: "#ffffff", weight: "bold", bg: "none" });
 
 /** Image editor, chat style: click the image and type what to change there, or type in the box below for the whole
  *  image (with /styles). Enter applies. Every result is a new version you can undo; the original is never changed. */
@@ -33,6 +39,7 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
   const [engine, setEngine] = useState("auto");
   const [side, setSide] = useState("versions");
   const [peek, setPeek] = useState(false);
+  const [layers, setLayers] = useState([]);
   const [busy, run] = useAction();
   const box = useRef(null);
   const composer = useRef(null);
@@ -42,6 +49,10 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
     setVersions([asset]); setAt(0); setPins([]); setActive(null); setText(""); setStyle(null); setEngine("auto"); setSide("versions");
   }, [open, asset]);
   const source = versions[at];
+  const textBase = source?.params?.text_base_url;
+  useEffect(() => {  // reopening a version with text brings its layers back, ready to change
+    if (side === "text") setLayers((source?.params?.text_layers || []).map((l, i) => ({ ...l, id: `${source.id}-${i}` })));
+  }, [side, source?.id]);
   if (!open || !asset || !source) return null;
 
   const engines = info?.engines || [];
@@ -52,10 +63,17 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
   const ready = !busy && (queued.length > 0 || !!style || typed.length >= 3);
   const before = versions[at - 1];
   const shown = peek && before ? before : source;
+  const writing = side === "text" && !peek;
+  const shownUrl = writing && textBase ? textBase : shown.url;
 
   const reset = () => { setPins([]); setActive(null); setText(""); setStyle(null); };
   const place = (e) => {
     if (busy || peek) return;
+    if (writing) {
+      const r = box.current.getBoundingClientRect();
+      if (layers.length < 8) setLayers((l) => [...l, newLayer((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)]);
+      return;
+    }
     // Clicking away from an open, empty comment just closes it.
     const open_ = pins.find((p) => p.id === active);
     if (open_ && !hasText(open_)) { setPins((p) => p.filter((x) => x.id !== active)); setActive(null); return; }
@@ -91,8 +109,11 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <div ref={box} className={cx("relative select-none rounded-2xl bg-surface-2", !busy && "cursor-crosshair")} onClick={place}>
-            <img src={shown.url} alt={shown.prompt || "Image"} className="block w-full rounded-2xl" draggable={false} />
-            {!peek && pins.map((p, i) => (
+            <img src={shownUrl} alt={shown.prompt || "Image"} className="block w-full rounded-2xl" draggable={false} />
+            {writing && layers.map((l) => (
+              <TextMark key={l.id} layer={l} box={box} update={(patch) => setLayers((all) => all.map((x) => (x.id === l.id ? { ...x, ...patch } : x)))} />
+            ))}
+            {!peek && !writing && pins.map((p, i) => (
               <PinMark key={p.id} pin={p} n={i + 1} open={active === p.id} canSelect={canSelect} busy={busy}
                 onOpen={() => setActive(p.id)} onClose={() => setActive(null)} update={(patch) => update(p.id, patch)}
                 onRemove={() => remove(p.id)} onSend={send} ready={ready} />
@@ -136,7 +157,11 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
         </div>
 
         <div className="space-y-4">
-          <Tabs value={side} onChange={setSide} tabs={[{ value: "versions", label: "Versions" }, { value: "more", label: "More tools" }]} />
+          <Tabs value={side} onChange={setSide} tabs={[{ value: "versions", label: "Versions" }, { value: "text", label: "Text" }, { value: "more", label: "More tools" }]} />
+          {side === "text" && (
+            <TextPanel layers={layers} setLayers={setLayers} busy={busy}
+              onApply={() => tool("text", { layers: layers.filter((l) => l.text.trim()).map(({ id, ...l }) => l) }, "Text saved as a new version")} />
+          )}
           {side === "versions" && (
             <Versions versions={versions} at={at} busy={busy} onPick={(i) => { setAt(i); reset(); }} onClose={onClose} />
           )}
@@ -425,12 +450,76 @@ function MorePanel({ busy, chosen, info, source, onExtend, onBackground, onUpsca
   );
 }
 
+/** A text layer previewed on the image. Drag to move; the server draws the final letters. */
+function TextMark({ layer: l, box, update }) {
+  const drag = (e) => {
+    e.stopPropagation();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const r = box.current.getBoundingClientRect();
+      update({ x: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)) });
+    };
+    const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
+  const pill = l.bg === "pill";
+  return (
+    <div onPointerDown={drag} onClick={(e) => e.stopPropagation()} role="button" aria-label={`Text: ${l.text || "empty"}. Drag to move`}
+      className={cx("absolute max-w-[88%] cursor-move touch-none whitespace-pre-wrap text-center leading-tight outline-dashed outline-1 outline-white/70",
+        l.bg === "band" && "bg-black/55 px-3 py-1", pill && "rounded-full px-4 py-1")}
+      style={{ left: `${l.x * 100}%`, top: `${l.y * 100}%`, transform: "translate(-50%, -50%)", fontSize: `calc(var(--w, 600px) * ${l.size})`,
+        fontWeight: l.weight === "bold" ? 700 : 400, color: pill ? undefined : l.color, background: pill ? l.color : undefined,
+        textShadow: l.bg === "none" ? "0 1px 3px rgba(0,0,0,.45)" : undefined, fontFamily: "Inter, 'Noto Sans', system-ui, sans-serif" }}>
+      <span style={pill ? { color: onColour(l.color) } : undefined}>{l.text || "Your text"}</span>
+    </div>
+  );
+}
+
+function TextPanel({ layers, setLayers, busy, onApply }) {
+  const patch = (id, p) => setLayers((all) => all.map((x) => (x.id === id ? { ...x, ...p } : x)));
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">Click the image to place text, drag it to move. Letters are typeset, never drawn by AI, so prices and any Indian language stay exact.</p>
+      {layers.map((l, i) => (
+        <div key={l.id} className="space-y-2 rounded-xl border border-ink/10 p-2.5">
+          <div className="flex items-start gap-1.5">
+            <textarea className="input min-h-[2.5rem] flex-1 text-sm" rows={1} maxLength={160} value={l.text} autoFocus={!l.text && i === layers.length - 1}
+              placeholder="e.g. दिवाली सेल ₹999" onChange={(e) => patch(l.id, { text: e.target.value })} />
+            <IconBtn label="Remove text" onClick={() => setLayers((all) => all.filter((x) => x.id !== l.id))}><Trash2 className="size-4" /></IconBtn>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {TEXT_SIZES.map(([k, v]) => <Chip key={k} small on={l.size === v} onClick={() => patch(l.id, { size: v })}>{k}</Chip>)}
+            <Chip small on={l.weight === "bold"} onClick={() => patch(l.id, { weight: l.weight === "bold" ? "regular" : "bold" })}><b>B</b></Chip>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {TEXT_LOOKS.map(([k, v]) => <Chip key={k} small on={l.bg === k} onClick={() => patch(l.id, { bg: k })}>{v}</Chip>)}
+            <span className="ml-auto flex gap-1">
+              {TEXT_COLOURS.map((c) => (
+                <button key={c} type="button" aria-label={`Colour ${c}`} title={c} onClick={() => patch(l.id, { color: c })}
+                  className={cx("size-5 rounded-full border border-ink/20", l.color === c && "ring-2 ring-violet-500 ring-offset-1")} style={{ background: c }} />
+              ))}
+            </span>
+          </div>
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <Button variant="ghost" size="sm" disabled={busy || layers.length >= 8} onClick={() => setLayers((l) => [...l, newLayer(0.5, 0.15 + 0.12 * (l.length % 6))])}>
+          <Plus className="size-4" /> Add text
+        </Button>
+        <Button size="sm" className="flex-1" busy={busy} onClick={onApply}><Type className="size-4" /> Apply text</Button>
+      </div>
+    </div>
+  );
+}
+
 /** Keeps a CSS variable with the image's shorter side in px, so circle sizes match what the server masks. */
 function ShortSide({ target }) {
   useEffect(() => {
     const el = target.current;
     if (!el) return;
-    const set = () => el.style.setProperty("--short", `${Math.min(el.clientWidth, el.clientHeight)}px`);
+    const set = () => { el.style.setProperty("--short", `${Math.min(el.clientWidth, el.clientHeight)}px`); el.style.setProperty("--w", `${el.clientWidth}px`); };
     set();
     const ro = new ResizeObserver(set);
     ro.observe(el);
