@@ -31,8 +31,8 @@ def test_seed_gives_every_role_working_access(db):
     assert {"Smile Dental Clinic", "Greenleaf Realty", "BrightPath Coaching"} <= names
     assert owner.post(f"/api/workspaces/{realty}/switch").status_code == 200
     leads = owner.get("/api/leads").json()
-    assert len(leads if isinstance(leads, list) else leads["leads"]) == 24
-    assert len(owner.get("/api/sites").json()) == 2
+    assert len(leads if isinstance(leads, list) else leads["leads"]) == 55
+    assert len(owner.get("/api/sites").json()) == 3
 
     editor = login("editor@aimva-demo.example.com")
     assert editor.post(f"/api/workspaces/{dental}/switch").status_code == 200
@@ -44,10 +44,10 @@ def test_seed_gives_every_role_working_access(db):
     lead_id = db.scalar(select(M.Lead.id).where(M.Lead.user_id == dental))
     assert client.patch(f"/api/leads/{lead_id}", json={"stage": "won"}).status_code == 403  # view-only
     pending = client.get("/api/approvals", params={"status": "pending"}).json()
-    assert len(pending) == 1 and pending[0]["kind"] == "campaign"
+    assert sorted(a["kind"] for a in pending) == ["campaign", "site"]
 
     solo = login("solo@aimva-demo.example.com")
-    assert len(solo.get("/api/sites").json()) == 2
+    assert len(solo.get("/api/sites").json()) == 3
     assert solo.get(f"/api/sites", headers={"X-AIMVA-Workspace": str(dental)}).status_code == 403
 
 
@@ -84,9 +84,29 @@ def test_unseed_removes_only_demo_data(db):
     assert dbtool.is_seeded(db)
     removed = dbtool._unseed(db)
     db.commit()
-    assert removed == 6 + 3
+    assert removed == 7 + 3
     assert not dbtool.is_seeded(db)
     assert db.scalar(select(func.count()).select_from(M.User)) == 1
-    for table in (M.Lead, M.Site, M.Campaign, M.CampaignStat, M.Membership, M.WaMessage, M.Call, M.SiteVersion, M.Invite):
+    for table in (M.Lead, M.Site, M.Campaign, M.CampaignStat, M.Membership, M.WaMessage, M.Call, M.SiteVersion, M.Invite,
+                  M.Asset, M.WaScheduled, M.Decision, M.BrandKit):
         assert db.scalar(select(func.count()).select_from(table)) == 0, table.__tablename__
     seeded(db)  # can load again after removing
+
+
+def test_every_screen_has_data_and_one_account_stays_empty(db):
+    """Owner's own business, pictures that load, multilingual calls, 60 days of leads; empty@ has nothing."""
+    from datetime import timedelta
+    seeded(db)
+    owner = login("owner@aimva-demo.example.com")
+    own_id = owner.get("/api/auth/me").json()["user"]["id"]
+    assert len(owner.get("/api/leads").json()) == 28 and len(owner.get("/api/sites").json()) == 3
+    pics = owner.get("/api/content/assets?kind=image").json()
+    assert len(pics) == 4 and owner.get(pics[0]["url"]).status_code == 200  # placeholder pictures are real files
+    langs = {c.transcript[0].get("lang") for c in db.scalars(select(M.Call).where(M.Call.user_id == own_id))}
+    assert "en-IN" in langs and len(langs) >= 2
+    oldest = db.scalar(select(func.min(M.Lead.created_at)).where(M.Lead.user_id == own_id))
+    assert M.utcnow() - oldest > timedelta(days=35)  # trends span about two months
+
+    empty = login("empty@aimva-demo.example.com")
+    assert empty.get("/api/leads").json() == [] and empty.get("/api/sites").json() == []
+    assert empty.get("/api/content/assets?kind=image").json() == []

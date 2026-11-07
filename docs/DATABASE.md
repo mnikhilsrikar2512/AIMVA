@@ -59,20 +59,28 @@ Their emails end in `@aimva-demo.example.com`, a reserved domain with no real in
 | `client.dental@aimva-demo.example.com` | Dr. Arjun Mehta | Client in Smile Dental: view-only, decides approvals |
 | `client.realty@aimva-demo.example.com` | Kavya Reddy | Client in Greenleaf Realty |
 | `solo@aimva-demo.example.com` | Imran Khan, Khan's Fitness Studio | Small business on its own, no agency |
+| `empty@aimva-demo.example.com` | Neha Kapoor, Kapoor Interiors | Signed up two days ago, no data: for testing empty states |
 
-Client workspaces, each with a brand kit, products, a published page and a draft page, 3 campaigns (Meta active,
-Google paused, LinkedIn draft) with daily stats, leads over the last 30 days in every stage with history, WhatsApp
-threads, a voice agent with calls, and a trial subscription:
+Every business below has a brand kit, products, three pages (two published, one draft) with visits, three campaigns
+(Meta active for 55 days, Google paused after 35, LinkedIn draft) with daily stats, leads spread over the last 60
+days in every stage and source with history and won deals, WhatsApp threads plus follow-ups scheduled for the next
+days, a voice agent with calls whose transcripts are in English, Hindi, Telugu or Tamil, four branded pictures
+(drawn locally, no network), and two campaign decisions. Lead messages mix English, Hinglish, Hindi, Telugu and Tamil.
 
-- **Smile Dental Clinic** (healthcare, 18 leads). Requires client approval: the published page is approved, the LinkedIn campaign is waiting for approval.
-- **Greenleaf Realty** (real estate, 24 leads). Pending invite for `newhire@aimva-demo.example.com` as editor: sign up with that email to test accepting an invite.
-- **BrightPath Coaching** (education, 12 leads).
+- **Smile Dental Clinic** (healthcare, 40 leads). Requires client approval: the first page is approved; the LinkedIn campaign and the second offer page are waiting for approval.
+- **Greenleaf Realty** (real estate, 55 leads). Pending invite for `newhire@aimva-demo.example.com` as editor: sign up with that email to test accepting an invite.
+- **BrightPath Coaching** (education, 30 leads).
+- **Brightline Digital**, the agency owner's own account (28 leads), so `owner@` has data before switching to a client.
+- **Khan's Fitness Studio**, `solo@` (22 leads).
 
-Khan's Fitness Studio has the same kinds of data (10 leads). Public pages: `/s/demo-dental`, `/s/demo-realty`,
-`/s/demo-coaching`, `/s/demo-solo`. The same `--random-seed` (default 42) always gives the same names and numbers.
+`owner@`, `solo@` and `empty@` have onboarding answers. Public pages: `/s/demo-dental`, `/s/demo-realty`,
+`/s/demo-coaching`, `/s/demo-solo`, `/s/demo-brightline`, plus `-2` for each second page. The same `--random-seed`
+(default 42) always gives the same names and numbers. `unseed` also deletes the seeded pictures from `data/uploads`.
 
-What it does not include: connected Meta/Google/WhatsApp/Twilio accounts, images or videos, AI provider keys. Those need
-real keys and are tested by connecting them in Settings.
+For the owner-only screens locally, put `ADMIN_EMAILS=owner@aimva-demo.example.com` in `backend/.env`.
+
+What it does not include: connected Meta/Google/WhatsApp/Twilio accounts, real AI-generated pictures or videos, and AI
+keys. Those need real keys and are tested by connecting them.
 
 ## 4. Things worth testing with it
 

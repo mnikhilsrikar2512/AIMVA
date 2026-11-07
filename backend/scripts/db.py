@@ -173,7 +173,16 @@ PEOPLE = [
     ("client.dental", "Dr. Arjun Mehta", "Smile Dental Clinic", "healthcare"),  # client (view + approve)
     ("client.realty", "Kavya Reddy", "Greenleaf Realty", "real_estate"),        # client
     ("solo", "Imran Khan", "Khan's Fitness Studio", "services"),       # small business, no agency
+    ("empty", "Neha Kapoor", "Kapoor Interiors", "services"),          # signed up, no data yet: empty states
 ]
+# What each person answered in onboarding (the agency owner's own business data is seeded too, see OWN_BIZ).
+ANSWERS = {
+    "owner": {"for_whom": "clients", "has_website": True, "website": "https://brightline.example.com",
+              "presence": ["instagram", "linkedin", "whatsapp"], "acquisition": "ads_self", "monthly_budget": "25k_1l", "team_size": "small"},
+    "solo": {"for_whom": "own", "has_website": False, "presence": ["instagram", "whatsapp"], "acquisition": "word_of_mouth",
+             "monthly_budget": "lt25k", "team_size": "solo"},
+    "empty": {"for_whom": "own", "has_website": False, "presence": ["none"], "acquisition": "none", "team_size": "solo"},
+}
 
 WORKSPACES = [
     {
@@ -183,7 +192,7 @@ WORKSPACES = [
         "offer": "Free consultation this month", "cta": "Book a free check-up",
         "features": ["Painless treatment", "Open on Sundays", "EMI available"],
         "members": [("admin", "admin"), ("editor", "editor"), ("client.dental", "client")],
-        "lead_count": 18,
+        "lead_count": 40,
     },
     {
         "key": "realty", "company": "Greenleaf Realty", "industry": "real_estate", "require_approval": False,
@@ -192,7 +201,7 @@ WORKSPACES = [
         "offer": "Site visits every weekend", "cta": "Book a site visit",
         "features": ["RERA approved", "Near metro", "Bank loans pre-approved"],
         "members": [("admin", "admin"), ("editor", "editor"), ("client.realty", "client")],
-        "lead_count": 24,
+        "lead_count": 55,
     },
     {
         "key": "coaching", "company": "BrightPath Coaching", "industry": "education", "require_approval": False,
@@ -201,21 +210,39 @@ WORKSPACES = [
         "offer": "Free scholarship test", "cta": "Register for the test",
         "features": ["IIT faculty", "Small batches", "Weekly mock tests"],
         "members": [("admin", "admin")],
-        "lead_count": 12,
+        "lead_count": 30,
     },
 ]
 
 SOLO = {"key": "solo", "company": "Khan's Fitness Studio", "industry": "services", "colors": ["#B91C1C", "#111827"],
         "audience": "Working professionals in Pune, 25-40", "products": [("12-week transformation", "service", 18000, 300)],
         "offer": "First week free", "cta": "Claim your free week",
-        "features": ["Certified trainers", "6 am batches", "Diet plans"], "lead_count": 10}
+        "features": ["Certified trainers", "6 am batches", "Diet plans"], "lead_count": 22}
+# The agency owner's own business (Brightline Digital), so their own account isn't empty.
+OWN_BIZ = {"key": "brightline", "trial": False, "company": "Brightline Digital", "industry": "services", "colors": ["#A34D22", "#1E1913"],
+           "audience": "Clinics, builders and coaching centres in South India", "products": [("Lead generation retainer", "service", 45000, 800),
+           ("Landing page sprint", "service", 18000, 400)], "offer": "Free marketing audit", "cta": "Book my audit",
+           "features": ["Leads in 14 days", "Telugu, Hindi and English ads", "Weekly reports"], "lead_count": 28}
 
 FIRST = ["Aarav", "Ananya", "Vikram", "Meera", "Rohan", "Isha", "Karthik", "Divya", "Siddharth", "Pooja", "Nikhil",
          "Lakshmi", "Aditya", "Fatima", "Harish", "Neha", "Suresh", "Tanvi", "Manoj", "Riya", "Deepak", "Sana"]
 LAST = ["Patel", "Rao", "Nair", "Gupta", "Singh", "Menon", "Joshi", "Das", "Kulkarni", "Shetty", "Ali", "Bose"]
 STAGES = ["new"] * 5 + ["contacted"] * 4 + ["qualified"] * 3 + ["won"] * 2 + ["lost"] * 2
 MESSAGES = ["Please call me after 6 pm", "What is the price?", "Is this available on weekends?", "Interested, send details",
-            "Can I get a callback in Hindi?", "Looking for something next month", ""]
+            "Can I get a callback in Hindi?", "Looking for something next month", "", "EMI options hai kya?",
+            "मुझे कल शाम को कॉल कीजिए", "ధర ఎంత? వీకెండ్ లో రావచ్చా?", "வார இறுதியில் வரலாமா?", "Can I get a callback in Telugu?",
+            "Please share the brochure on WhatsApp", "Is there parking nearby?"]
+# Short call transcripts by language (the call's language is stored on its first line, as real calls do).
+CALL_LINES = {
+    "en-IN": [("agent", "Hi, thanks for your enquiry. Is now a good time?"), ("caller", "Yes, tell me more."),
+              ("agent", "Great. When would you like to visit?"), ("caller", "Saturday morning works.")],
+    "hi-IN": [("agent", "नमस्ते, आपकी पूछताछ के लिए धन्यवाद। क्या अभी बात कर सकते हैं?"), ("caller", "हाँ, बताइए।"),
+              ("agent", "आप कब आना चाहेंगे?"), ("caller", "शनिवार सुबह ठीक रहेगा।")],
+    "te-IN": [("agent", "నమస్తే, మీ ఎంక్వైరీకి ధన్యవాదాలు. ఇప్పుడు మాట్లాడవచ్చా?"), ("caller", "అవును, చెప్పండి."),
+              ("agent", "మీరు ఎప్పుడు రావాలనుకుంటున్నారు?"), ("caller", "ఆదివారం ఉదయం.")],
+    "ta-IN": [("agent", "வணக்கம், உங்கள் விசாரணைக்கு நன்றி. இப்போது பேசலாமா?"), ("caller", "ஆம், சொல்லுங்கள்."),
+              ("agent", "எப்போது வர விரும்புகிறீர்கள்?"), ("caller", "சனிக்கிழமை காலை.")],
+}
 
 
 def site_html(company: str, slug: str, ws: dict) -> str:
@@ -228,6 +255,52 @@ def site_html(company: str, slug: str, ws: dict) -> str:
         return template_html(b, slug)
     except Exception:  # noqa: BLE001  (the builder changed shape: a plain page is still a valid test page)
         return f"<!doctype html><html><body><h1>{company}</h1><p>{ws['offer']}</p></body></html>"
+
+
+def _call_language(message: str):
+    try:
+        from app.speech import detect_language
+        lang = detect_language(message or "")
+    except Exception:  # noqa: BLE001
+        return None
+    return lang if lang in CALL_LINES else None
+
+
+def _picture_prompts(ws: dict) -> list:
+    return [(f"{ws['offer']} poster for {ws['company']}", "photographic"), (f"{ws['features'][0]}, Instagram post", "minimal_product"),
+            (f"Festive offer banner, {ws['company']}", "illustration"), (f"{ws['products'][0][0]} hero image", "cinematic")]
+
+
+def _placeholder_picture(owner_id: int, colors: list, company: str, prompt: str, n: int):
+    """A small branded picture drawn here (no network, no AI): a gradient in the brand colours with the business name,
+    saved where generated pictures live, so the Pictures library and ad sets have something real to show."""
+    try:
+        import io
+        from PIL import Image, ImageDraw, ImageFont
+        from app.brand import FONT_FILE, save_generated
+    except Exception:  # noqa: BLE001
+        return None
+    size = 768
+    c1, c2 = (tuple(int(c[i:i + 2], 16) for i in (1, 3, 5)) for c in (colors[n % 2], colors[(n + 1) % 2]))
+    img = Image.new("RGB", (size, size))
+    px = img.load()
+    for y in range(size):
+        for x in range(0, size, 4):
+            t = (x + y) / (2 * size)
+            col = tuple(int(c1[k] * (1 - t) + c2[k] * t) for k in range(3))
+            for dx in range(4):
+                px[x + dx, y] = col
+    d = ImageDraw.Draw(img)
+    try:
+        big, small = ImageFont.truetype(str(FONT_FILE), 54), ImageFont.truetype(str(FONT_FILE), 28)
+    except OSError:
+        big = small = ImageFont.load_default()
+    d.rounded_rectangle((48, size - 250, size - 48, size - 48), radius=28, fill=(255, 255, 255))
+    d.text((80, size - 220), company[:24], fill=c1, font=big)
+    d.text((80, size - 140), prompt[:44], fill=(60, 50, 40), font=small)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=85)
+    return save_generated(owner_id, buf.getvalue())
 
 
 def seed_business(db, rng, owner_id: int, ws: dict, now: datetime, person_ids: dict) -> dict:
@@ -244,11 +317,11 @@ def seed_business(db, rng, owner_id: int, ws: dict, now: datetime, person_ids: d
     db.flush()
 
     sites = []
-    for i, published in enumerate((True, False)):
-        slug = f"demo-{ws['key']}" + ("" if published else "-draft")
-        created = now - timedelta(days=40 - i * 10)
+    for i, (published, suffix, label) in enumerate(((True, "", ""), (False, "-draft", " (new offer)"), (True, "-2", " (second offer)"))):
+        slug = f"demo-{ws['key']}{suffix}"
+        created = now - timedelta(days=55 - i * 15)
         html = site_html(company, slug, ws)
-        s = M.Site(user_id=owner_id, name=company + ("" if published else " (new offer)"), slug=slug,
+        s = M.Site(user_id=owner_id, name=company + label, slug=slug,
                    brief={"business": company, "offer": ws["offer"], "cta": ws["cta"]}, html=html, published=published,
                    deploy_target="aimva", visits=rng.randint(300, 2500) if published else 0, product_id=products[0].id,
                    published_at=created + timedelta(hours=2) if published else None, created_at=created, updated_at=created)
@@ -259,7 +332,7 @@ def seed_business(db, rng, owner_id: int, ws: dict, now: datetime, person_ids: d
         sites.append(s)
 
     campaigns = []
-    for platform, status, budget, days in (("meta", "active", 1500, 21), ("google", "paused", 2000, 14), ("linkedin", "draft", 3000, 0)):
+    for platform, status, budget, days in (("meta", "active", 1500, 55), ("google", "paused", 2000, 35), ("linkedin", "draft", 3000, 0)):
         started = now - timedelta(days=days)
         c = M.Campaign(user_id=owner_id, platform=platform, name=f"{company} - {ws['offer']} ({platform.title()})",
                        objective="leads", daily_budget=budget, status=status, product_id=products[0].id,
@@ -296,7 +369,7 @@ def seed_business(db, rng, owner_id: int, ws: dict, now: datetime, person_ids: d
         first, last = rng.choice(FIRST), rng.choice(LAST)
         source, ref, campaign_id = rng.choice(sources)
         stage = rng.choice(STAGES)
-        created = now - timedelta(days=rng.randint(0, 29), hours=rng.randint(0, 23), minutes=rng.randint(0, 59))
+        created = now - timedelta(days=int(rng.triangular(0, 59, 6)), hours=rng.randint(0, 23), minutes=rng.randint(0, 59))
         product = rng.choice(products)
         value = product.price if stage == "won" else 0
         phone = f"+9198{rng.randint(10000000, 99999999)}"
@@ -323,15 +396,35 @@ def seed_business(db, rng, owner_id: int, ws: dict, now: datetime, person_ids: d
             db.add(M.WaMessage(user_id=owner_id, contact=phone, contact_name=lead.name, direction="in", status="delivered",
                                body="Tomorrow 11 am works", created_at=t + timedelta(minutes=rng.randint(3, 90))))
         if source == "voice" or i % 5 == 0:
-            db.add(M.Call(user_id=owner_id, agent_id=agent.id, lead_id=lead.id, channel="browser", status="completed",
-                          sentiment=round(rng.uniform(-0.2, 0.8), 2),
-                          transcript=[{"role": "agent", "text": agent.greeting, "sentiment": 0},
-                                      {"role": "caller", "text": "Yes, tell me more.", "sentiment": 0.4}],
+            lang = _call_language(lead.message) or rng.choice(["en-IN", "en-IN", "hi-IN", "te-IN", "ta-IN"])
+            lines = [{"role": r, "text": t, "sentiment": 0.4 if r == "caller" else 0} for r, t in CALL_LINES[lang]]
+            lines[0]["lang"] = lang
+            db.add(M.Call(user_id=owner_id, agent_id=agent.id, lead_id=lead.id, channel="phone" if i % 2 else "browser",
+                          status="completed", sentiment=round(rng.uniform(-0.2, 0.8), 2), transcript=lines,
                           answers={"What are you looking for?": product.name}, created_at=created + timedelta(minutes=5)))
         leads.append(lead)
 
-    db.add(M.Subscription(user_id=owner_id, plan="trial", status="trialing", period_start=now - timedelta(days=3),
-                          period_end=now + timedelta(days=11), note="Seeded demo"))
+    for j, lead in enumerate([l for l in leads if l.stage in ("new", "contacted")][:3]):  # follow-ups waiting to go out
+        db.add(M.WaScheduled(user_id=owner_id, contact=lead.phone, contact_name=lead.name,
+                             body=f"Hi {lead.name.split()[0]}, just checking in about {company}. Any questions?",
+                             send_at=now + timedelta(days=j + 1, hours=3), status="scheduled", created_at=now - timedelta(hours=j + 1)))
+    for j, (prompt, style) in enumerate(_picture_prompts(ws)):
+        rel = _placeholder_picture(owner_id, ws["colors"], company, prompt, j)
+        if rel:
+            db.add(M.Asset(user_id=owner_id, kind="image", prompt=prompt, model="AIMVA images", url="/api/files/" + rel,
+                           status="done", params={"size": "1:1", "width": 768, "height": 768, "style": style, "brand": True,
+                                                  "provider": "builtin:pollinations", "batch": f"demo{j}"},
+                           created_at=now - timedelta(days=rng.randint(1, 50))))
+    meta = campaigns[0]
+    db.add(M.Decision(user_id=owner_id, key=f"call_hot:{(now - timedelta(days=6)).date()}", title="Call your 3 hottest leads now",
+                      decision="accepted", result="Voice agent called 3 leads", created_at=now - timedelta(days=6)))
+    db.add(M.Decision(user_id=owner_id, key=f"cpl_high:{meta.id}", title=f"“{meta.name}” costs more per lead than your target",
+                      decision="snoozed", note="Waiting for the new creative", until=now + timedelta(days=2),
+                      created_at=now - timedelta(days=2)))
+
+    if ws.get("trial", True):  # the agency owner's own account gets its paid plan in load_demo instead
+        db.add(M.Subscription(user_id=owner_id, plan="trial", status="trialing", period_start=now - timedelta(days=3),
+                              period_end=now + timedelta(days=11), note="Seeded demo"))
     db.flush()
     return {"sites": sites, "campaigns": campaigns, "leads": leads}
 
@@ -354,8 +447,8 @@ def load_demo(db, password: str = DEFAULT_PASSWORD, random_seed: int = 42) -> li
     people = {}
     for key, name, company, industry in PEOPLE:
         u = M.User(name=name, email=demo_email(key), password_hash=pw, company=company, industry=industry,
-                   goal="more_leads", is_verified=True, onboarding_dismissed=True, kind="person",
-                   created_at=now - timedelta(days=45))
+                   goal="more_leads", is_verified=True, onboarding_dismissed=key != "empty", kind="person",
+                   onboarding_answers=ANSWERS.get(key, {}), created_at=now - timedelta(days=2 if key == "empty" else 65))
         db.add(u)
         people[key] = u
     db.flush()
@@ -384,11 +477,15 @@ def load_demo(db, password: str = DEFAULT_PASSWORD, random_seed: int = 42) -> li
             db.add(M.Approval(workspace_id=w.id, kind="campaign", ref_id=draft_campaign.id, title=draft_campaign.name,
                               status="pending", note="New LinkedIn campaign, Rs 3,000/day", requested_by=ids["editor"],
                               created_at=now - timedelta(hours=5)))
+            second = data["sites"][2]
+            db.add(M.Approval(workspace_id=w.id, kind="site", ref_id=second.id, title=second.name, status="pending",
+                              note="Second offer page for implants", requested_by=ids["editor"], created_at=now - timedelta(hours=2)))
         summary.append((ws["company"], w.id, len(data["leads"])))
 
     db.add(M.Invite(workspace_id=summary[1][1], email=demo_email("newhire"), role="editor", invited_by=ids["owner"],
                     expires_at=now + timedelta(days=14)))
     seed_business(db, rng, ids["solo"], SOLO, now, ids)
+    seed_business(db, rng, ids["owner"], OWN_BIZ, now, ids)  # the agency's own marketing
     db.add(M.Subscription(user_id=ids["owner"], plan="agency", status="active", processor="manual",
                           period_start=now - timedelta(days=10), period_end=now + timedelta(days=20), note="Seeded demo"))
     db.commit()
@@ -418,14 +515,15 @@ def cmd_seed(args) -> int:
     print(f"Sign in with any of these (password: {args.password}):")
     roles = {"owner": "agency owner, owns all 3 client workspaces", "admin": "admin in all 3 workspaces",
              "editor": "editor in Smile Dental and Greenleaf", "client.dental": "client (view + approve) in Smile Dental",
-             "client.realty": "client in Greenleaf Realty", "solo": "small business, own data, no agency"}
+             "client.realty": "client in Greenleaf Realty", "solo": "small business, own data, no agency",
+             "empty": "signed up, no data yet (empty states)"}
     for key, name, *_ in PEOPLE:
         print(f"  {demo_email(key):34} {name:18} {roles[key]}")
     print("\nClient workspaces:")
     for company, wid, n in summary:
         print(f"  {company:22} id {wid:<5} {n} leads")
     print(f"\nPending invite: {demo_email('newhire')} as editor in Greenleaf Realty (sign up with that email to accept).")
-    print("Published demo pages: /s/demo-dental  /s/demo-realty  /s/demo-coaching  /s/demo-solo")
+    print("Published demo pages: /s/demo-dental  /s/demo-realty  /s/demo-coaching  /s/demo-solo  /s/demo-brightline (and -2 for each)")
     return 0
 
 
@@ -445,6 +543,13 @@ def _unseed(db) -> int:
     # Sites' site_versions and campaigns' campaign_stats cascade from their parents, which cascade from users.
     db.query(M.User).filter(M.User.id.in_(gone)).delete(synchronize_session=False)
     db.flush()
+    try:  # the seeded pictures on disk
+        import shutil
+        from app.brand import UPLOADS
+        for uid in gone:
+            shutil.rmtree(UPLOADS / str(uid), ignore_errors=True)
+    except Exception:  # noqa: BLE001
+        pass
     if shared:
         warn(f"kept workspace(s) {sorted(shared)}: people outside the demo are members")
     return len(gone)
