@@ -119,7 +119,7 @@ export default function Leads() {
         <AgentSwitch kind="concierge" title="Lead Concierge"
           text="Welcomes every new lead on WhatsApp within seconds, then follows up on day 2 and day 7 until they reply." />
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="grid gap-6 2xl:grid-cols-[1fr_340px]">{/* laptops: the full table, sync below it */}
         <Card className="min-w-0 p-0 sm:p-0">
           <div className="grid grid-cols-2 gap-2 border-b border-line p-4 sm:flex sm:flex-row">
             <div className="relative col-span-2 flex-1">

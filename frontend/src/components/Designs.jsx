@@ -87,7 +87,7 @@ export function DirectionsButton({ getBrief, onPick }) {
             {options.map((o) => (
               <div key={o.layout} className="flex flex-col gap-2">
                 <ScaledFrame html={o.html} />
-                <p className="text-sm font-semibold text-strong">{o.label} <span className="font-normal text-muted">· {o.look}, {o.theme}</span></p>
+                <p className="text-sm font-semibold text-strong">{o.label} <span className="font-normal text-muted">· {o.matched ? `matched to ${o.matched}` : `${o.look}, ${o.theme}`}</span></p>
                 <p className="flex-1 text-xs text-muted">{o.description}</p>
                 <Button type="button" onClick={() => { onPick({ layout: o.layout, look: o.look, font: o.font, decor: o.decor, theme: o.theme }); setOpen(false); }}>Use this design</Button>
               </div>

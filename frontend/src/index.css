@@ -29,7 +29,7 @@
   /* Warm accent: only for what needs attention (urgent next step, hot lead, greeting). */
   --color-warm: #a34d22;
   --color-warm-soft: #fbeadf;
-  --color-brand: #6d5dfc;
+  --color-brand: #6655f2;  /* 4.5:1 on the cream page background for small link text */
   /* was #0e9fb8 (3.1:1 as link text, failed WCAG AA); now 4.6–5.4:1 on every warm surface */
   --color-brand-2: #087485;
   --color-peach: #ff9f7a;

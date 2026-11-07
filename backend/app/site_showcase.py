@@ -91,6 +91,11 @@ def showcase_html(b, slug: str, media: dict, real_estate: bool, form_script: str
     c = copy or {}
     dark, gold, light = palette_for(b)
     gfam, hfont = HEAD_FONTS.get(b.font, HEAD_FONTS["serif"])
+    if b.font == "auto" and getattr(b, "font_heading", ""):  # heading font matched to the business (body stays Inter)
+        from .design_intel import fonts_query
+        q = fonts_query(b.font_heading, b.font_heading)
+        if q:
+            gfam, hfont = q, f"'{b.font_heading}'"
     hero_img = media.get("hero") or ""
     gallery = [g for g in media.get("gallery", []) if g]
     captions = list(getattr(b, "gallery_captions", []) or [])

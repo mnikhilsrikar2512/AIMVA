@@ -29,6 +29,7 @@ from ..db import get_db
 from ..brand import UPLOADS, asset_bytes, primary_logo
 from ..models import Asset, BrandAsset, ReferenceFile, Site, SiteVersion, User, utcnow
 from .. import providers as P
+from ..design_intel import fonts_query, match_design, on_color, writer_notes
 from ..quality import PLAYBOOKS, audit_page, match_playbook, playbook_ai_rules, playbook_out, readiness, review_brief
 from .references import reference_text
 from ..security import current_user, rate_limit
@@ -140,7 +141,12 @@ class Brief(BaseModel):
     decor: Decor = "auto"
     look: Look = "modern"
     theme: Literal["light", "dark"] = "light"
-    font: Literal["jakarta", "inter", "serif", "rounded", "grotesk"] = "jakarta"
+    font: Literal["auto", "jakarta", "inter", "serif", "rounded", "grotesk"] = "jakarta"  # auto: matched to the business
+    # Design matched to the business (UI/UX Pro Max data). Off unless asked for, so the owner's own colours always win.
+    match_colors: bool = False
+    font_heading: str = Field("", max_length=40, pattern=r"^[A-Za-z0-9 ]*$")  # filled in by the server when font is "auto"
+    font_body: str = Field("", max_length=40, pattern=r"^[A-Za-z0-9 ]*$")
+    design_match: str = Field("", max_length=80)  # the kind of business the design was matched to, shown to the owner
     language: str = Field("English", max_length=40)
     sections: List[Section] = Field(default_factory=lambda: ["features"], max_length=7)
     about: str = Field("", max_length=2000)
@@ -373,6 +379,45 @@ DECOR_CSS = {  # painted on a layer behind the hero, so masks/fades never touch 
 }
 
 
+ICON_PHONE = ('<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+              'stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 '
+              '19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 '
+              '2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>')
+ICON_CHAT = ('<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+             'stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>')
+
+
+def apply_design_match(b: Brief) -> Optional[dict]:
+    """Colours and fonts matched to the kind of business, only where the owner asked for that (match_colors, font "auto")."""
+    if not (b.match_colors or b.font == "auto"):
+        return None
+    m = match_design(b.industry, b.business, b.offer)
+    b.design_match = m["category"] if m else ""
+    if b.font == "auto":
+        b.font_heading, b.font_body = (m["font_heading"], m["font_body"]) if m else ("", "")
+    if m and b.match_colors:
+        b.primary, b.accent = m["primary"], m["accent"]
+    return m
+
+
+def page_fonts(b: Brief) -> tuple:
+    """(Google Fonts family query, CSS heading font, CSS body font). Matched fonts only when whitelisted, else Jakarta."""
+    if b.font == "auto":
+        q = fonts_query(b.font_heading, b.font_body)
+        if q:
+            return q, f"'{b.font_heading}'", f"'{b.font_body}'"
+    return FONTS.get(b.font, FONTS["jakarta"])
+
+
+def _design_notes(b: Brief) -> str:
+    if not (b.match_colors or b.font == "auto"):
+        return ""
+    m = match_design(b.industry, b.business, b.offer)
+    if m and b.font != "auto":  # the owner picked the fonts: don't suggest others
+        m = {**m, "font_heading": "", "font_body": ""}
+    return writer_notes(m)
+
+
 def template_html(b: Brief, slug: str, media: Optional[dict] = None, playbook: str = "other", copy: Optional[dict] = None) -> str:
     e = H.escape
     media = media or {"hero": b.hero_image if b.hero_image.startswith("https://") else "", "gallery": [], "logo": ""}
@@ -383,7 +428,8 @@ def template_html(b: Brief, slug: str, media: Optional[dict] = None, playbook: s
                              _form_script(slug, b.thank_you), _tracking(b), FIELD_LABELS, copy)
     decor = b.decor if b.decor != "auto" else "blobs"
     radius, shadow, weight, grad = LOOKS[b.look]
-    fq, hfont, bfont = FONTS[b.font]
+    fq, hfont, bfont = page_fonts(b)
+    on_p = on_color(b.primary)
     dark = b.theme == "dark"
     bg, fg, muted, card, line = (("#0b1020", "#e8ecf8", "#9aa3c0", "#121a33", "#1f2a4a") if dark
                                  else ("#f8fafc", "#0f172a", "#475569", "#ffffff", "#e2e8f0"))
@@ -394,8 +440,8 @@ def template_html(b: Brief, slug: str, media: Optional[dict] = None, playbook: s
     wa_num = re.sub(r"[^0-9]", "", b.whatsapp)
     wa = f'<a class="wa" href="https://wa.me/{wa_num}" target="_blank" rel="noopener">WhatsApp us</a>' if wa_num else ""
     callback = b.contact_mode != "own_phone"
-    tel = (f'<a class="ghost" href="tel:{e(b.phone)}">Call {e(b.phone)}</a>' if b.shows_phone
-           else '<a class="ghost" href="#contact">📞 Request a call back</a>' if callback else "")
+    tel = (f'<a class="ghost" href="tel:{e(b.phone)}">{ICON_PHONE}Call {e(b.phone)}</a>' if b.shows_phone
+           else f'<a class="ghost" href="#contact">{ICON_PHONE}Request a call back</a>' if callback else "")
     jump = f'<a class="btn-inline" href="#contact">{e(b.cta)}</a>'
     brand = (f'<img src="{media["logo"]}" alt="{e(b.business)}" class="logo">' if media["logo"] else f"<b>{e(b.business)}</b>")
     hero_img = f'<img class="hero-img" src="{e(media["hero"])}" alt="{e(b.business)}">' if media["hero"] else ""
@@ -403,7 +449,7 @@ def template_html(b: Brief, slug: str, media: Optional[dict] = None, playbook: s
     for f in b.form_fields:
         req = " required" if f in ("name", "phone", "email") and (f != "email" or "phone" not in b.form_fields) else ""
         if f == "message":
-            fields.append(f'<textarea name="message" rows="3" placeholder="{FIELD_LABELS[f]}"></textarea>')
+            fields.append(f'<textarea name="message" rows="3" placeholder="{FIELD_LABELS[f]}" aria-label="{FIELD_LABELS[f]}"></textarea>')
         else:
             typ = {"phone": "tel", "email": "email", "preferred_date": "date"}.get(f, "text")
             fields.append(f'<input name="{f}" type="{typ}" placeholder="{FIELD_LABELS[f]}" aria-label="{FIELD_LABELS[f]}"{req}>')
@@ -467,7 +513,7 @@ def template_html(b: Brief, slug: str, media: Optional[dict] = None, playbook: s
     else:
         body = (f'<div class="top">{nav}<section class="hero" data-aimva-section="hero"><div>{intro}<div class="row">{wa}</div>{hero_img}</div>'
                 f"{form_card}</section></div>" + "".join(blocks))
-    float_wa = (f'<a class="wa-float" href="https://wa.me/{wa_num}" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">💬</a>'
+    float_wa = (f'<a class="wa-float" href="https://wa.me/{wa_num}" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">{ICON_CHAT}</a>'
                 if wa_num and b.whatsapp_button else "")
     return f"""<!doctype html><html lang="{e(LANG_CODES.get(b.language.lower(), 'en'))}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(b.seo_title or b.business)}</title>
@@ -476,21 +522,23 @@ def template_html(b: Brief, slug: str, media: Optional[dict] = None, playbook: s
 <meta name="aimva:layout" content="{layout}">
 <link href="https://fonts.googleapis.com/css2?family={fq}&display=swap" rel="stylesheet">{_tracking(b)}
 <style>
-:root{{--p:{b.primary};--a:{b.accent};--r:{radius};--ln:{line}}}*{{box-sizing:border-box;margin:0}}
+:root{{--p:{b.primary};--a:{b.accent};--on-p:{on_p};--r:{radius};--ln:{line}}}*{{box-sizing:border-box;margin:0}}
 body{{font-family:{bfont},system-ui,sans-serif;color:{fg};background:{bg};line-height:1.6}}
 h1,h2,h3{{font-family:{hfont},system-ui,sans-serif;font-weight:{weight}}}
 .wrap{{max-width:1120px;margin:0 auto;padding:0 20px}}
 nav{{display:flex;justify-content:space-between;align-items:center;padding:20px 0}}nav b{{font-size:20px}}.logo{{max-height:44px}}
-.btn,.wa,.ghost,.btn-inline{{display:inline-block;padding:14px 22px;border-radius:var(--r);font-weight:600;text-decoration:none}}
-.btn{{background:var(--p);color:#fff;border:0;cursor:pointer;font-size:16px;width:100%}}.btn-inline{{background:var(--p);color:#fff}}
+.btn,.wa,.ghost,.btn-inline{{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:12px 22px;border-radius:var(--r);font-weight:600;text-decoration:none}}
+.ghost svg,.wa-float svg{{flex:none}}
+.btn{{background:var(--p);color:var(--on-p);border:0;cursor:pointer;font-size:16px;width:100%}}.btn-inline{{background:var(--p);color:var(--on-p)}}
 .wa{{background:#25d366;color:#fff}}.ghost{{border:1.5px solid {line};color:{fg}}}
 h1{{font-size:clamp(34px,5vw,56px);line-height:1.1;letter-spacing:-.02em}}
 {"h1 span{background:linear-gradient(90deg,var(--p),var(--a));-webkit-background-clip:text;color:transparent}" if grad else "h1 span{color:var(--p)}"}
 .sub{{font-size:19px;color:{muted};margin:20px 0 28px}}.row{{display:flex;gap:12px;flex-wrap:wrap}}
 .card{{background:{card};border-radius:var(--r);padding:28px;box-shadow:{shadow}}}
 .card h2{{font-size:22px;margin-bottom:16px}}
-input,textarea{{width:100%;padding:13px 14px;border:1.5px solid {line};border-radius:calc(var(--r)/2);font:inherit;margin-bottom:12px;background:{bg};color:{fg}}}
+input,textarea{{width:100%;font-size:16px;padding:13px 14px;border:1.5px solid {line};border-radius:calc(var(--r)/2);font:inherit;margin-bottom:12px;background:{bg};color:{fg}}}
 input:focus,textarea:focus{{outline:2px solid var(--p);border-color:transparent}}
+a:focus-visible,button:focus-visible,summary:focus-visible{{outline:3px solid var(--p);outline-offset:3px}}
 .cb{{display:flex;gap:10px;align-items:center;font-size:14px;color:{muted};margin:2px 0 14px;cursor:pointer}}.cb input{{width:18px;height:18px;margin:0;accent-color:var(--p)}}
 .hero-img{{width:100%;border-radius:var(--r);margin-top:28px}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}}
@@ -501,11 +549,12 @@ input:focus,textarea:focus{{outline:2px solid var(--p);border-color:transparent}
 blockquote{{font-size:16px}}figcaption{{margin-top:10px;color:{muted};font-size:14px}}
 .gallery{{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}}.gallery img{{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:var(--r)}}
 details{{border-bottom:1px solid {line};padding:14px 0}}summary{{font-weight:600;cursor:pointer}}details p{{margin-top:8px;color:{muted}}}
-.wa-float{{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:50%;background:#25d366;display:grid;place-items:center;font-size:26px;text-decoration:none;box-shadow:0 10px 30px rgba(0,0,0,.25)}}
+.wa-float{{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:50%;background:#25d366;display:grid;place-items:center;color:#fff;text-decoration:none;box-shadow:0 10px 30px rgba(0,0,0,.25)}}
 footer{{padding:32px 0;color:{muted};font-size:14px;border-top:1px solid {line}}}
 .top{{margin:0 -20px;padding:0 20px;position:relative;isolation:isolate}}.top::before{{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none}}
 {DECOR_CSS[decor] if layout != "immersive" else ""}
 {_layout_css(layout, colours)}
+@media(prefers-reduced-motion:reduce){{*,*::before,*::after{{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}}}
 @media(max-width:820px){{.hero{{grid-template-columns:1fr!important;padding-top:24px;min-height:0}}.cols{{grid-template-columns:1fr!important}}.cols aside{{position:static}}}}
 </style></head><body><div class="wrap">
 {body}
@@ -531,13 +580,13 @@ def _ai_brief(b: Brief, reference: str = "", playbook: str = "other") -> str:
             f"{('Layout: ' + LAYOUTS[b.layout] + ' ') if b.layout in LAYOUTS else ''}"
             f"Business: {b.business}. Industry: {b.industry}. Audience: {b.audience}. Offer: {b.offer}. "
             f"Headline idea: {b.headline}. Subheadline idea: {b.subheadline}. Features: {', '.join(b.features)}. "
-            f"Colours: primary {b.primary}, accent {b.accent}. {('Phone: ' + b.phone + '. ') if b.shows_phone else 'Do not show any business phone number. '}WhatsApp: {b.whatsapp}. Email: {b.contact_email}. "
+            f"Colours: primary {b.primary}, accent {b.accent}; button text {on_color(b.primary)}. {('Phone: ' + b.phone + '. ') if b.shows_phone else 'Do not show any business phone number. '}WhatsApp: {b.whatsapp}. Email: {b.contact_email}. "
             f"{CALLBACK_RULE if b.contact_mode != 'own_phone' else ''}"
             f"Address: {b.address}. Sections after the hero, in order: {'; '.join(sections) or 'features'}. "
             f"Never invent testimonials, reviews, ratings, prices, awards or statistics that aren't given above. "
             f"Use the image placeholder src values __HERO__ for the hero image and __GALLERY_1__.. for gallery images if relevant. "
             f"Include exactly one lead form with the attribute data-aimva-lead containing inputs named: {', '.join(b.form_fields)}, "
-            f"and a submit button labelled '{b.cta}'." + playbook_ai_rules(playbook) + " Return ONLY the HTML document."
+            f"and a submit button labelled '{b.cta}'." + playbook_ai_rules(playbook) + _design_notes(b) + " Return ONLY the HTML document."
             + (f"\n\nBackground material from the business (use facts from it, don't copy it wholesale):\n{reference}" if reference else ""))
 
 
@@ -688,6 +737,7 @@ def ranked_layouts(db: Session, user: User, b: Brief, playbook: str) -> list:
 
 def resolve_design(db: Session, user: User, b: Brief, playbook: str) -> None:
     """Fill in "auto" choices so each new page gets its own structure and background (saved in the brief)."""
+    apply_design_match(b)
     if b.layout == "auto":
         b.layout = ranked_layouts(db, user, b, playbook)[0]
     if b.decor == "auto":
@@ -714,14 +764,37 @@ def directions(b: Brief, user: User = Depends(current_user), db: Session = Depen
     rate_limit(f"directions:{user.id}", 30, 600)
     playbook = match_playbook(b.industry, user.industry)
     media = _media(db, user.id, b)
+    b = b.model_copy()
+    m = apply_design_match(b)
     start = zlib.crc32(b.business.encode()) % len(STYLE_SETS)
+    styles = [STYLE_SETS[(start + i) % len(STYLE_SETS)] for i in range(len(STYLE_SETS))]
+    if m:  # first option: the look and fonts proven for this kind of business, then two clearly different ones
+        styles = [{"look": m["look"], "font": "auto" if m["font_heading"] else "jakarta",
+                   "decor": "blobs" if m["look"] in ("modern", "playful") else "plain", "theme": "light"}] + \
+                 [x for x in styles if x["look"] != m["look"]]
     out = []
     for i, layout in enumerate(ranked_layouts(db, user, b, playbook)[:3]):
-        style = STYLE_SETS[(start + i) % len(STYLE_SETS)]
+        style = styles[i]
         option = b.model_copy(update={"layout": layout, **style})
+        matched = bool(m) and i == 0
         out.append({"layout": layout, **style, "label": LAYOUT_LABELS[layout], "description": LAYOUTS[layout],
-                    "html": template_html(option, "preview", media, playbook)})
+                    "matched": m["category"] if matched else "", "html": template_html(option, "preview", media, playbook)})
     return out
+
+
+class MatchIn(BaseModel):
+    industry: str = Field("", max_length=80)
+    business: str = Field("", max_length=120)
+    offer: str = Field("", max_length=160)
+
+
+@router.post("/api/sites/design-match")
+def design_match(body: MatchIn, user: User = Depends(current_user)):
+    """The design the data suggests for this kind of business (instant, offline), or null when nothing fits well."""
+    m = match_design(body.industry, body.business, body.offer)
+    if not m:
+        return None
+    return {k: m[k] for k in ("category", "primary", "accent", "font_heading", "font_body", "look", "style", "pattern")}
 
 
 @router.post("/api/sites")
@@ -1099,6 +1172,17 @@ def checks(site_id: int, user: User = Depends(current_user), db: Session = Depen
 def audit(site_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     c = site_checks(_own(db, user, site_id), db)
     return {"checks": c, "readiness": readiness(c)}
+
+
+@router.post("/api/sites/{site_id}/autofix")
+def autofix(site_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """One tap: the Page Fixer applies every fix that has one right answer, as a new version (so it can be undone)."""
+    from .agents import fix_site
+    s = _own(db, user, site_id)
+    out = fix_site(db, user, s.id)
+    db.refresh(s)
+    c = site_checks(s, db)
+    return {"site": site_out(s, True), "fixed": out["fixed"], "checks": c, "readiness": readiness(c)}
 
 
 # ---- before generating: playbooks, brief review and import ---------------------------------------

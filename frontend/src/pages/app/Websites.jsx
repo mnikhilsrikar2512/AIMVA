@@ -24,7 +24,7 @@ const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefin
 const BLANK = {
   business: "", industry: "", audience: "", offer: "", headline: "", subheadline: "", cta: "Get a free quote",
   features: "", contact_mode: "voice_agent", voice_agent_id: null, country_code: "+91", phone: "", whatsapp: "", primary: "#6366f1", accent: "#22d3ee", hero_image: "", use_ai: true,
-  writer: "auto", page_type: "lead_gen", layout: "auto", decor: "auto", look: "modern", theme: "light", font: "jakarta", language: "English",
+  writer: "auto", page_type: "lead_gen", layout: "auto", decor: "auto", look: "modern", theme: "light", font: "auto", match_colors: true, language: "English",
   sections: ["features"], about: "", testimonials: [], faqs: [], pricing: [], gallery: [],
   form_fields: ["name", "phone", "email", "message"], form_title: "", thank_you: "Thanks! We'll be in touch shortly.",
   whatsapp_button: true, include_logo: false, contact_email: "", address: "", seo_title: "", seo_description: "",
@@ -37,7 +37,7 @@ const PALETTES = [["auto", "Auto"], ["brand", "My colours"], ["emerald", "Emeral
 const PAGE_TYPES = [["lead_gen", "Lead generation"], ["product", "Product"], ["service", "Service"], ["event", "Event"],
   ["real_estate", "Real estate"], ["restaurant", "Restaurant"], ["portfolio", "Portfolio"], ["app", "App / SaaS"]];
 const LOOKS = [["modern", "Modern"], ["minimal", "Minimal"], ["bold", "Bold"], ["elegant", "Elegant"], ["playful", "Playful"], ["corporate", "Corporate"]];
-const FONTS = [["jakarta", "Jakarta (friendly)"], ["inter", "Inter (clean)"], ["serif", "Playfair (classic)"], ["rounded", "Nunito (rounded)"], ["grotesk", "Space Grotesk (tech)"]];
+const FONTS = [["auto", "Matched to your business"], ["jakarta", "Jakarta (friendly)"], ["inter", "Inter (clean)"], ["serif", "Playfair (classic)"], ["rounded", "Nunito (rounded)"], ["grotesk", "Space Grotesk (tech)"]];
 const SECTIONS = [["features", "Features"], ["about", "About"], ["gallery", "Gallery"], ["testimonials", "Testimonials"],
   ["pricing", "Pricing"], ["faq", "FAQ"], ["contact_info", "Contact details"]];
 const FORM_FIELDS = [["name", "Name"], ["phone", "Phone"], ["email", "Email"], ["message", "Message"], ["city", "City"],
@@ -156,6 +156,30 @@ function ProjectDetails({ b, set, val, docs }) {
   );
 }
 
+/** What the design data suggests for this kind of business. Your own colours and fonts always win; one tap brings the match back. */
+function DesignMatch({ b, setB }) {
+  const [m, setM] = useState(null);
+  useEffect(() => {
+    if ((b.industry || b.business).trim().length < 3) { setM(null); return; }
+    const t = setTimeout(() => post("/api/sites/design-match", { industry: b.industry, business: b.business, offer: b.offer }).then(setM).catch(() => setM(null)), 400);
+    return () => clearTimeout(t);
+  }, [b.industry, b.business, b.offer]);
+  if (!m) return null;
+  const using = b.match_colors && b.font === "auto";
+  const use = () => setB((x) => ({ ...x, match_colors: true, font: "auto", primary: m.primary, accent: m.accent }));
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-surface-2/60 px-4 py-3 text-sm">
+      <span className="flex gap-1" aria-hidden>{[m.primary, m.accent].map((c) => <span key={c} className="size-4 rounded-full ring-1 ring-black/10" style={{ background: c }} />)}</span>
+      <span className="min-w-0 flex-1 text-ink">
+        {using ? "Matched to" : "Suggested for"} <b className="font-semibold text-strong">{m.category}</b>
+        {m.font_heading && <span className="text-muted"> · {m.font_heading === m.font_body ? m.font_heading : `${m.font_heading} + ${m.font_body}`}</span>}
+      </span>
+      {using ? <span className="text-xs text-faint">Pick your own colour or font to override</span>
+        : <Button type="button" size="sm" variant="ghost" onClick={use}>Use this</Button>}
+    </div>
+  );
+}
+
 function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true }) {
   const { data: ai } = useApi("/api/integrations/ai/status");
   const { data: writers } = useApi("/api/providers/options?kind=text", []);
@@ -262,9 +286,10 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
           <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto_auto]">
             <Field label="Theme"><select className="input" value={b.theme} onChange={set("theme")}><option value="light">Light</option><option value="dark">Dark</option></select></Field>
             <Field label="Fonts"><select className="input" value={b.font} onChange={set("font")}>{FONTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
-            <Field label="Primary"><input type="color" className="input w-16 p-1" value={b.primary} onChange={set("primary")} /></Field>
-            <Field label="Accent"><input type="color" className="input w-16 p-1" value={b.accent} onChange={set("accent")} /></Field>
+            <Field label="Primary"><input type="color" className="input w-16 p-1" value={b.primary} onChange={(e) => setB((x) => ({ ...x, primary: e.target.value, match_colors: false }))} /></Field>
+            <Field label="Accent"><input type="color" className="input w-16 p-1" value={b.accent} onChange={(e) => setB((x) => ({ ...x, accent: e.target.value, match_colors: false }))} /></Field>
           </div>
+          <DesignMatch b={b} setB={setB} />
           <LibraryImagePicker label="Hero image" value={libraryHero ? b.hero_image : ""} onChange={(v) => val("hero_image", v)}
             hint="Pick from your library (embedded into the page) or paste an https:// link below." />
           <input className="input" value={libraryHero ? "" : b.hero_image} onChange={set("hero_image")} placeholder="https://… (optional)" maxLength={1000} />
@@ -613,7 +638,7 @@ function Editor({ site, onClose, onChange, feedback }) {
         </form>
       </Modal>
       <Modal open={checks} onClose={() => setChecks(false)} title="Launch checks">
-        <ReadinessPanel siteId={site.id} version={site.html} />
+        <ReadinessPanel siteId={site.id} version={site.html} onFixed={replaced} />
       </Modal>
       <Modal open={code !== null} onClose={() => setCode(null)} title="Edit HTML code" wide="xl">
         <p className="mb-3 text-sm text-muted">For developers. Saving creates a new version, so you can always go back.</p>
@@ -627,7 +652,7 @@ function Editor({ site, onClose, onChange, feedback }) {
         </div>
       </Modal>
       <Modal open={showBrief} onClose={() => setShowBrief(false)} title="Start over from the brief (your current page is kept in Versions)" wide>
-        <BriefForm initial={{ ...BLANK, ...site.brief }} busy={busy} submitLabel="Rebuild page" coach={false}
+        <BriefForm initial={{ ...BLANK, match_colors: false, ...site.brief }} busy={busy} submitLabel="Rebuild page" coach={false}
           onSubmit={(b) => run(async () => {
             replaced(await post(`/api/sites/${site.id}/regenerate`, b));
             setShowBrief(false);
@@ -696,7 +721,7 @@ export default function Websites() {
   const { data: brandKit } = useApi("/api/brand");
   const fromBrand = brandKit?.is_set_up ? {
     ...(brandKit.name && { business: brandKit.name }), ...(brandKit.tagline && { subheadline: brandKit.tagline }),
-    ...(brandKit.colors[0] && { primary: brandKit.colors[0] }), ...(brandKit.colors[1] && { accent: brandKit.colors[1] }),
+    ...(brandKit.colors[0] && { primary: brandKit.colors[0], match_colors: false }), ...(brandKit.colors[1] && { accent: brandKit.colors[1] }),
   } : {};
   const starter = { ...BLANK, business: user.workspace?.name || user.company || "", industry: onboarding?.template?.label || "", ...(onboarding?.industry && tpl ? tpl : {}), ...fromBrand };
 

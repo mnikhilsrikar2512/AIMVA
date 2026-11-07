@@ -194,7 +194,7 @@ export default function Brand() {
                     onChange={(e) => set("colors", kit.colors.map((x, j) => (j === i ? e.target.value : x)))} />
                   <span className="mt-1 block text-center font-mono text-xs text-faint">{c}</span>
                   <button type="button" aria-label={`Remove ${c}`} onClick={(e) => { e.preventDefault(); set("colors", kit.colors.filter((_, j) => j !== i)); }}
-                    className="absolute -right-1.5 -top-1.5 hidden size-5 place-items-center rounded-full bg-white text-muted shadow group-hover:grid"><X className="size-3" /></button>
+                    className="absolute -right-2 -top-2 hidden size-6 place-items-center rounded-full bg-white text-muted shadow group-hover:grid group-focus-within:grid"><X className="size-3.5" /></button>
                 </label>
               ))}
               {kit.colors.length < 8 && (
@@ -224,7 +224,7 @@ export default function Brand() {
             <div className="flex flex-wrap gap-2">
               {kit.style.map((s) => (
                 <span key={s} className="inline-flex items-center gap-1 rounded-full bg-lavender px-3 py-1.5 text-sm font-medium text-strong">
-                  {s}<button type="button" aria-label={`Remove ${s}`} onClick={() => set("style", kit.style.filter((x) => x !== s))}><X className="size-3.5 text-muted" /></button>
+                  {s}<button type="button" aria-label={`Remove ${s}`} onClick={() => set("style", kit.style.filter((x) => x !== s))} className="-my-1 -mr-2 grid size-6 place-items-center rounded-full hover:bg-black/5"><X className="size-3.5 text-muted" /></button>
                 </span>
               ))}
               <input className="input h-9 w-48 rounded-full" value={styleText} placeholder="Add a style, press Enter" onChange={(e) => setStyleText(e.target.value)}

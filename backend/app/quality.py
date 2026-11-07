@@ -286,7 +286,133 @@ def audit_page(html: str, brief: Optional[dict] = None, reference: str = "") -> 
     add("links", not dead, "tip", "No empty links", f"{dead} link(s) go nowhere.", "Point them at #contact or remove them.")
     add("weight", len(html) < 1_500_000, "tip", "Loads quickly on mobile", "The page is heavy (over 1.5 MB).",
         "Use fewer or smaller images.")
+    for key, ok, level, message, detail, fix, auto in design_checks(html):
+        add(key, ok, level, message, detail, fix)
+        checks[-1]["autofix"] = bool(auto and not ok)
+    for c in checks:
+        c.setdefault("autofix", c["key"] in ("alt", "links", "title", "description", "mobile") and not c["ok"])
     return checks
+
+
+# ---------------------------------------------------------------------------------------------- design checks
+# From the UI/UX Pro Max guidelines (see app/design_intel): the issues a careful designer catches before launch.
+CSS_RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
+FIELD_RE = re.compile(r"<(input|textarea|select)\b[^>]*>", re.I)
+EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
+
+
+def _css(html: str) -> str:
+    return " ".join(re.findall(r"<style\b[^>]*>(.*?)</style>", html, re.I | re.S))
+
+
+def _css_vars(css: str) -> dict:
+    return {k.strip(): v.strip() for k, v in re.findall(r"(--[\w-]+)\s*:\s*([^;{}]+)", css)}
+
+
+def _hex(v: str, vars_: dict) -> str:
+    v = (v or "").strip()
+    for _ in range(3):
+        m = re.match(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^)]+))?\)", v)
+        if not m:
+            break
+        v = vars_.get(m.group(1), m.group(2) or "").strip()
+    m = re.match(r"#([0-9a-f]{3}|[0-9a-f]{6})\b", v, re.I)
+    if not m:
+        return {"white": "#ffffff", "black": "#000000"}.get(v.lower(), "")
+    h = m.group(1)
+    return "#" + ("".join(c * 2 for c in h) if len(h) == 3 else h).lower()
+
+
+def button_contrast(html: str) -> list:
+    """[(selector, background, text colour, ratio)] for button styles whose text is hard to read (under 4.5:1)."""
+    from .design_intel import contrast
+    css = _css(html)
+    vars_ = _css_vars(css)
+    seen = {}  # selector -> {"bg": (value, important), "fg": ...}: later rules win, !important beats normal
+    for sel, decl in CSS_RULE.findall(css):
+        for one in sel.split(","):
+            one = one.strip()
+            if not re.search(r"btn|button|cta", one, re.I) or re.search(r":hover|::?before|::?after|:disabled|@", one, re.I):
+                continue
+            cur = seen.setdefault(one, {})
+            for prop, val in re.findall(r"(?:^|;)\s*(background-color|background|color)\s*:\s*([^;]+)", decl, re.I):
+                k = "fg" if prop.lower() == "color" else "bg"
+                imp = "!important" in val
+                if imp or not cur.get(k, ("", False))[1]:
+                    cur[k] = (val.replace("!important", "").strip(), imp)
+    bad = []
+    for one, cur in seen.items():
+        if "bg" not in cur or "fg" not in cur:
+            continue
+        b, f = _hex(cur["bg"][0], vars_), _hex(cur["fg"][0], vars_)
+        if b and f and contrast(b, f) < 4.5:
+            bad.append((one[-80:], b, f, round(contrast(b, f), 1)))
+    return bad
+
+
+def _unlabelled(html: str) -> list:
+    ids = set(re.findall(r"<label\b[^>]*\bfor\s*=\s*[\"']?([\w-]+)", html, re.I))
+    out = []
+    for m in FIELD_RE.finditer(html):
+        tag = m.group(0)
+        if re.search(r"type\s*=\s*[\"']?(hidden|submit|button|checkbox|radio|reset|image)\b", tag, re.I):
+            continue
+        if re.search(r"\baria-label(?:ledby)?\s*=", tag, re.I) or re.search(r"\btitle\s*=", tag, re.I):
+            continue
+        idm = re.search(r"\bid\s*=\s*[\"']?([\w-]+)", tag, re.I)
+        if idm and idm.group(1) in ids:
+            continue
+        before = html[max(0, m.start() - 400):m.start()].lower()
+        if before.rfind("<label") > before.rfind("</label>"):  # wrapped in a <label>
+            continue
+        out.append(tag)
+    return out
+
+
+def _eager_images(html: str) -> list:
+    imgs = re.findall(r"<img\b[^>]*>", html, re.I)
+    return [i for i in imgs[2:] if not re.search(r"\bloading\s*=", i, re.I)]  # the first two are usually above the fold
+
+
+def design_checks(html: str) -> list:
+    """(key, ok, level, message, detail, fix, autofix) for design and accessibility basics."""
+    css = _css(html)
+    low_css = css.lower()
+    out = []
+    bad = button_contrast(html)
+    out.append(("contrast", not bad, "warning", "Button text is easy to read",
+                (f"{len(bad)} button style(s) with faint text (e.g. {bad[0][2]} on {bad[0][1]}, {bad[0][3]}:1; needs 4.5:1)." if bad else ""),
+                "Fix automatically: AIMVA switches the text to white or near-black, whichever reads. Your button colour stays.", True))
+    small_inputs = [px for sel, decl in CSS_RULE.findall(css) if re.search(r"\b(input|textarea|select)\b", sel, re.I)
+                    for px in re.findall(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", decl, re.I) if float(px) < 16]
+    if re.search(r"(input|textarea|select)[^{}]*\{[^{}]*font-size\s*:\s*(1[6-9]|[2-9]\d)px\s*!important", css, re.I):
+        small_inputs = []  # an !important 16px rule (e.g. the Page Fixer's) wins on phones
+    out.append(("input_size", not small_inputs, "warning", "Form fields don't make phones zoom in",
+                "Form text is smaller than 16px, so iPhones zoom in when someone taps a field.",
+                "Fix automatically: form text becomes 16px on phones.", True))
+    unlabelled = _unlabelled(html)
+    out.append(("labels", not unlabelled, "tip", "Every form field has a label screen readers can read",
+                f"{len(unlabelled)} field(s) have no label.", "Fix automatically: AIMVA labels them from their placeholder or name.", True))
+    moves = bool(re.search(r"@keyframes|animation\s*:|transition\s*:", low_css))
+    out.append(("motion", not moves or "prefers-reduced-motion" in low_css, "tip", "Respects people who turn off animations",
+                "The page animates but ignores the phone's Reduce motion setting.",
+                "Fix automatically: animations switch off for people who asked for that.", True))
+    eager = _eager_images(html)
+    out.append(("lazy", not eager, "tip", "Images further down load only when needed",
+                f"{len(eager)} image(s) further down load straight away and slow the first view on mobile.",
+                "Fix automatically: they load as the visitor scrolls.", True))
+    killed = bool(re.search(r"outline\s*:\s*(none|0)\b", low_css)) and "focus-visible" not in low_css
+    out.append(("focus", not killed, "tip", "Keyboard users can see where they are",
+                "The page hides the focus outline, so keyboard users can't see which link or field is selected.",
+                "Fix automatically: a clear outline shows on keyboard focus only.", True))
+    tiny = sorted({float(px) for px in re.findall(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", css, re.I) if float(px) < 12})
+    out.append(("small_text", not tiny, "tip", "No text smaller than 12px",
+                f"Some text is {tiny[0]:g}px, hard to read on a phone." if tiny else "", "Make it at least 12px in the HTML editor.", False))
+    emoji = [t for t in re.findall(r"<(?:a|button)\b[^>]*>(.*?)</(?:a|button)>", html, re.I | re.S) if EMOJI_RE.search(visible_text(t))]
+    out.append(("emoji", not emoji, "tip", "Icons are drawn, not emoji",
+                f"{len(emoji)} button(s) or link(s) use emoji as icons, which look different on every phone.",
+                "Swap them for simple icons or plain words in the editor.", False))
+    return out
 
 
 def readiness(checks: list) -> dict:

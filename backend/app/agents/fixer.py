@@ -2,7 +2,7 @@
 import html as H
 import re
 
-from ..quality import audit_page
+from ..quality import _eager_images, _unlabelled, audit_page, design_checks
 
 
 def fix_html(html: str, brief: dict) -> tuple:
@@ -47,6 +47,70 @@ def fix_html(html: str, brief: dict) -> tuple:
     html, dead = re.subn(r"(<a\b[^>]*href\s*=\s*)([\"'])\s*#?\s*\2", r'\1"#contact"', html, flags=re.I)
     if dead:
         fixed.append(f"Pointed {dead} empty link{'s' if dead != 1 else ''} at the enquiry form")
+    html, more = fix_design(html)
+    return html, fixed + more
+
+
+def fix_design(html: str) -> tuple:
+    """Design and accessibility fixes with one right answer. Brand colours, layout and wording are left alone:
+    only button *text* colour changes, to white or near-black, whichever reads on the owner's colour."""
+    from ..design_intel import on_color
+    from ..quality import button_contrast
+    failing = {k for k, ok, *_ in design_checks(html) if not ok}
+    css, fixed = [], []
+    if "contrast" in failing:
+        bad = button_contrast(html)
+        css += [f"{sel}{{color:{on_color(bg)}!important}}" for sel, bg, _fg, _r in bad]
+        fixed.append(f"Made the text on {len(bad)} button style{'s' if len(bad) != 1 else ''} readable (your button colour is unchanged)")
+    if "input_size" in failing:
+        css.append("@media(max-width:640px){input,select,textarea{font-size:16px!important}}")
+        fixed.append("Set form text to 16px on phones so iPhones don't zoom in")
+    if "motion" in failing:
+        css.append("@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;"
+                   "animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}")
+        fixed.append("Turned animations off for visitors who asked their phone for less motion")
+    if "focus" in failing:
+        css.append("a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,"
+                   "summary:focus-visible{outline:3px solid currentColor!important;outline-offset:2px}")
+        fixed.append("Showed a focus outline for keyboard users")
+    if "labels" in failing:
+        todo = set(_unlabelled(html))
+        n = 0
+
+        def label(m):
+            nonlocal n
+            tag = m.group(0)
+            if tag not in todo:
+                return tag
+            src = re.search(r"\bplaceholder\s*=\s*[\"']([^\"']+)", tag, re.I) or re.search(r"\bname\s*=\s*[\"']?([\w-]+)", tag, re.I)
+            if not src:
+                return tag
+            n += 1
+            text = H.unescape(src.group(1)).replace("_", " ").strip()
+            text = text[:1].upper() + text[1:]
+            return re.sub(r"^<(\w+)", lambda t: f'<{t.group(1)} aria-label="{H.escape(text)}"', tag)
+        html = re.sub(r"<(input|textarea|select)\b[^>]*>", label, html, flags=re.I)
+        if n:
+            fixed.append(f"Labelled {n} form field{'s' if n != 1 else ''} for screen readers")
+    if "lazy" in failing:
+        todo = set(_eager_images(html))
+        n = 0
+
+        def lazy(m):
+            nonlocal n
+            if m.group(0) not in todo:
+                return m.group(0)
+            n += 1
+            return m.group(0)[:4] + ' loading="lazy"' + m.group(0)[4:]
+        imgs = list(re.finditer(r"<img\b[^>]*>", html, re.I))
+        cut = imgs[1].end() if len(imgs) > 1 else 0  # leave the first two (above the fold) as they are
+        html = html[:cut] + re.sub(r"<img\b[^>]*>", lazy, html[cut:], flags=re.I)
+        if n:
+            fixed.append(f"Made {n} image{'s' if n != 1 else ''} further down load as visitors scroll")
+    if css:
+        block = '<style data-aimva-fix="design">' + "".join(css) + "</style>"
+        end = re.search(r"</head\s*>", html, re.I)
+        html = html[:end.start()] + block + html[end.start():] if end else block + html
     return html, fixed
 
 

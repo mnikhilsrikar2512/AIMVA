@@ -120,7 +120,7 @@ const STATUS = {
 const ICON = { blocker: [XCircle, "text-rose-500"], warning: [AlertTriangle, "text-amber-500"], tip: [Lightbulb, "text-sky-500"] };
 
 /** The automatic quality pass on a generated page: what passed, and the few things worth a human look. */
-export function ReadinessPanel({ siteId, version }) {
+export function ReadinessPanel({ siteId, version, onFixed }) {
   const [audit, setAudit] = useState(null);
   const [open, setOpen] = useState(false);
   const first = useRef(true);
@@ -138,6 +138,17 @@ export function ReadinessPanel({ siteId, version }) {
   const [Icon, label, tone] = STATUS[r.status];
   const failed = checks.filter((c) => !c.ok).sort((a, b) => ["blocker", "warning", "tip"].indexOf(a.level) - ["blocker", "warning", "tip"].indexOf(b.level));
   const passed = checks.length - failed.length;
+  const fixable = failed.filter((c) => c.autofix).length;
+  const fixAll = async () => {
+    try {
+      const out = await post(`/api/sites/${siteId}/autofix`);
+      setAudit({ checks: out.checks, readiness: out.readiness });
+      onFixed?.(out.site);
+      toast.success(out.fixed.length ? `Fixed ${out.fixed.length} thing${out.fixed.length === 1 ? "" : "s"}. Undo from Versions if you don't like it.` : "Nothing left to fix automatically.");
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
   return (
     <div className="mb-4 rounded-2xl bg-surface-2/60">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left">
@@ -145,6 +156,12 @@ export function ReadinessPanel({ siteId, version }) {
         <span className="text-sm text-muted">{r.score}/100 · {passed} of {checks.length} checks passed</span>
         <ChevronDown className={cx("ml-auto size-4 text-muted transition", open && "rotate-180")} />
       </button>
+      {open && fixable > 0 && (
+        <div className="flex flex-wrap items-center gap-3 px-4 pb-3">
+          <Button type="button" size="sm" onClick={fixAll}><Sparkles className="size-3.5" /> Fix {fixable} automatically</Button>
+          <span className="text-xs text-muted">Saved as a new version. Your wording and brand colours stay as they are.</span>
+        </div>
+      )}
       {open && (
         <ul className="space-y-2 px-4 pb-4">
           {failed.length === 0 && <li className="flex items-center gap-2 text-sm text-ink"><CheckCircle2 className="size-4 text-emerald-500" /> Contact form, phone, mobile layout, SEO, no placeholders and no invented claims. Good to go.</li>}
