@@ -16,9 +16,10 @@ Owner: **You** = only you can do it (accounts, money, legal, real devices). **Cl
 
 | # | Item | Owner | Why / evidence |
 |---|---|---|---|
-| 1 | Create a private GitHub repo, push the Mac folder, and connect it to this project | You create the repo, Claude pushes | [Certain] The Mac folder has no git. Backups are tarballs, so there's no rollback. Your friend's repo might not have the latest changes. Treat the Mac as the source and don't merge from that repo blindly. |
-| 2 | CI on every push: backend tests on SQLite **and** Postgres, plus `npm ci && npm run build` | Claude | [Certain] TECHSTACK item 3. Tests have only run on Postgres by hand. |
-| 3 | Clean up the repo before the first push: delete `_backup_*`, `_tmp_stage`, `_samples` (if they hold customer-like data), `__pycache__`, `frontend/dist`, `frontend/node_modules`, `.DS_Store`, `backend/data/` | Claude (needs your OK to delete) | [Certain] All of these are in the folder now. `backend/data/.secret_key` must never be committed. |
+| 1 | ✅ **Done.** Code lives in the private repo https://github.com/mnikhilsrikar2512/AIMVA (remote `origin`, branch `main`), connected to this project. The Mac folder `~/Desktop/AIMVA` is the working copy. | You created it, Claude pushes | [Certain] Pushed since 7 Nov. Until launch (one owner, no live server), pushing straight to `main` is fine; see 3b for the rule once a server deploys from `main`. |
+| 2 | ✅ **Done.** CI runs on every push: frontend build, backend tests on Postgres and SQLite. Results: https://github.com/mnikhilsrikar2512/AIMVA/actions | Claude | [Certain] Green on every push so far (latest: 6281ec7). Don't push when it's red; fix first. |
+| 3 | ✅ **Done by `.gitignore`.** Never commit `backend/.env`, `deploy/.env`, `_samples/`, `_backup_*`, `_tmp_stage`, `legacy/`, `backend/data/` (local database, uploads, `.secret_key`), `frontend/dist`, `node_modules`, `.venv`, `__pycache__`, `.DS_Store`. They are all ignored; keep it that way. | Claude | [Certain] Checked before each push, plus a scan of the pushed changes for keys and tokens. |
+| 3b | **Before any server deploys from `main`:** one branch and one pull request per change, merged only when CI is green. Turn on branch protection for `main` on GitHub (Settings → Branches): require CI to pass, no direct pushes, no force-pushes. Deploy only from `main` after a merge. | You turn on protection, Claude works in branches and PRs | [Certain] Today changes go straight to `main`, which is fine with no live server. Once customers use a server that deploys from `main`, a direct push goes live untested by review. |
 
 ### A2. Secrets and the legacy app
 
@@ -101,8 +102,8 @@ Owner: **You** = only you can do it (accounts, money, legal, real devices). **Cl
 
 ## Suggested order
 
-1. **Today (you):** rotate the fal key (4), set `ADMIN_EMAILS` to your email (41), take the Apps Script offline (5), create the GitHub repo (1), and start Meta verification (21) and the Twilio/Indian calling check (23).
-2. **This week (Claude):** repo + CI (2, 3), FREE_AI default (8), STOP opt-out (15), account deletion/export (19), consent record (28), call-hours guard (29), legal page drafts (25), hide untested modules (17).
+1. **Today (you):** rotate the fal key (4), turn on branch protection for `main` before the first deploy (3b), set `ADMIN_EMAILS` to your email (41), take the Apps Script offline (5), and start Meta verification (21) and the Twilio/Indian calling check (23).
+2. **This week (Claude):** FREE_AI default (8), STOP opt-out (15), account deletion/export (19), consent record (28), call-hours guard (29), legal page drafts (25), hide untested modules (17).
 3. **When you have a domain + VPS:** staging deploy, HTTPS, Postgres tests, backups + restore, monitoring (9 to 14).
 4. **Then:** the full Meta ad (16), live end-to-end tests (18), real devices (20), the admin view, keys and a real Sarvam call (41 to 43), and the lawyer's review of section C.
 5. **Pilot** with 3 to 5 businesses. Section D runs alongside it.
