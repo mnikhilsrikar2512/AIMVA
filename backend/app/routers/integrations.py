@@ -5,6 +5,7 @@ Two connection styles:
 - API key (fal, netlify, vercel, cloudflare, whatsapp, twilio, github): the user pastes a token in the UI;
   it is stored Fernet-encrypted and never returned to the browser.
 """
+import hmac
 import logging
 import secrets
 import time
@@ -14,7 +15,7 @@ from urllib.parse import urlencode
 import httpx
 import jwt
 from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,6 +28,9 @@ from ..services import get_integration
 
 log = logging.getLogger("aimva.integrations")
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
+
+OAUTH_COOKIE = "aimva_oauth"  # one-time nonce tying an OAuth connect to the browser that started it
+OAUTH_TTL_S = 600
 
 OAUTH = {
     "meta": {
@@ -184,30 +188,38 @@ def oauth_start(provider: str, user: User = Depends(current_user)):
     if not p["client_id"]():
         log.warning("OAuth app for %s has no client id/secret in backend/.env", provider)
         raise HTTPException(400, f"Connecting {p['label']} isn't switched on yet. Please check back soon.")
-    state = jwt.encode({"uid": user.id, "p": provider, "n": secrets.token_urlsafe(8),
-                        "exp": int(time.time()) + 600}, settings.secret_key, "HS256")
+    nonce = secrets.token_urlsafe(24)
+    state = jwt.encode({"uid": user.id, "p": provider, "n": nonce,
+                        "exp": int(time.time()) + OAUTH_TTL_S}, settings.secret_key, "HS256")
     params = {"client_id": p["client_id"](), "redirect_uri": _redirect_uri(provider), "response_type": "code",
               "scope": p["scope"], "state": state, **p.get("extra", {})}
-    return {"url": f"{p['auth_url']}?{urlencode(params)}"}
+    # The same nonce goes into a cookie on this browser. The callback only accepts a state whose nonce matches,
+    # so a connect link someone else started can't link their ad account into your login (or yours into theirs).
+    resp = JSONResponse({"url": f"{p['auth_url']}?{urlencode(params)}"})
+    resp.set_cookie(OAUTH_COOKIE, nonce, max_age=OAUTH_TTL_S, httponly=True, secure=settings.cookie_secure,
+                    samesite="lax", path="/api/integrations")
+    return resp
 
 
 @router.get("/{provider}/callback")
-def oauth_callback(provider: str, code: str = "", state: str = "", error: str = "", db: Session = Depends(get_db)):
+def oauth_callback(request: Request, provider: str, code: str = "", state: str = "", error: str = "",
+                   db: Session = Depends(get_db)):
     back = f"{settings.frontend_url}/app/settings?tab=integrations"
     p = OAUTH.get(provider)
     if error or not p:
-        return RedirectResponse(f"{back}&error={error or 'unknown'}")
+        return _oauth_done(f"{back}&error={error or 'unknown'}")
     try:
         st = jwt.decode(state, settings.secret_key, algorithms=["HS256"])
         assert st["p"] == provider
+        assert hmac.compare_digest(str(st["n"]), request.cookies.get(OAUTH_COOKIE) or "")  # started in this browser
     except Exception:
-        return RedirectResponse(f"{back}&error=invalid_state")
+        return _oauth_done(f"{back}&error=invalid_state")
     r = httpx.post(p["token_url"], data={
         "grant_type": "authorization_code", "code": code, "redirect_uri": _redirect_uri(provider),
         "client_id": p["client_id"](), "client_secret": p["client_secret"](),
     }, timeout=30)
     if r.status_code >= 400:
-        return RedirectResponse(f"{back}&error=token_exchange_failed")
+        return _oauth_done(f"{back}&error=token_exchange_failed")
     tokens = r.json()
     integ = get_integration(db, st["uid"], provider) or Integration(user_id=st["uid"], provider=provider)
     integ.secret = encrypt_json(tokens)
@@ -215,7 +227,14 @@ def oauth_callback(provider: str, code: str = "", state: str = "", error: str = 
     integ.connected_at = utcnow()
     db.add(integ)
     db.commit()
-    return RedirectResponse(f"{back}&connected={provider}")
+    return _oauth_done(f"{back}&connected={provider}")
+
+
+def _oauth_done(url: str) -> RedirectResponse:
+    """Back to Settings; the one-time nonce cookie is spent either way."""
+    resp = RedirectResponse(url)
+    resp.delete_cookie(OAUTH_COOKIE, path="/api/integrations")
+    return resp
 
 
 def oauth_access_token(db: Session, user_id: int, provider: str) -> Optional[str]:

@@ -32,7 +32,7 @@ from .. import providers as P
 from ..design_intel import fonts_query, match_design, on_color, writer_notes
 from ..quality import PLAYBOOKS, audit_page, match_playbook, playbook_ai_rules, playbook_out, readiness, review_brief
 from .references import reference_text
-from ..security import current_user, rate_limit
+from ..security import client_ip, current_user, rate_limit
 from ..services import integration_secret
 from .providers import writer
 from .leads import create_lead
@@ -1524,7 +1524,10 @@ def serve_page(slug: str, page: str, db: Session = Depends(get_db)):
 
 @router.post("/api/public/sites/{slug}/lead")
 async def public_lead(slug: str, request: Request, bg: BackgroundTasks, db: Session = Depends(get_db)):
-    rate_limit(f"publead:{slug}", 60, 600)
+    # Limits are per visitor, never per page: a page-wide cap let one script lock every real customer out.
+    ip = client_ip(request)
+    rate_limit(f"publead:{slug}:{ip}", 10, 600)    # one visitor on one page
+    rate_limit(f"publead-ip:{ip}", 30, 3600)       # one visitor across every AIMVA page
     try:
         form = await request.form()
     except Exception:
@@ -1533,6 +1536,11 @@ async def public_lead(slug: str, request: Request, bg: BackgroundTasks, db: Sess
     if get("website", 200):  # honeypot: people never see this field, bots fill it in
         return {"ok": True}
     name, email, phone, message = get("name", 160), get("email", 255), get("phone", 40), get("message", 2000)
+    # One phone number or email can't be submitted over and over, so the form can't be used to make the
+    # Concierge keep messaging someone's WhatsApp.
+    contact = re.sub(r"\D", "", phone)[-10:] or email.lower()
+    if contact:
+        rate_limit(f"publead-contact:{slug}:{contact}", 3, 3600)
     s = db.scalar(select(Site).where(Site.slug == slug))
     if not s or not (email or phone):
         return {"ok": False}

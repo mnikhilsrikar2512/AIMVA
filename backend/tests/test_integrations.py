@@ -133,3 +133,20 @@ def test_key_saved_when_provider_unreachable(auth_client, mock_http):
 def test_fal_hint_exposed(auth_client):
     fal = next(i for i in auth_client.get("/api/integrations").json() if i["provider"] == "fal")
     assert "colon" in fal["hints"]["api_key"]
+
+
+def test_oauth_callback_must_finish_in_the_browser_that_started_it(auth_client, other_client, mock_http, monkeypatch, db):
+    """Regression: the state carried the starter's user id and the callback trusted it from any browser, so a victim
+    opening someone else's connect link linked their ad account into the other person's AIMVA login."""
+    monkeypatch.setattr(settings, "google_client_id", "gid")
+    monkeypatch.setattr(settings, "google_client_secret", "gsecret")
+    state = parse_qs(urlparse(auth_client.get("/api/integrations/google/connect").json()["url"]).query)["state"][0]
+    token_route = mock_http.post("https://oauth2.googleapis.com/token").respond(json={"access_token": "victim"})
+    r = other_client.get("/api/integrations/google/callback", params={"code": "abc", "state": state}, follow_redirects=False)
+    assert "error=invalid_state" in r.headers["location"]
+    assert not token_route.called and db.scalar(select(Integration)) is None
+    # The browser that started it still finishes, and the nonce can't be replayed afterwards.
+    r = auth_client.get("/api/integrations/google/callback", params={"code": "abc", "state": state}, follow_redirects=False)
+    assert r.headers["location"].endswith("connected=google")
+    r = auth_client.get("/api/integrations/google/callback", params={"code": "abc", "state": state}, follow_redirects=False)
+    assert "error=invalid_state" in r.headers["location"]
