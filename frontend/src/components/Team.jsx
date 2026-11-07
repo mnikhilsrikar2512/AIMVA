@@ -75,7 +75,8 @@ export function WorkspaceSwitcher({ expanded = true }) {
 export function TeamPanel() {
   const { user } = useAuth();
   const { active, list, reload: reloadWs, error: wsError } = useWorkspaces();
-  const members = useApi(active ? `/api/workspaces/${active.id}/members` : null, null);
+  const viewOnly = active?.role === "client";  // clients don't see or manage the team list
+  const members = useApi(active && !viewOnly ? `/api/workspaces/${active.id}/members` : null, null);
   const [f, setF] = useState({ email: "", role: "editor" });
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -103,6 +104,7 @@ export function TeamPanel() {
     catch (err) { toast.error(err.message); }
   };
 
+  if (viewOnly) return <p className="max-w-2xl text-sm text-muted">{active.name}'s agency manages who works on this workspace. Ask them if someone needs access.</p>;
   return (
     <div className="max-w-2xl space-y-8">
       <section>

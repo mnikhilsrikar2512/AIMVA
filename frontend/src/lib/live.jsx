@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { post } from "./api";
+import { useIsClient } from "./auth";
 
 /*
  * Live updates over Server-Sent Events (/api/events). Keeps the unseen-lead badge in sync,
@@ -42,13 +43,16 @@ export function LiveProvider({ children }) {
   const [connected, setConnected] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const isClient = useIsClient();  // clients view leads; only the team marks them seen
+  const viewOnly = useRef(false);
+  viewOnly.current = isClient;
   const onLeadsPage = useRef(false);
   onLeadsPage.current = location.pathname === "/app/leads";
 
   // Visiting the Leads page marks everything as seen.
   useEffect(() => {
-    if (location.pathname === "/app/leads") post("/api/leads/seen").then(() => setUnseen(0)).catch(() => {});
-  }, [location.pathname]);
+    if (location.pathname === "/app/leads" && !isClient) post("/api/leads/seen").then(() => setUnseen(0)).catch(() => {});
+  }, [location.pathname, isClient]);
 
   useEffect(() => {
     if (typeof EventSource === "undefined") return;
@@ -64,7 +68,7 @@ export function LiveProvider({ children }) {
       const open = () => navigate(`/app/leads?lead=${d.lead.id}`);
       if (d.type === "created") {
         if (onLeadsPage.current) {
-          post("/api/leads/seen").catch(() => {});
+          if (!viewOnly.current) post("/api/leads/seen").catch(() => {});
           setUnseen(0);
         } else {
           setUnseen(d.unseen);

@@ -3,19 +3,22 @@ import { AlertTriangle, CheckCircle2, ChevronDown, Globe2, Lightbulb, ShieldChec
 import { toast } from "sonner";
 import { Button, Spinner, cx } from "./ui";
 import { get, post } from "../lib/api";
+import { useIsClient } from "../lib/auth";
 
 const asList = (v) => (Array.isArray(v) ? v : (v || "").split("\n").map((x) => x.trim()).filter(Boolean));
 
 /** Live review of a brief (debounced): score, the playbook for the industry and the questions that matter most. */
 export function useBriefReview(brief) {
   const [review, setReview] = useState(null);
+  const isClient = useIsClient();  // the brief coach is for people who can edit the page
   const key = JSON.stringify({ ...brief, features: asList(brief.features) });
   useEffect(() => {
+    if (isClient) return undefined;
     const t = setTimeout(async () => {
       try { setReview(await post("/api/sites/review-brief", JSON.parse(key))); } catch { /* coach is optional */ }
     }, 450);
     return () => clearTimeout(t);
-  }, [key]);
+  }, [key, isClient]);
   return review;
 }
 

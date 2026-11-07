@@ -11,7 +11,7 @@ import { SOURCE_TONE } from "./Dashboard";
 import LeadPanel from "../../components/LeadPanel";
 import { DownloadMenu } from "../../components/DownloadMenu";
 import { useLeadEvents } from "../../lib/live";
-import { useAuth } from "../../lib/auth";
+import { useAuth, useIsClient } from "../../lib/auth";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
 const STAGE_TONE = { new: "blue", contacted: "violet", qualified: "amber", won: "green", lost: "rose" };
@@ -78,6 +78,7 @@ const LEAD_COLS = [
 
 export default function Leads() {
   const { user } = useAuth();
+  const isClient = useIsClient();  // view-only clients don't manage sync destinations
   const business = user?.workspace?.name || user?.company || user?.name || "";
   const [q, setQ] = useState("");
   const [source, setSource] = useState("");
@@ -193,8 +194,8 @@ export default function Leads() {
           )}
         </Card>
         <div>
-          <h2 className="mb-3 font-semibold text-strong">Sync destinations</h2>
-          <SyncPanel />
+          {!isClient && <><h2 className="mb-3 font-semibold text-strong">Sync destinations</h2>
+          <SyncPanel /></>}
         </div>
       </div>
       {openId && <LeadPanel leadId={openId} onClose={closeLead} onChanged={reload} />}

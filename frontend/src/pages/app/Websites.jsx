@@ -7,7 +7,7 @@ import { ArrowLeft, ChevronDown, Code2, ExternalLink, FileText, Globe, History, 
 import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
 import { del, get, patch, post } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
-import { useAuth } from "../../lib/auth";
+import { useAuth, useIsClient } from "../../lib/auth";
 import { useOnboarding } from "../../components/AppLayout";
 import { LibraryImagePicker } from "../../components/GenControls";
 import PublishDialog from "../../components/PublishDialog";
@@ -175,8 +175,9 @@ function DesignMatch({ b, setB }) {
 }
 
 function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true }) {
-  const { data: ai } = useApi("/api/integrations/ai/status");
-  const { data: writers } = useApi("/api/providers/options?kind=text", []);
+  const isClient = useIsClient();  // view-only: no writer or account lookups
+  const { data: ai } = useApi(isClient ? null : "/api/integrations/ai/status");
+  const { data: writers } = useApi(isClient ? null : "/api/providers/options?kind=text", []);
   const { data: docs, setData: setDocs } = useApi("/api/references?kind=document", []);
   const [tab, setTab] = useState("content");
   const [b, setB] = useState(() => ({
@@ -430,7 +431,7 @@ const CONTACT_MODES = [["voice_agent", "AIMVA voice agent calls them back"], ["o
 /** Leads can be called back by the AIMVA voice agent (no business number needed), reach the business's own phone, or both. */
 function ContactChoice({ b, val, set }) {
   const { data: agents } = useApi("/api/voice/agents", []);
-  const { data: integrations } = useApi("/api/integrations", []);
+  const { data: integrations } = useApi(useIsClient() ? null : "/api/integrations", []);
   const twilio = integrations.some((i) => i.provider === "twilio" && i.connected);
   const voice = b.contact_mode !== "own_phone";
   return (

@@ -37,3 +37,5 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+/** A client (view-only) in the workspace they're looking at: the app skips anything they aren't allowed to do. */
+export const useIsClient = () => useContext(AuthContext)?.user?.workspace?.role === "client";
