@@ -1,6 +1,6 @@
 # AIMVA production checklist
 
-Written 2026-11-07 from the code in `~/Desktop/AIMVA` (TECHSTACK.md, docs/DEPLOY.md, docs/DATABASE.md, design.md, backend/app, deploy/) and the 6 Nov review.
+Written 2026-11-07 (testing items 41 to 43 added the same day) from the code in `~/Desktop/AIMVA` (TECHSTACK.md, docs/DEPLOY.md, docs/DATABASE.md, design.md, backend/app, deploy/) and the 6 Nov review.
 
 **Read this first.** The slowest items on this list aren't code. Meta app review and business verification, Google Ads developer-token approval, LinkedIn Marketing API access, Razorpay KYC, and TRAI-compliant calling in India all take days to weeks, and only you can apply for them. Start them today. If you wait until the code is done, they will hold up the launch, not the code.
 
@@ -51,6 +51,9 @@ Owner: **You** = only you can do it (accounts, money, legal, real devices). **Cl
 | 18 | Live end-to-end test with your own accounts: sign-up email, a WhatsApp inbound lead, the 60 s reply, a Twilio call, a fal image edit, a site on a custom domain | Both | [Certain] None of these has run for real (memory, TECHSTACK item 6). Mocked tests can't catch wrong API fields. |
 | 19 | Account deletion and a data export (for the user and the leads they hold) | Claude | [Certain] No delete-account or export endpoint exists. DPDP requires erasure on request (section C). |
 | 20 | Real-device pass: iPhone Safari, Android Chrome, desktop Firefox | You (devices), Claude fixes | [Certain] Only Chromium emulation and desktop Safari 26.5 have been tested. Bottom sheets and safe areas often break only on a real iPhone. |
+| 41 | **Test the admin view.** Set `ADMIN_EMAILS` to your own email(s) in `backend/.env` locally, or in `deploy/.env` on the server, then restart. Sign in as the owner and check that Settings shows the AI providers tab and Accounts lists the platform engines. Then sign in as a normal user and as a client, and check that neither sees that tab, any vendor name or any key. | You test, Claude fixes | [Certain] `ADMIN_EMAILS` gates `providers.py`, `integrations.py`, `feedback.py` and the image-upload connections in `content.py`. If it's left empty, nobody is admin. |
+| 42 | **Fill in the platform keys** from `docs/AI_KEYS.md`: `SARVAM_API_KEY`, `FAL_KEY` (the new one, after rotating per item 4) and `GEMINI_API_KEY`. Or use the per-task `*_PROVIDER` + `*_API_KEY` pairs. Keep `FREE_AI=false` in production (item 8). | You | [Certain] Without keys, each task falls back to the free tier or to rules (`docs/AI_KEYS.md` table). |
+| 43 | **Make one real Hindi call and one real Telugu call** once the Sarvam key is set, to check the voice, the transcript and the reply speed | You call, Claude fixes | [Certain] Sarvam speech and transcription are built on the backend but have only been tested with mocks. |
 
 ---
 
@@ -86,7 +89,7 @@ Owner: **You** = only you can do it (accounts, money, legal, real devices). **Cl
 | 31 | Move billing from per-workspace to per-agency account before any agency pays. Set real prices (Starter ₹1,999 / Growth ₹4,999 / Agency ₹12,999 are placeholders in `billing.py`). | You (prices), Claude (code) | [Certain] memory + `billing.py:10`. |
 | 32 | Turn on `BILLING_ENFORCE` and wire `charge()` into the costly modules (images, video, calls) | Claude, with your OK | [Certain] It's off on purpose today. Until it's on, one user can run up your fal/Gemini bill. Rate limits help (`img` 30/5 min, `vid` 10/10 min) but they aren't a budget. |
 | 33 | A hard monthly spend cap in the fal.ai, Gemini and Twilio dashboards | You | [Likely] Five minutes of work, and it saves you from a runaway agent or abuse. |
-| 34 | Sarvam for Indian-language voice | Claude | [Certain] Calls are English-only Twilio `<Say>` today. This is your pitched differentiator, so it shouldn't wait long. |
+| 34 | Sarvam for Indian-language voice | Claude | [Certain] Built on the backend on 2026-11-07, with the keys kept on the server (`SARVAM_API_KEY`), and tested only with mocks. The real-call test is item 43. |
 | 35 | Per-ad results (not per-campaign), and ad-to-sale tracking via Meta Conversions API | Claude | [Certain] memory: results are per-campaign only. |
 | 36 | Uploads to object storage (R2/S3), before a second server | Claude | [Certain] TECHSTACK item 4. |
 | 37 | Monthly restore drill, plus a short incident runbook (who to call, how to roll back, how to tell customers) | Both | [Certain] DEPLOY.md recommends the monthly restore. There's no runbook yet. |
@@ -101,7 +104,7 @@ Owner: **You** = only you can do it (accounts, money, legal, real devices). **Cl
 1. **Today (you):** rotate the fal key (4), take the Apps Script offline (5), create the GitHub repo (1), and start Meta verification (21) and the Twilio/Indian calling check (23).
 2. **This week (Claude):** repo + CI (2, 3), FREE_AI default (8), STOP opt-out (15), account deletion/export (19), consent record (28), call-hours guard (29), legal page drafts (25), hide untested modules (17).
 3. **When you have a domain + VPS:** staging deploy, HTTPS, Postgres tests, backups + restore, monitoring (9 to 14).
-4. **Then:** the full Meta ad (16), live end-to-end tests (18), real devices (20), and the lawyer's review of section C.
+4. **Then:** the full Meta ad (16), live end-to-end tests (18), real devices (20), the admin view, keys and a real Sarvam call (41 to 43), and the lawyer's review of section C.
 5. **Pilot** with 3 to 5 businesses. Section D runs alongside it.
 
 **Done means:** one real business uses it for two weeks, leads reach them through WhatsApp within 60 s, nobody who replied STOP gets another message, and you never had to fix data by hand.
