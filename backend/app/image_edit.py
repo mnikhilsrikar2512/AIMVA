@@ -358,6 +358,49 @@ def fal_subject_mask(key: str, img: Image.Image) -> Image.Image:
     return m
 
 
+# ---- keep the real product: new scene around the user's own product pixels ---------------------------------
+PRODUCT_SCENE_PROMPT = ("{scene}. A real product photo is already placed in the frame: build the surface, background, props, "
+                        "a natural contact shadow and soft reflections around it, matching its light and perspective. "
+                        "No text, no logos, no second copy of the product.")
+
+
+def place_product(product: Image.Image, mask: Image.Image, size, scale: float = 0.6, centre_y: float = 0.56):
+    """Cut the product out and set it on a canvas of the target size. Returns (canvas, product mask)."""
+    mask = mask.convert("L").point(lambda v: 255 if v >= 128 else 0)
+    box = mask.getbbox()
+    if not box:
+        raise EditFailed("Couldn't find the product in that photo. Use a photo where the product is clearly visible.", 422)
+    item, cut = product.convert("RGB").crop(box), mask.crop(box)
+    W, H = size
+    f = min(W * scale / item.width, H * scale / item.height)
+    nw, nh = max(1, round(item.width * f)), max(1, round(item.height * f))
+    item, cut = item.resize((nw, nh), Image.LANCZOS), cut.resize((nw, nh), Image.LANCZOS)
+    x = (W - nw) // 2
+    y = max(0, min(H - nh, round(H * centre_y - nh / 2)))
+    canvas, pmask = Image.new("RGB", size, (200, 198, 194)), Image.new("L", size, 0)
+    canvas.paste(item, (x, y), cut)
+    pmask.paste(cut, (x, y))
+    return canvas, pmask
+
+
+def keep_product(canvas: Image.Image, generated: Image.Image, pmask: Image.Image) -> Image.Image:
+    """Put the original product pixels back over the model's scene. The edge is pulled in a pixel and feathered,
+    so the model's shadow meets the product without a halo, and the product itself is never redrawn."""
+    if generated.size != canvas.size:
+        generated = generated.resize(canvas.size, Image.LANCZOS)
+    keep = pmask.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(1.2))
+    return Image.composite(canvas, generated.convert("RGB"), keep)
+
+
+def product_scene(key: str, product: Image.Image, size, scene: str, subject_mask=None, fill_fn=None) -> Image.Image:
+    """Find the product, place it, let the fill model paint everything around it, then restore the product."""
+    subject_mask, fill_fn = subject_mask or fal_subject_mask, fill_fn or fill
+    canvas, pmask = place_product(product, subject_mask(key, product), size)
+    repaint = ImageOps.invert(pmask.point(lambda v: 255 if v >= 128 else 0))
+    generated = fill_fn(key, canvas, repaint, PRODUCT_SCENE_PROMPT.format(scene=scene.strip().rstrip(".")))
+    return keep_product(canvas, generated, pmask)
+
+
 def basic_upscale(img: Image.Image, factor: int) -> Image.Image:
     w, h = img.size
     f = min(factor, MAX_UPSCALED_SIDE / max(w, h))
