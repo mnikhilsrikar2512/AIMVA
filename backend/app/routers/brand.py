@@ -140,7 +140,10 @@ def palette(asset_id: int, user: User = Depends(current_user), db: Session = Dep
 @router.get("/api/files/{path:path}")
 def serve_file(path: str, user: User = Depends(current_user)):
     """Private files: only the owner can view their uploads and branded images."""
+    # Resolve first, then require the real file to sit inside this account's own folder, so "6/../99/x" can't
+    # step into another account's uploads.
+    own = (UPLOADS / str(user.id)).resolve()
     f = (UPLOADS / path).resolve()
-    if not path.startswith(f"{user.id}/") or UPLOADS.resolve() not in f.parents or not f.is_file():
+    if own not in f.parents or not f.is_file():
         raise HTTPException(404, "File not found.")
     return FileResponse(f, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400"})

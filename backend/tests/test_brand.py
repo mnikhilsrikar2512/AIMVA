@@ -137,3 +137,13 @@ def test_ad_copy_follows_brand_voice(auth_client):
     r = auth_client.post("/api/content/ad-copy", json={"product": "Skyline Homes"}).json()
     assert "elegant" in r["tone"]
     assert "Live above the city" in r["variants"][0]["headline"] and "executives" in r["variants"][0]["headline"]
+
+
+def test_files_cannot_step_into_another_account_with_dotdot(auth_client, other_client):
+    """Regression: /api/files/<me>/../<them>/<file> used to pass the "starts with my id" check and return their file."""
+    a = upload(auth_client, png()).json()["asset"]
+    owner_id, name = a["url"].removeprefix("/api/files/").split("/", 1)
+    me = other_client.get("/api/auth/me").json()["user"]["id"]
+    for path in (f"{me}/../{owner_id}/{name}", f"{me}/%2e%2e/{owner_id}/{name}", f"{me}/..%2f{owner_id}/{name}"):
+        assert other_client.get(f"/api/files/{path}").status_code == 404, path
+    assert auth_client.get(a["url"]).status_code == 200  # the owner still gets it

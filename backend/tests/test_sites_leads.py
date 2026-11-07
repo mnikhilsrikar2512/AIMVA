@@ -212,3 +212,31 @@ def test_leads_are_private(auth_client, other_client):
     assert auth_client.get("/api/leads").json()[0]["stage"] == "new"
     assert "a@x.com" in auth_client.get("/api/leads/export.csv").text
     assert other_client.get("/api/leads/export.csv").text.count("a@x.com") == 1
+
+
+def test_public_form_limit_is_per_visitor_not_per_page(auth_client, client, monkeypatch):
+    """Regression: the form was capped at 60 submissions per page for everyone, so one script could fill it 60 times
+    and lock every real customer out with a 429."""
+    from app.routers import sites as sites_router
+    s = make_site(auth_client)
+    auth_client.post(f"/api/sites/{s['id']}/deploy", json={"target": "aimva"})
+    url = f"/api/public/sites/{s['slug']}/lead"
+    ip = {"v": "203.0.113.9"}
+    monkeypatch.setattr(sites_router, "client_ip", lambda request: ip["v"])
+    codes = [client.post(url, data={"phone": f"+9198{i:08d}"}).status_code for i in range(80)]
+    assert codes[:10] == [200] * 10 and set(codes[10:]) == {429}  # the spammer is stopped quickly...
+    ip["v"] = "198.51.100.7"
+    r = client.post(url, data={"name": "Real customer", "phone": "+919812345678"})
+    assert r.status_code == 200 and r.json() == {"ok": True}  # ...and a real visitor still gets through
+    assert any(l["name"] == "Real customer" for l in auth_client.get("/api/leads").json())
+
+
+def test_public_form_cannot_spam_one_phone_number(auth_client, client, monkeypatch):
+    from app.routers import sites as sites_router
+    s = make_site(auth_client)
+    auth_client.post(f"/api/sites/{s['id']}/deploy", json={"target": "aimva"})
+    ips = iter(f"192.0.2.{i}" for i in range(1, 50))
+    monkeypatch.setattr(sites_router, "client_ip", lambda request: next(ips))  # a new IP every time
+    codes = [client.post(f"/api/public/sites/{s['slug']}/lead", data={"phone": p}).status_code
+             for p in ("+91 98123 45678", "098123 45678", "9812345678", "+919812345678")]
+    assert codes == [200, 200, 200, 429]
