@@ -116,7 +116,7 @@ def activity(db: Session, user_id: int, leads: list) -> dict:
     for l in leads:
         i, o = last_in.get(l.id), last_out.get(l.id)
         since = None
-        if l.stage not in CLOSED:
+        if l.stage not in CLOSED and not l.opted_out_at:  # replied STOP: nobody should answer them
             if i and (not o or o < i):
                 since = i
             elif not i and not o and l.stage == "new":

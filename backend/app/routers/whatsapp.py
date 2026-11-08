@@ -16,8 +16,9 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
+from .. import opt_out
 from ..lead_reply import wa_number, window_open
-from ..models import Integration, User, WaMessage, WaScheduled, utcnow
+from ..models import Integration, OptOut, User, WaMessage, WaScheduled, utcnow
 from ..security import current_user, decrypt_json
 from ..services import get_integration
 from ..webhooks import check_meta_signature
@@ -37,10 +38,12 @@ def conversations(user: User = Depends(current_user), db: Session = Depends(get_
     last = (select(WaMessage.contact, func.max(WaMessage.id).label("mid"))
             .where(WaMessage.user_id == user.id).group_by(WaMessage.contact).subquery())
     rows = list(db.scalars(select(WaMessage).join(last, WaMessage.id == last.c.mid).order_by(WaMessage.id.desc())))
+    out_set = set(db.scalars(select(OptOut.contact).where(OptOut.user_id == user.id)))
     # The newest message may be ours (no name), so use the contact's most recent known name.
     names = dict(db.execute(select(WaMessage.contact, WaMessage.contact_name)
                             .where(WaMessage.user_id == user.id, WaMessage.contact_name != "").order_by(WaMessage.id)).all())
-    return [{**msg_out(m), "contact_name": m.contact_name or names.get(m.contact, "")} for m in rows]
+    return [{**msg_out(m), "contact_name": m.contact_name or names.get(m.contact, ""),
+             "opted_out": wa_number(m.contact) in out_set} for m in rows]
 
 
 @router.get("/api/whatsapp/messages/{contact}")
@@ -58,7 +61,9 @@ class SendIn(BaseModel):
 def send_whatsapp(db: Session, user_id: int, to: str, text: str, name: str = "", template: str = "",
                   template_lang: str = "en", params: Optional[list] = None) -> WaMessage:
     """Send (or, without a connected number, simulate) a WhatsApp text, or an approved template when `template` is set.
-    `params` fill the template's body variables ({{1}}, {{2}}...). Raises HTTPException(502) if WhatsApp refuses it."""
+    `params` fill the template's body variables ({{1}}, {{2}}...). Raises HTTPException(502) if WhatsApp refuses it,
+    and HTTPException(409) without sending anything if the person replied STOP (every send in AIMVA comes through here)."""
+    opt_out.guard(db, user_id, to)
     to = wa_number(to)
     integ = get_integration(db, user_id, "whatsapp")
     m = WaMessage(user_id=user_id, contact=to, contact_name=name, direction="out",
@@ -146,6 +151,7 @@ def schedule(body: ScheduleIn, user: User = Depends(current_user), db: Session =
     if send_at > now + MAX_AHEAD:
         raise HTTPException(400, "You can schedule up to 90 days ahead.")
     contact = wa_number(body.to)
+    opt_out.guard(db, user.id, contact)
     if db.scalar(select(func.count()).select_from(WaScheduled).where(WaScheduled.user_id == user.id,
                                                                       WaScheduled.status == "scheduled")) >= 500:
         raise HTTPException(400, "You have 500 messages waiting already. Cancel some first.")
@@ -233,6 +239,7 @@ def simulate_inbound(body: SimIn, bg: BackgroundTasks, request: Request, user: U
     m = WaMessage(user_id=user.id, contact=contact, contact_name=body.name, direction="in", body=body.body, status="received")
     db.add(m)
     db.commit()
+    opt_out.on_inbound(db, user.id, contact, body.body)
     # On a live server (platform owner testing) skip the background jobs: no Sheets sync, and no Concierge welcome
     # sent from a real business number to whatever phone number was typed in.
     create_lead(db, user.id, None if settings.is_production else bg,
@@ -272,6 +279,11 @@ async def receive_webhook(request: Request, bg: BackgroundTasks, db: Session = D
                 db.add(WaMessage(user_id=integ.user_id, contact=msg["from"], contact_name=names.get(msg["from"], ""),
                                  direction="in", body=text, status="received", wa_id=msg.get("id", "")))
                 db.commit()
+                # A tapped quick-reply button (e.g. a template's "Stop promotions") arrives as type button/interactive.
+                inter = msg.get("interactive") or {}
+                said = ((msg.get("text") or {}).get("body") or (msg.get("button") or {}).get("text")
+                        or (inter.get("button_reply") or inter.get("list_reply") or {}).get("title") or "")
+                opt_out.on_inbound(db, integ.user_id, msg["from"], said)
                 create_lead(db, integ.user_id, bg, name=names.get(msg["from"], ""), phone="+" + msg["from"],
                             message=text, source="whatsapp")
             for st in v.get("statuses", []):

@@ -577,7 +577,8 @@ def execute(db: Session, user: User, r: dict) -> str:
         if not agent:
             raise HTTPException(400, "Create a voice agent first (Voice Agent page), then try again.")
         now = utcnow()
-        hot = [l for l in db.scalars(select(Lead).where(Lead.user_id == user.id, Lead.stage == "new", Lead.score >= HOT)
+        hot = [l for l in db.scalars(select(Lead).where(Lead.user_id == user.id, Lead.stage == "new", Lead.score >= HOT,
+                                                              Lead.opted_out_at.is_(None))
                                      .order_by(Lead.score.desc())) if l.phone and now - l.created_at > timedelta(minutes=30)][:5]
         if not hot:
             raise HTTPException(400, "None of the hot leads has a phone number. Open them in Leads to reach them another way.")

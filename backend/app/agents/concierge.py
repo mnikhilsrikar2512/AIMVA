@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import record, setting
+from .. import opt_out
 from ..models import FollowUp, Lead, User, WaMessage, utcnow
 from ..quality import match_playbook
 from ..services import get_integration
@@ -95,7 +96,7 @@ def _deliver(db: Session, user: User, lead: Lead, step: str) -> str:
 def on_new_lead(db: Session, lead_id: int) -> None:
     """Called once for each new lead (in the background, after the lead is saved)."""
     lead = db.get(Lead, lead_id)
-    if not lead or lead.source not in ACT_ON or not lead.phone:
+    if not lead or lead.source not in ACT_ON or not lead.phone or opt_out.is_out(db, lead.user_id, lead.phone):
         return
     user = db.get(User, lead.user_id)
     s = setting(db, user.id, "concierge")
@@ -131,6 +132,8 @@ def run_due(db: Session, now=None) -> int:
             continue
         if not setting(db, user.id, "concierge").enabled:
             f.status, f.note = "skipped", "Concierge was turned off"
+        elif lead.opted_out_at or opt_out.is_out(db, user.id, lead.phone):
+            f.status, f.note = "skipped", "The lead opted out"
         elif lead.stage in CLOSED:
             f.status, f.note = "skipped", f"Lead is {lead.stage}"
         elif _replied(db, lead):

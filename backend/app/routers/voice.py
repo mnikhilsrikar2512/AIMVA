@@ -215,7 +215,9 @@ class DialIn(BaseModel):
 
 
 def place_phone_call(db: Session, user: User, agent: VoiceAgent, to: str, lead_id: Optional[int] = None) -> Call:
+    from .. import opt_out
     from ..services import get_integration
+    opt_out.guard(db, user.id, to)  # they replied STOP: no calls either
     tw = integration_secret(db, user.id, "twilio")
     integ = get_integration(db, user.id, "twilio")
     sid = tw.get("account_sid") or settings.twilio_account_sid

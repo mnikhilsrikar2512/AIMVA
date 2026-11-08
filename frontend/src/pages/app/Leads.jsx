@@ -187,8 +187,9 @@ export default function Leads() {
                       <td className="max-w-[190px] px-3 py-3 sm:max-w-[260px] sm:px-4">
                         <button className="text-left font-semibold text-strong hover:text-brand-2 hover:underline" onClick={() => openLead(l.id)}>{l.name || l.email || l.phone || "—"}</button>
                         {fresh.has(l.id) && <span className="ml-2 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-xs font-bold uppercase text-emerald-600">New</span>}
-                        {(l.needs_reply || (l.language && l.language !== "en")) && (
+                        {(l.needs_reply || l.opted_out || (l.language && l.language !== "en")) && (
                           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs">
+                            {l.opted_out && <span className="font-semibold text-rose-600" title="They replied STOP: no WhatsApp or calls">Opted out</span>}
                             {l.needs_reply && <span className="font-semibold text-warm" title="Nobody has answered them yet">{waited(l.waiting_since)}</span>}
                             {l.language && l.language !== "en" && <span className="text-muted" title="They write in this language; replies are drafted in it">{l.language_name}</span>}
                           </p>
@@ -219,7 +220,7 @@ export default function Leads() {
                       </td>
                       <td className="px-2 py-3 sm:px-4">
                         <div className="flex items-center justify-end gap-1">
-                          {l.phone && !isClient && (l.needs_reply
+                          {l.phone && !isClient && !l.opted_out && (l.needs_reply
                             ? <Button size="sm" className="px-2 sm:px-3" aria-label="Reply" onClick={() => openLead(l.id, true)} title={`Reply on WhatsApp${l.language_name ? ` in ${l.language_name}` : ""}`}><MessageCircle className="size-3.5" /><span className="hidden sm:inline">Reply</span></Button>
                             : <IconButton label="Message on WhatsApp" onClick={() => openLead(l.id, true)}><MessageCircle className="size-4" /></IconButton>)}
                           {!isClient && <IconButton danger label="Delete lead" onClick={() => removeLead(l)}><Trash2 className="size-4" /></IconButton>}

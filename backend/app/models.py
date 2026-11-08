@@ -131,6 +131,7 @@ class Lead(Base):
     campaign_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     synced: Mapped[dict] = mapped_column(JSON, default=dict)
     language: Mapped[str] = mapped_column(String(12), default="", server_default="")  # what the lead writes in (hi-IN, hi-Latn, ta-IN...); "" = not known yet
+    opted_out_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # replied STOP: no messages or calls (see app/opt_out.py)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -457,6 +458,18 @@ class LiveEvent(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     payload: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class OptOut(Base):
+    """A phone number that asked a business not to contact it (replied STOP). Checked before every message and call."""
+    __tablename__ = "opt_outs"
+    __table_args__ = (UniqueConstraint("user_id", "contact", name="uq_opt_outs_user_contact"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    contact: Mapped[str] = mapped_column(String(40))  # digits with country code, as WhatsApp sends them
+    source: Mapped[str] = mapped_column(String(20), default="whatsapp")  # whatsapp | manual
+    note: Mapped[str] = mapped_column(String(300), default="")  # what they wrote
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class WaScheduled(Base):
