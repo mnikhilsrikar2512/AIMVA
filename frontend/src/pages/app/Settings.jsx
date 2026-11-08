@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CheckCircle2, ExternalLink, KeyRound, Link2, Palette, Settings as SettingsIcon, Unplug } from "lucide-react";
+import { CheckCircle2, Download, ExternalLink, KeyRound, Link2, Palette, Settings as SettingsIcon, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Chip, Field, Modal, PageHeader, Spinner, Tabs, ListSkeleton } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
@@ -40,6 +40,7 @@ function Profile() {
           <Button type="submit" busy={busy}>Update password</Button>
         </form>
       </Card>
+      <YourData />
       {onboarding?.data?.dismissed && (
         <Card className="flex items-center justify-between gap-4 lg:col-span-2">
           <div><p className="font-semibold text-strong">Setup guide</p><p className="text-sm text-muted">Bring back the step-by-step checklist on your dashboard.</p></div>
@@ -47,6 +48,48 @@ function Profile() {
         </Card>
       )}
     </div>
+  );
+}
+
+// DPDP: people can take their data with them and erase their account. Both work on the signed-in person, whatever
+// workspace is active, so a view-only client can use them too.
+function YourData() {
+  const { setUser } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [f, setF] = useState({ password: "", confirm_email: "" });
+  const [busy, run] = useAction();
+  const start = () => run(async () => { setPreview(await get("/api/account/delete-preview")); setF({ password: "", confirm_email: "" }); setOpen(true); });
+  const n = (c) => `${c.leads} leads, ${c.sites} pages, ${c.campaigns} campaigns`;
+  return (
+    <Card className="lg:col-span-2">
+      <h2 className="mb-1 font-semibold text-strong">Your data</h2>
+      <p className="mb-4 text-sm text-muted">Download everything AIMVA holds for your account and the client workspaces you own, or delete your account for good.</p>
+      <div className="flex flex-wrap gap-3">
+        <a className="btn-ghost" href="/api/account/export" download><Download className="size-4" /> Download my data</a>
+        <Button variant="danger" busy={busy && !open} onClick={start}><Trash2 className="size-4" /> Delete account</Button>
+      </div>
+      <Modal open={open} onClose={() => setOpen(false)} title="Delete your account?">
+        {preview && (
+          <form className="space-y-4" onSubmit={(e) => {
+            e.preventDefault();
+            run(async () => { await post("/api/account/delete", f); setOpen(false); setUser(null); window.location.assign("/"); }, "Your account has been deleted");
+          }}>
+            <p className="text-sm text-muted">This can't be undone. Download your data first if you want a copy.</p>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-strong">
+              <li>Your own business: {n(preview.own)}.</li>
+              {preview.workspaces_deleted.map((w) => <li key={w.id}>Client workspace {w.name}: {n(w)}.</li>)}
+              {preview.connected.length > 0 && <li>Connected accounts are disconnected ({preview.connected.length}).</li>}
+              {preview.paid_plan && <li>Your paid plan is cancelled.</li>}
+            </ul>
+            {preview.workspaces_kept.length > 0 && <p className="text-sm text-muted">Kept, because someone else also owns them: {preview.workspaces_kept.map((w) => w.name).join(", ")}. You just lose access.</p>}
+            <Field label={`Type ${preview.email} to confirm`}><input className="input" autoComplete="off" value={f.confirm_email} onChange={(e) => setF({ ...f, confirm_email: e.target.value })} required /></Field>
+            <Field label="Password"><input className="input" type="password" autoComplete="current-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required /></Field>
+            <Button type="submit" busy={busy} disabled={f.confirm_email.trim().toLowerCase() !== preview.email.toLowerCase()} className="!bg-rose-600 hover:!bg-rose-700">Delete everything</Button>
+          </form>
+        )}
+      </Modal>
+    </Card>
   );
 }
 

@@ -41,6 +41,8 @@ from .billing import router as billing_router  # noqa: E402
 app.include_router(billing_router)
 from .workspaces import router as workspaces_router  # noqa: E402
 app.include_router(workspaces_router)
+from .account import router as account_router  # noqa: E402
+app.include_router(account_router)
 
 
 @app.on_event("startup")

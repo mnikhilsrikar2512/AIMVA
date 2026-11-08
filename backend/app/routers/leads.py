@@ -7,7 +7,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from .. import call_hours, lead_reply, live, opt_out
@@ -240,8 +240,22 @@ def patch_lead(lead_id: int, body: LeadPatch, user: User = Depends(current_user)
 
 @router.delete("/{lead_id}")
 def delete_lead(lead_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Deletes the lead with its history: timeline, follow-ups, and the WhatsApp messages and calls with that
+    number, so a person who asks to be erased is erased (DPDP). Conversations stay when another lead in this
+    account has the same number."""
+    from ..models import Call, WaScheduled
     lead = db.get(Lead, lead_id)
     if lead and lead.user_id == user.id:
+        contacts = lead_reply._contacts(lead.phone) if lead.phone else set()
+        shared = contacts and any(lead_reply._contacts(p) & contacts for p in db.scalars(
+            select(Lead.phone).where(Lead.user_id == user.id, Lead.id != lead.id, Lead.phone != "")))
+        db.execute(delete(Call).where(Call.user_id == user.id, Call.lead_id == lead.id))
+        if contacts and not shared:
+            db.execute(delete(WaMessage).where(WaMessage.user_id == user.id, WaMessage.contact.in_(contacts)))
+            db.execute(delete(WaScheduled).where(WaScheduled.user_id == user.id, WaScheduled.contact.in_(contacts)))
+            digits = "".join(ch for ch in lead.phone if ch.isdigit())
+            if len(digits) >= 10:
+                db.execute(delete(Call).where(Call.user_id == user.id, Call.to_number.contains(digits[-10:])))
         db.delete(lead)
         db.commit()
     return {"ok": True}
