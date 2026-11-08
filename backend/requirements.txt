@@ -38,7 +38,7 @@ python-multipart==0.0.31
 PyYAML==6.0.3
 requests==2.33.0
 sentry-sdk==2.74.0
-SQLAlchemy==2.0.55
+SQLAlchemy==2.1.8
 starlette==1.10.0
 typing-inspection==0.4.2
 typing_extensions==4.16.0
