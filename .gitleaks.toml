@@ -1,0 +1,16 @@
+# Default gitleaks rules, plus the fal key format used by this project.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "fal-key"
+description = "fal.ai API key"
+regex = '''[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{32}'''
+
+[allowlist]
+description = "Made-up keys in tests (checked by hand 2026-11-08: all are obvious test values)"
+paths = [
+  '''backend/tests/test_discreet\.py''',    # fake fal key in an error-message test
+  '''backend/tests/conftest\.py''',         # SECRET_KEY "test-secret-key-that-is-long-enough-123"
+  '''backend/tests/test_production\.py''',  # TOKEN_ENCRYPTION_KEYS = base64("for-tests-only-32-bytes-key-0123")
+]

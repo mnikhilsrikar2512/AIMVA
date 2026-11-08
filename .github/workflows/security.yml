@@ -1,0 +1,42 @@
+name: Security
+
+# Runs on every change and every Monday: known-vulnerable packages and leaked keys fail the check.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "30 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    name: Vulnerable packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Backend packages (pip-audit)
+        run: pip install pip-audit==2.9.0 && pip-audit -r backend/requirements.txt --progress-spinner off
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Frontend packages shipped to browsers (npm audit)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+  secrets:
+    name: Leaked keys
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the whole history, not just the latest commit
+      - name: gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --redact --no-banner -v --config .gitleaks.toml .

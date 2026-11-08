@@ -6,7 +6,8 @@
 FROM node:22-alpine AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# --ignore-scripts: a hijacked package can't run code while installing (the build doesn't need install scripts)
+RUN npm ci --no-audit --no-fund --ignore-scripts
 COPY frontend/ ./
 RUN npm run build
 
@@ -16,7 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_
 RUN useradd --system --uid 10001 --home /app aimva
 WORKDIR /app/backend
 COPY backend/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt
 COPY backend/ .
 COPY --from=web /web/dist /app/frontend/dist
 # Files copied from a Mac folder can be owner-only (600); the app user only needs to read them.
