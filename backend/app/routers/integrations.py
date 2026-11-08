@@ -275,8 +275,12 @@ def update_meta(provider: str, body: MetaIn, user: User = Depends(current_user),
 
 @router.delete("/{provider}")
 def disconnect(provider: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Forget the stored token, and tell Meta / Google / LinkedIn to drop AIMVA's access too (best effort)."""
+    from ..account import revoke_integration
     integ = get_integration(db, user.id, provider)
+    revoked = False
     if integ:
+        revoked = revoke_integration(integ)
         db.delete(integ)
         db.commit()
-    return {"ok": True}
+    return {"ok": True, "revoked": revoked}
