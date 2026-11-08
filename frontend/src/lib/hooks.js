@@ -38,7 +38,8 @@ export function useAction() {
     setBusy(true);
     try {
       const out = await fn();
-      if (successMsg) toast.success(successMsg);
+      const msg = typeof successMsg === "function" ? successMsg(out) : successMsg;
+      if (msg) toast.success(msg);
       return out;
     } catch (e) {
       toast.error(e.message || "Something went wrong");
