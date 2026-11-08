@@ -8,6 +8,7 @@ import { Logo } from "../Logo";
 import { useAuth } from "../../lib/auth";
 import { USE_CASES } from "./useCases";
 import { LEGAL_PAGES } from "./legal";
+import "./marketing.css";
 
 export const cx = clsx;
 
@@ -52,7 +53,7 @@ function TopBar({ from }) {
   }, [open]);
 
   const actions = user ? (
-    <Link to="/app" className="btn-primary">Open app <ArrowRight className="size-4" /></Link>
+    <Link to="/app" className="mk-go btn-primary">Open app <ArrowRight className="size-4" /></Link>
   ) : (
     <>
       <Link to="/login" className="btn-subtle">Log in</Link>
@@ -68,7 +69,7 @@ function TopBar({ from }) {
         <Logo />
         <nav className="hidden items-center gap-1 text-sm font-medium md:flex" aria-label="Main">
           {LINKS.map((l) => (
-            <NavLink key={l.to} to={l.to} end className={({ isActive }) => cx("rounded-full px-3 py-1.5 transition hover:text-strong",
+            <NavLink key={l.to} to={l.to} end className={({ isActive }) => cx("mk-nav rounded-full px-3 py-1.5 transition hover:text-strong",
               isActive && !l.to.includes("#") ? "text-strong" : "text-muted")}>{l.label}</NavLink>
           ))}
         </nav>
@@ -132,7 +133,7 @@ export function MarketingLayout({ from, children }) {
     return () => clearTimeout(t);
   }, [hash, pathname]);
   return (
-    <div className="min-h-dvh overflow-x-clip bg-bg text-ink">
+    <div className="mk min-h-dvh overflow-x-clip bg-bg text-ink">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2">Skip to content</a>
       <TopBar from={from} />
       <main id="main">{children}</main>
@@ -161,7 +162,7 @@ export function FinalCta({ from, title = "Your next lead could be in today.", te
         <h2 className="serif-moment text-[30px] leading-tight text-strong sm:text-5xl">{title}</h2>
         <p className="mx-auto mt-4 max-w-lg text-base text-muted sm:text-lg">{text}</p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link to={user ? "/app" : signupHref(from)} className="btn-primary h-12 px-7 text-[15px]">{user ? "Open app" : "Start free"} <ArrowRight className="size-4" /></Link>
+          <Link to={user ? "/app" : signupHref(from)} className="mk-go btn-primary h-12 px-7 text-[15px]">{user ? "Open app" : "Start free"} <ArrowRight className="size-4" /></Link>
           {from !== "tour" && <Link to="/tour" className="btn-subtle h-12 px-5 text-[15px]">Take the product tour</Link>}
         </div>
         <p className="mt-5 text-sm text-faint">Free while in early access. No card needed.</p>

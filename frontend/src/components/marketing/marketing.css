@@ -1,0 +1,80 @@
+/*
+ * Public site only. The deep teal and saffron palette, scoped to .mk so the signed-in app is untouched here.
+ * These match the app palette tokens exactly; once that palette is in index.css this block can be deleted.
+ */
+.mk {
+  --color-bg: #f4f6f3;
+  --color-surface: #fcfdfb;
+  --color-surface-2: #e9eeeb;
+  --color-line: rgb(15 43 45 / 0.09);
+  --color-line-strong: rgb(15 43 45 / 0.17);
+  --color-strong: #0f2b2d;
+  --color-ink: #233a3b;
+  --color-muted: #526563;
+  --color-faint: #596b69;
+  --color-warm: #a35700;
+  --color-warm-soft: #fdf0db;
+  --color-brand: #0b6b67;
+  --color-brand-2: #134e5e;
+  --color-peach: #f4a21c;
+  --color-lavender: #dcefeb;
+  --shadow-soft: 0 0 0 1px rgb(15 43 45 / 0.09);
+  --shadow-lift: 0 0 0 1px rgb(15 43 45 / 0.09), 0 18px 40px -20px rgb(10 40 42 / 0.3);
+}
+.mk .btn-primary:hover:not(:disabled) { background: #1d4346; }
+.mk ::selection { background: #fdf0db; color: #0f2b2d; }
+
+/* Hero glow: teal and saffron light behind the stage instead of a box. */
+.mk-aura {
+  background:
+    radial-gradient(42% 52% at 18% 8%, rgb(94 184 172 / 0.32), transparent 70%),
+    radial-gradient(36% 46% at 88% 2%, rgb(244 162 28 / 0.26), transparent 70%),
+    radial-gradient(46% 40% at 62% 62%, rgb(160 220 210 / 0.22), transparent 70%);
+}
+
+/* 3D stage: depth comes from transforms the GPU composites, not from WebGL. */
+.mk-stage { perspective: 1600px; perspective-origin: 50% 40%; }
+.mk-3d { transform-style: preserve-3d; }
+.mk-flat .mk-3d, .mk-flat .mk-3d * { transform-style: flat; }
+
+/* Phone frame around real page screenshots. */
+.mk-phone {
+  border-radius: 34px;
+  padding: 7px;
+  background: linear-gradient(160deg, #1d4346, #0f2b2d 55%, #0a1f20);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06) inset, 0 30px 60px -24px rgb(10 40 42 / 0.55), 0 12px 24px -12px rgb(10 40 42 / 0.35);
+}
+.mk-phone > .mk-screen { border-radius: 28px; overflow: hidden; background: #fff; position: relative; height: 100%; }
+
+/* Gallery: slides snap to the centre; script adds the 3D turn on capable devices. */
+.mk-rail { scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.mk-rail::-webkit-scrollbar { display: none; }
+.mk-rail > * { scroll-snap-align: center; }
+
+/* Button arrow nudges toward where it takes you. */
+.mk .mk-go svg { transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+.mk .mk-go:hover svg, .mk .mk-go:focus-visible svg { transform: translateX(3px); }
+
+/* Nav links: a saffron underline grows from the centre. */
+.mk-nav { position: relative; }
+.mk-nav::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: 2px; height: 2px; border-radius: 2px;
+  background: var(--color-peach); transform: scaleX(0); transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mk-nav:hover::after, .mk-nav[aria-current="page"]::after { transform: scaleX(1); }
+
+/* FAQ answers open smoothly where the browser can animate to auto height. */
+@supports (interpolate-size: allow-keywords) {
+  .mk-faq { interpolate-size: allow-keywords; }
+  .mk-faq::details-content { block-size: 0; overflow: hidden; transition: block-size 0.35s cubic-bezier(0.22, 1, 0.36, 1), content-visibility 0.35s allow-discrete; }
+  .mk-faq[open]::details-content { block-size: auto; }
+}
+
+@keyframes mk-timer { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes mk-tick { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
+@keyframes mk-ring { 0% { transform: scale(1); opacity: 0.55; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes mk-type { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mk-nav::after, .mk .mk-go svg { transition: none; }
+}
