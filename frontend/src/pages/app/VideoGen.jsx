@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { rise, stagger } from "../../components/Motion";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Clapperboard, KeyRound, Plus, Trash2, Video, Volume2, VolumeX, Wand2 } from "lucide-react";
+import { Clapperboard, KeyRound, MessageSquarePlus, Plus, Trash2, Video, Volume2, VolumeX, Wand2 } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, Notice, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
 import { del, get, post } from "../../lib/api";
@@ -13,6 +13,7 @@ import BrandControls from "../../components/BrandControls";
 import { useAuth } from "../../lib/auth";
 import { Advanced, LibraryImagePicker, ProviderPicker, SeedField, STYLES } from "../../components/GenControls";
 import { EnhanceButton, Rate } from "../../components/Quality";
+import VideoStudio from "../../components/VideoStudio";
 
 const DURATION_LABEL = (d) => `${String(d).replace(/s$/, "")} seconds`;
 
@@ -25,7 +26,7 @@ function Switch({ checked, onChange, label }) {
   );
 }
 
-function VideoCard({ a, rating, onChange, onDelete }) {
+function VideoCard({ a, rating, onChange, onDelete, onComment }) {
   const [soundBusy, setSoundBusy] = useState(false);
   const p = a.params || {};
   const addingSound = a.status === "queued" && p.stage === "audio";
@@ -70,6 +71,7 @@ function VideoCard({ a, rating, onChange, onDelete }) {
           )}
         </div>
         <div className="flex items-center gap-1">
+          {a.status === "done" && <button className="btn-subtle btn-sm" title="Comment to change it" aria-label="Comment to change it" onClick={onComment}><MessageSquarePlus className="size-3.5" /></button>}
           {a.status === "done" && <Rate kind="video" id={a.id} initial={rating} />}
           <Chip tone={a.status === "done" ? "green" : a.status === "queued" ? "amber" : "rose"}>{addingSound ? "sound" : a.status}</Chip>
           <button className="btn-subtle btn-sm" aria-label="Delete video" onClick={onDelete}><Trash2 className="size-3.5" /></button>
@@ -145,14 +147,19 @@ export default function VideoGen() {
   const startNew = () => { setForm(EMPTY); setCurrentIds([]); setTab("create"); };
   const current = assets.filter((a) => currentIds.includes(a.id));
   const history = assets.filter((a) => a.prompt.toLowerCase().includes(q.toLowerCase()));
+  const [studio, setStudio] = useState(null);
+  const rootOf = (a) => { let x = a; const seen = new Set(); while (x?.params?.parent && !seen.has(x.id)) { seen.add(x.id); x = assets.find((y) => y.id === x.params.parent) || x; if (seen.has(x.id)) break; } return x?.id; };
+  const chain = studio ? assets.filter((x) => rootOf(x) === rootOf(studio)).sort((a, b) => a.id - b.id) : [];
   const card = (a) => (
-    <VideoCard key={a.id} a={a} rating={ratings[a.id]}
+    <VideoCard key={a.id} a={a} rating={ratings[a.id]} onComment={() => setStudio(a)}
       onChange={(n) => setAssets((all) => all.map((x) => (x.id === n.id ? n : x)))}
       onDelete={async () => { await del(`/api/content/assets/${a.id}`); setAssets((all) => all.filter((x) => x.id !== a.id)); }} />
   );
 
   return (
     <div>
+      <VideoStudio video={studio} versions={chain} open={!!studio} onClose={() => setStudio(null)} onPick={setStudio}
+        onCreated={(n) => { setAssets((all) => [n, ...all]); setStudio(null); setTab("history"); }} />
       <PageHeader icon={Video} tone="pink" title="Videos" subtitle="Turn a sentence or a picture into a short promo clip, with sound."
         actions={<Button variant="ghost" onClick={startNew}><Plus className="size-4" /> Start new</Button>} />
       <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${assets.length ? ` (${assets.length})` : ""}` }]} /></div>
