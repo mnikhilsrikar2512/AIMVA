@@ -23,7 +23,7 @@
     "recharts": "^2.13.3",
     "sonner": "^1.7.0",
     "tailwind-merge": "^3.7.0",
-    "three": "^0.169.0"
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.11",
