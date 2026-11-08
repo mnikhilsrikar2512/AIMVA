@@ -154,7 +154,7 @@ def _detail(db: Session, u: User, role: str) -> dict:
     grants = [{"meter": g.meter, "quantity": g.quantity, "expires_at": _iso(g.expires_at), "note": g.note} for g in db.scalars(
         select(CreditGrant).where(CreditGrant.user_id == u.id, CreditGrant.expires_at > now).order_by(CreditGrant.created_at.desc()))]
     history = [staff.action_out(a) for a in db.scalars(
-        select(StaffAction).where(StaffAction.target_id == u.id).order_by(StaffAction.id.desc()).limit(20))]
+        select(StaffAction).where(StaffAction.target_id == u.id, StaffAction.action != "customer.view").order_by(StaffAction.id.desc()).limit(20))]
     return {
         "profile": {"id": u.id, "kind": u.kind, "name": u.name, "email": u.email if u.kind == "person" else None,
                     "company": u.company, "industry": u.industry, "goal": u.goal, "verified": u.is_verified,
@@ -168,7 +168,7 @@ def _detail(db: Session, u: User, role: str) -> dict:
         "connected": sorted({p for p in db.scalars(select(Integration.provider).where(Integration.user_id == u.id))
                              if role == "owner" or p not in PLATFORM}),
         "usage": _counts(db, u.id),
-        "history": history,
+        "history": history,  # changes only; who opened the account is in the Activity log
     }
 
 

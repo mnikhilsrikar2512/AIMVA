@@ -94,8 +94,9 @@ def test_customer_search_and_detail(support, customer, db):
     text = str(d)
     assert "Asha" not in text and "+9198" not in text and "enc" not in text  # no lead contents, no secrets
     # Viewing is logged, once an hour per person.
-    support.get(f"/api/console/customers/{customer.id}")
+    again = support.get(f"/api/console/customers/{customer.id}").json()
     assert len(log(db, "customer.view")) == 1
+    assert again["history"] == []  # the pane lists changes; views live in the Activity log
 
 
 def test_owner_sees_ai_connections(owner, customer):

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { toast } from "sonner";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./lib/auth";
+import { canSeeQuality } from "./lib/modules";
 
 // Everything is loaded per route, so the public pages don't download the app (and the app doesn't download them).
 const AppLayout = lazy(() => import("./components/AppLayout"));
@@ -27,6 +28,7 @@ const Analytics = lazy(() => import("./pages/app/Analytics"));
 const Settings = lazy(() => import("./pages/app/Settings"));
 const Brand = lazy(() => import("./pages/app/Brand"));
 const Owner = lazy(() => import("./pages/app/Owner"));
+const Console = lazy(() => import("./pages/app/Console"));
 const Command = lazy(() => import("./pages/app/Command"));
 const Welcome = lazy(() => import("./pages/Welcome"));
 
@@ -58,7 +60,8 @@ function Away({ text }) {
 
 function Allowed({ path, children }) {
   const { user } = useAuth();
-  if (path === "owner" && !user?.is_admin) return <Away text="That page is only for the AIMVA team." />;
+  if (path === "owner" && !canSeeQuality(user)) return <Away text="That page is only for the AIMVA team." />;
+  if (path === "console" && !user?.staff_role) return <Away text="That page is only for the AIMVA team." />;
   if (user?.workspace?.role === "client" && !CLIENT_PAGES.has(path.split("/")[0])) return <Away text="Your agency looks after that part for you." />;
   return children;
 }
@@ -90,7 +93,7 @@ export default function App() {
         {[
           ["brand", Brand], ["images", ImageGen], ["videos", VideoGen], ["websites", Websites], ["hosting", Hosting],
           ["ads/:platform", Ads], ["voice", VoiceAgent], ["whatsapp", WhatsApp], ["leads", Leads],
-          ["analytics", Analytics], ["settings", Settings], ["owner", Owner], ["command", Command],
+          ["analytics", Analytics], ["settings", Settings], ["owner", Owner], ["console", Console], ["command", Command],
         ].map(([path, C]) => <Route key={path} path={path} element={<Allowed path={path}>{page(<C />)}</Allowed>} />)}
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Route>
