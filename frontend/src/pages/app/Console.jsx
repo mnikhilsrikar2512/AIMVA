@@ -824,7 +824,7 @@ export default function Console() {
   const openCustomer = (id) => setParams(new URLSearchParams({ tab: "customers", c: String(id) }));
 
   useEffect(() => {
-    if (error?.status === 403) { toast("Your role on the AIMVA team changed. Ask an owner.", { id: "console-role" }); navigate("/app", { replace: true }); }
+    if (error?.status === 403) { toast("Your role on the AIMVA team changed. Ask an owner.", { id: "console-role" }); navigate("/", { replace: true }); }
   }, [error, navigate]);
 
   return (

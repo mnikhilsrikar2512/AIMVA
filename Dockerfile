@@ -2,14 +2,14 @@
 #   docker build -t aimva .
 # Run it with deploy/docker-compose.yml (Postgres, HTTPS, backups). See docs/DEPLOY.md.
 
-# --- 1. Build the React app ---
+# --- 1. Build the React apps: the customer app (dist) and the AIMVA team app (dist-team) ---
 FROM node:22-alpine AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 # --ignore-scripts: a hijacked package can't run code while installing (the build doesn't need install scripts)
 RUN npm ci --no-audit --no-fund --ignore-scripts
 COPY frontend/ ./
-RUN npm run build
+RUN npm run build && npm run build:team
 
 # --- 2. The API server ---
 FROM python:3.13-slim
@@ -20,6 +20,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt
 COPY backend/ .
 COPY --from=web /web/dist /app/frontend/dist
+COPY --from=web /web/dist-team /app/frontend/dist-team
 # Files copied from a Mac folder can be owner-only (600); the app user only needs to read them.
 RUN rm -rf tests .venv data .env && chmod -R a+rX,go-w /app && mkdir -p data && chown aimva:aimva data
 ARG RELEASE=""

@@ -32,6 +32,7 @@ services:
       DATABASE_URL: postgresql+psycopg://aimva:${POSTGRES_PASSWORD}@db:5432/aimva
       PUBLIC_URL: https://${DOMAIN:?set DOMAIN in deploy/.env}
       FRONTEND_URL: https://${DOMAIN}
+      TEAM_URL: https://${TEAM_DOMAIN:?set TEAM_DOMAIN in deploy/.env (the team app address, e.g. team.example.com)}
       UPLOADS_DIR: /app/backend/data/uploads
     volumes:
       - appdata:/app/backend/data
@@ -48,6 +49,7 @@ services:
       - "443:443/udp"
     environment:
       DOMAIN: ${DOMAIN}
+      TEAM_DOMAIN: ${TEAM_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

@@ -12,6 +12,13 @@
 	reverse_proxy app:8000
 }
 
+# The AIMVA team app (internal console). Same server; the app answers the console APIs only on this address.
+{$TEAM_DOMAIN} {
+	encode zstd gzip
+	header X-Robots-Tag "noindex, nofollow"
+	reverse_proxy app:8000
+}
+
 # Customers' domains pointed at this server (CNAME or A record) serve their published site.
 https:// {
 	tls {

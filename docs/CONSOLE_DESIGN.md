@@ -1,6 +1,6 @@
 # Team console: design
 
-The console is where the AIMVA team (Owner, Management, Development, Support, Accounts) looks after customers. It sits inside the app at `/app/console`, uses the same design system as the customer app (`frontend/src/index.css`, `design.md`), and appears only for staff. The scope and rules are in the PRD (Claude Doc "AIMVA Team Console PRD"). This file covers how it looks and behaves.
+The console is where the AIMVA team (Owner, Management, Development, Support, Accounts) looks after customers. It is a separate team app on its own address (see below), uses the same design system as the customer app (`frontend/src/index.css`, `design.md`). The scope and rules are in the PRD (Claude Doc "AIMVA Team Console PRD"). This file covers how it looks and behaves.
 
 ## Principles
 
@@ -12,17 +12,24 @@ The console is where the AIMVA team (Owner, Management, Development, Support, Ac
 
 ## Where it lives
 
-- Rail item **Team console** (icon `ShieldCheck`) in the Account group, shown when `user.staff_role` is set.
+**A separate team app** (owner's choice, 8 Nov), not a page in the customer app:
+
+- Its own address (`TEAM_URL`, e.g. team.aimva.in), its own sign-in page and its own build (`frontend/team`, `vite.team.config.js`, output `dist-team`). Customers never download its code.
+- The server answers the console and admin APIs only on that address (`backend/app/team_host.py`), and still checks the role on every request.
+- A slim top bar: "AIMVA Team", Console, Quality and usage (Owner, Management, Development), the person's name and role, Sign out. No customer rail.
+- Someone signed in who isn't on the team sees "This app is for the AIMVA team" and a Sign out button.
+
+Inside the console:
+
 - Tabs: Overview (Owner, Management), Tasks, Customers, Billing (Owner, Management, Accounts), Activity, Team (Owner). The first tab is Overview for owners and managers, Billing for Accounts, Tasks for everyone else.
 - A teammate who is also a client in some agency's workspace still sees the console; it ignores the workspace they're switched into.
-- **Quality and usage** (the existing Owner page) shows for roles with `quality.view` (Owner, Management, Development). Template review on that page stays Owner-only.
-- `Ctrl/Cmd+K` finds both pages and "Find customer…".
+- **Quality and usage** (the former Owner page) shows for roles with `quality.view` (Owner, Management, Development). Template review on that page stays Owner-only.
 - The page header shows the person's role as a quiet chip ("Support").
 
 ## Layout
 
 ```
-┌ rail ┬───────────────────────────────────────────────────────────────┐
+┌ top  ┬───────────────────────────────────────────────────────────────┐
 │      │ Team console                                  [Support]       │
 │      │ Customers · Activity · Team                                    │
 │      ├──────────────────────────────┬────────────────────────────────┤
@@ -40,7 +47,7 @@ The console is where the AIMVA team (Owner, Management, Development, Support, Ac
 └──────┴──────────────────────────────┴────────────────────────────────┘
 ```
 
-- **Desktop (≥1024px):** list on the left (about 380px), the customer on the right. The selected id is in the URL (`/app/console?c=42`), so a link can be pasted into a chat.
+- **Desktop (≥1024px):** list on the left (about 380px), the customer on the right. The selected id is in the URL (`/?tab=customers&c=42`), so a link can be pasted into a chat.
 - **Tablet and phone:** the list fills the screen. Tapping a row opens the customer full screen with a back arrow. The actions row becomes one "Actions" button that opens a sheet.
 
 ## Overview (Owner and Management)
@@ -120,7 +127,7 @@ Plain words for each action: `customer.view` "opened", `credits.grant` "granted"
 - Empty search: "No one matches “xyz”." plus a Clear button.
 - No customer selected (desktop): a quiet line, "Pick someone on the left."
 - Error: the same `Notice` pattern as the rest of the app, with Retry.
-- 403 (role removed while the page is open): toast "Your role changed. Ask an owner." and go Home.
+- 403 (role removed while the page is open): toast "Your role changed. Ask an owner." and go back to the start.
 
 ## Copy rules
 

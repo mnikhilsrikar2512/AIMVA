@@ -1,6 +1,7 @@
 # dependencies and builds
 node_modules/
 frontend/dist/
+frontend/dist-team/
 .venv/
 __pycache__/
 .pytest_cache/

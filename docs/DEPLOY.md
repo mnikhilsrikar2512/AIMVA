@@ -29,7 +29,7 @@ answer `{"ok": true, "database": true}`. Then set up an uptime check (UptimeRobo
 | --- | --- |
 | `app` | API and web app, `WEB_CONCURRENCY` worker processes. Migrations run on start under a lock. |
 | `db` | Postgres 16, data in the `pgdata` volume. |
-| `caddy` | HTTPS certificates (Let's Encrypt) for `DOMAIN` and for customers' verified custom domains. |
+| `caddy` | HTTPS certificates (Let's Encrypt) for `DOMAIN`, `TEAM_DOMAIN` and customers' verified custom domains. |
 | `backup` | Database dump + uploads tarball every day at `BACKUP_HOUR_UTC`, kept `BACKUP_KEEP_DAYS` days in `deploy/backups/`. |
 
 Several workers are safe: the agent scheduler runs on one at a time (database lease), rate limits live in the database,
@@ -81,6 +81,15 @@ Migrations run automatically. Before a big upgrade, take a backup first.
 
 - Set `SENTRY_DSN` (free tier at sentry.io, or self-hosted GlitchTip). No emails, cookies or IPs are sent.
 - Logs are JSON lines: `docker compose logs app`. Every response has an `X-Request-ID`, and server errors show the same id to the user, so you can find the exact log line and Sentry event.
+
+## The team app (internal console)
+
+Your staff use a separate app at `TEAM_DOMAIN` (set it in `deploy/.env` and point its DNS A record at this server). The same container serves both: the customer app on `DOMAIN`, the team app on `TEAM_DOMAIN`.
+
+- The console and admin APIs (`/api/console`, `/api/admin`) answer only on `TEAM_DOMAIN`. On `DOMAIN` they return 404.
+- Sign-ins are per address. A teammate signs in to the team app separately.
+- Who is on the team: owners are `ADMIN_EMAILS`. Owners add everyone else (Management, Development, Support, Accounts) on the team app's Team tab. A teammate creates their account in the customer app with that email, verifies it, then signs in to the team app.
+- Local development: `npm run dev:team` in `frontend/` opens the team app on http://localhost:5174. Without `TEAM_URL` the APIs answer on any address.
 
 ## Custom domains for customers' sites
 

@@ -1,6 +1,6 @@
 import {
-  AudioLines, BarChart3, Compass, Gauge, Globe, Image, LayoutDashboard, Linkedin, MessageCircle, Megaphone,
-  Palette, Search, Server, Settings, ShieldCheck, Users, Video, Facebook,
+  AudioLines, BarChart3, Compass, Globe, Image, LayoutDashboard, Linkedin, MessageCircle, Megaphone,
+  Palette, Search, Server, Settings, Users, Video, Facebook,
 } from "lucide-react";
 
 // Single source of truth for the app's modules. The rail follows the journey (make → reach → see);
@@ -31,20 +31,18 @@ export const NAV = [
   ]},
   { group: "Account", items: [
     { to: "/app/settings", label: "Settings", icon: Settings, desc: "Accounts, brand, team", keywords: "integrations connect" },
-    { to: "/app/console", label: "Team console", icon: ShieldCheck, staff: true, desc: "Customers, support actions and the team's log", keywords: "admin support customers staff" },
-    { to: "/app/owner", label: "Quality and usage", icon: Gauge, quality: true },  // Owner, Management, Development
   ]},
 ];
 
-// AIMVA team roles (backend app/staff.py) that see the quality and usage numbers.
+// AIMVA team roles (backend app/staff.py) that see the quality and usage numbers (team app only).
 export const QUALITY_ROLES = ["owner", "manager", "developer"];
 export const canSeeQuality = (user) => QUALITY_ROLES.includes(user?.staff_role);
 
 /** The items a person may see: team-only and client-view filters applied. */
 export function visibleNav(user) {
   const isClient = user?.workspace?.role === "client";
-  const allowed = (it) => (!it.owner || user?.is_admin) && (!it.staff || user?.staff_role) && (!it.quality || canSeeQuality(user));
-  return NAV.map((g) => ({ ...g, items: g.items.filter((it) => allowed(it) && (!isClient || it.client || it.staff || it.quality)) }))
+  // The AIMVA team's pages (console, quality and usage) live in the separate team app (src/team, TEAM_URL).
+  return NAV.map((g) => ({ ...g, items: g.items.filter((it) => (!it.owner || user?.is_admin) && (!isClient || it.client)) }))
     .filter((g) => g.items.length);
 }
 

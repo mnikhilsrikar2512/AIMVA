@@ -35,6 +35,11 @@ def app_host() -> str:
     return (urlsplit(settings.public_url).hostname or "localhost").lower()
 
 
+def team_host() -> str:
+    """The AIMVA team app's address (TEAM_URL), or "" when it isn't set."""
+    return (urlsplit(settings.team_url).hostname or "").lower() if settings.team_url else ""
+
+
 NOT_SET_UP = ("Custom domains aren't switched on yet: this AIMVA server doesn't have its public web address set. "
               "Ask your AIMVA admin to finish server setup, then come back and check again.")
 
@@ -191,7 +196,7 @@ class CustomDomainMiddleware:
             return await self.app(scope, receive, send)
         raw = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1").lower()
         host = raw.rsplit(":", 1)[0] if raw.count(":") == 1 else raw
-        if not host or host == app_host() or host in _LOCAL or not DOMAIN_RE.match(host):
+        if not host or host == app_host() or host == team_host() or host in _LOCAL or not DOMAIN_RE.match(host):
             return await self.app(scope, receive, send)
         from starlette.concurrency import run_in_threadpool
         slug = await run_in_threadpool(_site_slug, host)

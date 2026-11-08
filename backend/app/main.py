@@ -14,6 +14,7 @@ from .config import BASE_DIR, settings
 from .db import check_database, migrate
 from .security import current_user
 from .domains import CustomDomainMiddleware, router as domains_router
+from .team_host import TEAM_DIST, TeamHostMiddleware, is_team_host
 from .observability import RequestContextMiddleware, request_id_var, setup_logging, setup_sentry
 from .routers import agents, analytics, auth, brand, campaigns, command, templates, providers, references, content, events, feedback, integrations, leads, onboarding, sites, voice, whatsapp
 
@@ -29,9 +30,10 @@ migrate()
 # The interactive API docs are handy in development; on a public server they only advertise the attack surface.
 _docs = {} if not settings.is_production else {"docs_url": None, "redoc_url": None, "openapi_url": None}
 app = FastAPI(title="AIMVA API", version="1.0.0", **_docs)
-app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url], allow_credentials=True,
+app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url] + ([settings.team_url] if settings.team_url else []), allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"], expose_headers=["X-Request-ID"])
 app.add_middleware(CustomDomainMiddleware)
+app.add_middleware(TeamHostMiddleware)  # outermost of the two: team-only APIs never reach the customer address
 app.add_middleware(RequestContextMiddleware)  # added last = runs first, so every response gets its id and headers
 
 for r in (auth, onboarding, events, brand, providers, references, integrations, content, sites, feedback, templates, leads, campaigns, command, whatsapp, voice, analytics, agents):
@@ -122,13 +124,17 @@ async def unhandled(request: Request, exc: Exception):
 
 # Serve the built React app (frontend/dist) in production; in dev Vite serves it on :5173.
 DIST = BASE_DIR.parent / "frontend" / "dist"
+if TEAM_DIST.exists():  # the team app's own files (built with assetsDir "team-assets", see frontend/vite.team.config.js)
+    app.mount("/team-assets", StaticFiles(directory=TEAM_DIST / "team-assets"), name="team-assets")
 if DIST.exists():
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 
     @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
-    def spa(path: str):
+    def spa(path: str, request: Request):
         if path.startswith(("api/", "s/")):
             return JSONResponse({"detail": "Not found."}, status_code=404)
-        f = (DIST / path).resolve()
-        ok = path and f.is_file() and DIST.resolve() in f.parents
-        return FileResponse(f if ok else DIST / "index.html")
+        # The team address serves the team app (frontend/dist-team), everything else the customer app.
+        root = TEAM_DIST if is_team_host(request.headers.get("host", "")) and TEAM_DIST.exists() else DIST
+        f = (root / path).resolve()
+        ok = path and f.is_file() and root.resolve() in f.parents
+        return FileResponse(f if ok else root / "index.html")

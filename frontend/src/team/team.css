@@ -1,0 +1,3 @@
+/* The team app builds from frontend/team, so tell Tailwind to scan the shared components in src/ too. */
+@import "../index.css";
+@source "../";

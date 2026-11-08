@@ -62,6 +62,10 @@ class Settings:
         "ALLOW_PRIVATE_PROVIDERS", "true" if "localhost" in _env("PUBLIC_URL", "http://localhost:8000") else "false"
     ).lower() == "true"
     frontend_url = _env("FRONTEND_URL", "http://localhost:5173")
+    # The AIMVA team app (internal console) on its own address, e.g. https://team.aimva.in. When set, the console
+    # and admin APIs answer only there, and the customer address serves no team pages. Empty = development:
+    # the team app runs on its own Vite port and the APIs answer on any host.
+    team_url = _env("TEAM_URL").rstrip("/")
     cookie_secure = _env("COOKIE_SECURE", "false").lower() == "true"
     session_days = int(_env("SESSION_DAYS", "7"))
     # Owners who can see platform-wide quality and usage metrics (comma-separated emails).
