@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
+from ..judge import judge
 from ..models import Campaign, CampaignStat, Decision, Lead, Product, Site, User, VoiceAgent, utcnow
 from ..security import current_user, rate_limit
 from .campaigns import CampaignPatch, campaign_out, record_stat, update_campaign
@@ -238,6 +239,7 @@ def compute(db: Session, user: User, days: int) -> dict:
     names = {p.id: p.name for p in products}
     for x in camp.values():
         x["target_cpl"] = target_for(x)
+        x["target_own"] = bool(next((p.target_cpl for p in products if p.id == x["product_id"]), None))
         x["health"] = _health(x)
         x["product_name"] = names.get(x["product_id"])
 
@@ -382,30 +384,35 @@ def recommendations(db: Session, user: User, ctx: dict) -> list:
         t, spend, leads, clicks = c["target_cpl"], c["period_spend"], c["leads"], c["period_clicks"]
         weekly = money(spend / days * 7)
         found = []  # (rec, note text)
+        # Pause, fix and scale only when luck alone is unlikely to explain the numbers (app/judge.py).
+        j = judge(spend, leads, clicks, t)
+        verdict = j["verdict"]
+        sure_txt = (" Almost certainly not just a slow or lucky stretch." if (j["sure"] or 0) >= 0.99 else
+                    f" About {round((j['sure'] or 0) * 100)}% sure this isn't just a slow or lucky stretch.") if verdict and j["sure"] and c["target_own"] else ""  # only calibrated against a real target
         if c["platform"] == "other" and not clicks and not leads and spend > 0:
             found.append((rec(f"track:{cid}", "medium", f"Track the leads from “{name}”",
                               f"{money(spend)} spent and no leads linked to it yet. Put its tracking link or a QR code in the ad, "
                               "and set the lead's campaign when people say how they heard of you.",
                               {"type": "ack", "label": "Got it"}, campaign_id=cid, product_id=pid, group="tidy"), None))
-        elif not leads and spend > 0 and (clicks >= 30 or (t and spend >= 3 * t)):
+        elif verdict == "pause":
             found.append((rec(f"pause:{cid}", "high", f"Pause “{name}”: {money(spend)} spent, no leads",
-                              f"{clicks} clicks and {money(spend)} in {days} days without a single lead.",
+                              f"{clicks} clicks and {money(spend)} in {days} days without a single lead.{sure_txt}",
                               {"type": "pause_campaign", "label": "Pause campaign"}, impact=f"Save about {weekly}/week",
                               campaign_id=cid, product_id=pid), None))
-        elif leads and t and c["cpl"] > 1.5 * t and spend >= 2 * t:
+        elif verdict == "fix":
             mv = moves.pop(cid, None)
             alt = {k: v for k, v in mv.items() if k not in ("gain", "best")} if mv else None
             found.append((rec(f"fix:{cid}", "high", f"“{name}” costs {money(c['cpl'])} per lead",
                               f"That's {round(c['cpl'] / t, 1)}× the {money(t)} target."
-                              + (f" “{mv['best']['name']}” gets them for {money(mv['best']['cpl'])}." if mv else ""),
+                              + (f" “{mv['best']['name']}” gets them for {money(mv['best']['cpl'])}." if mv else "") + sure_txt,
                               {"type": "pause_campaign", "label": "Pause campaign"}, alt=alt,
                               impact=(f"≈ +{mv['gain']} leads/week by moving budget" if mv else f"Save about {weekly}/week"),
                               campaign_id=cid, product_id=pid), None))
-        elif leads >= 3 and t and c["cpl"] <= 0.7 * t and c["daily_budget"] > 0 and pid not in over_pace:
+        elif verdict == "scale" and c["daily_budget"] > 0 and pid not in over_pace:
             new = round(c["daily_budget"] * 1.2)
             extra = (new - c["daily_budget"]) * 7 / c["cpl"]
             found.append((rec(f"scale:{cid}", "medium", f"Scale “{name}”: your cheapest leads",
-                              f"{money(c['cpl'])} per lead vs a {money(t)} target. Raise the daily budget {money(c['daily_budget'])} → {money(new)}.",
+                              f"{money(c['cpl'])} per lead vs a {money(t)} target. Raise the daily budget {money(c['daily_budget'])} → {money(new)}.{sure_txt}",
                               {"type": "scale_budget", "label": f"Raise to {money(new)}/day", "daily_budget": new},
                               impact=f"≈ +{max(1, round(extra))} leads/week", campaign_id=cid, product_id=pid, group="grow"), None))
         if c["period_impressions"] >= 2000 and c["ctr"] is not None and c["ctr"] < 0.8:
@@ -448,6 +455,19 @@ def recommendations(db: Session, user: User, ctx: dict) -> list:
             out.append(rec(f"roas:{p['id']}", "high", f"“{p['name']}” is losing money on ads",
                            f"{money(p['revenue'])} won from {money(p['spend'])} spent (return {p['roas']}×).",
                            {"type": "scroll", "label": "Review its campaigns", "to": f"#product-{p['id']}"}, product_id=p["id"]))
+        if not p["target_cpl"] and any(c["status"] == "active" and c["period_spend"] > 0 for c in p["campaigns"]):
+            # Without its own target a campaign is only compared with the account's other campaigns. On the bench
+            # (scripts/suggestion_bench.py) that drops right answers from about 86% to 64%, so this is worth asking.
+            mine = [l for l in ctx["leads"] if l.product_id == p["id"]]
+            won = sum(l.stage == "won" for l in mine)
+            even = round(p["price"] * won / len(mine)) if p["price"] and won and len(mine) >= 10 else None
+            out.append(rec(f"target:{p['id']}", "medium", f"Set what a lead for “{p['name']}” is worth to you",
+                           (f"{won} of your last {len(mine)} leads for it bought, at {money(p['price'])}, so a lead is worth about "
+                            f"{money(even)} before costs. " if even else "")
+                           + "With a target, AIMVA can tell a campaign that's really too expensive from one having a slow week.",
+                           ({"type": "set_target", "label": f"Use {money(even)} a lead", "product_id": p["id"], "target_cpl": even}
+                            if even else {"type": "scroll", "label": "Set a target", "to": f"#product-{p['id']}"}),
+                           impact="Sharper suggestions", product_id=p["id"], group="tidy"))
         if not p["campaigns"]:
             out.append(rec(f"advertise:{p['id']}", "medium", f"Start advertising “{p['name']}”", "No campaign is selling it yet.",
                            {"type": "open", "label": "Create a campaign", "to": "/app/ads/meta"}, product_id=p["id"], group="grow"))
@@ -491,8 +511,11 @@ def summary(ctx: dict, recs: list) -> str:
         parts[-1] += f" ({'+' if k['leads_change'] >= 0 else ''}{k['leads_change']}% vs the period before)"
     if k["spend"]:
         parts.append(f"spent {money(k['spend'])}" + (f" at {money(k['cpl'])} a lead" if k["cpl"] else ""))
-    best = min((c for c in ctx["campaigns"].values() if c["cpl"]), key=lambda c: c["cpl"], default=None)
-    if best:
+    # "Cheapest" only means something next to another campaign, and never for one the top advice says to fix.
+    flagged = {r["campaign_id"] for r in recs if r["key"].split(":")[0] in ("pause", "fix")}
+    priced = [c for c in ctx["campaigns"].values() if c["cpl"]]
+    best = min(priced, key=lambda c: c["cpl"]) if len(priced) >= 2 else None
+    if best and best["id"] not in flagged:
         parts.append(f"“{best['name']}” brings the cheapest leads")
     text = ", ".join(parts) + "."
     if recs:
@@ -571,6 +594,11 @@ def execute(db: Session, user: User, r: dict) -> str:
             update_campaign(c.id, CampaignPatch(daily_budget=round(c.daily_budget * ratio, 2)), user, db)
             changed += 1
         return f"Trimmed {changed} daily budget{'s' if changed != 1 else ''} for “{p.name}” by {round((1 - ratio) * 100)}%."
+    if t == "set_target":
+        p = _product(db, user, a["product_id"])
+        p.target_cpl = max(1.0, min(1e7, float(a["target_cpl"])))
+        db.commit()
+        return f"“{p.name}” now aims for {money(p.target_cpl)} a lead. Change it any time under the product."
     if t == "call_hot_leads":
         from .voice import place_phone_call
         agent = db.scalar(select(VoiceAgent).where(VoiceAgent.user_id == user.id).order_by(VoiceAgent.id))

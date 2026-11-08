@@ -177,7 +177,7 @@ def test_custom_messages_are_used(auth_client, client):
 def leaky(c):
     camp = c.post("/api/campaigns", json={"platform": "linkedin", "name": "Leaky", "daily_budget": 500}).json()
     c.patch(f"/api/campaigns/{camp['id']}", json={"status": "active"})
-    c.post(f"/api/campaigns/{camp['id']}/results", json={"spend": 4000, "impressions": 9000, "clicks": 60})
+    c.post(f"/api/campaigns/{camp['id']}/results", json={"spend": 6000, "impressions": 14000, "clicks": 120})
     return camp
 
 
