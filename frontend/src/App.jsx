@@ -9,6 +9,8 @@ const Landing = lazy(() => import("./pages/Landing"));
 const Tour = lazy(() => import("./pages/marketing/Tour"));
 const UseCasesIndex = lazy(() => import("./pages/marketing/UseCases").then((m) => ({ default: m.UseCasesIndex })));
 const UseCasePage = lazy(() => import("./pages/marketing/UseCases").then((m) => ({ default: m.UseCasePage })));
+const legal = (name) => lazy(() => import("./pages/marketing/Legal").then((m) => ({ default: m[name] })));
+const PrivacyPage = legal("PrivacyPage"), TermsPage = legal("TermsPage"), RefundPage = legal("RefundPage"), ContactPage = legal("ContactPage");
 const NotFound = lazy(() => import("./pages/marketing/NotFound"));
 const auth = (name) => lazy(() => import("./pages/Auth").then((m) => ({ default: m[name] })));
 const LoginPage = auth("LoginPage"), SignupPage = auth("SignupPage"), VerifyPage = auth("VerifyPage"), ForgotPage = auth("ForgotPage");
@@ -74,6 +76,10 @@ export default function App() {
       <Route path="/tour" element={page(<Tour />)} />
       <Route path="/use-cases" element={page(<UseCasesIndex />)} />
       <Route path="/use-cases/:slug" element={page(<UseCasePage />)} />
+      <Route path="/privacy" element={page(<PrivacyPage />)} />
+      <Route path="/terms" element={page(<TermsPage />)} />
+      <Route path="/refund" element={page(<RefundPage />)} />
+      <Route path="/contact" element={page(<ContactPage />)} />
       <Route path="/login" element={<GuestOnly>{page(<LoginPage />)}</GuestOnly>} />
       <Route path="/signup" element={<GuestOnly>{page(<SignupPage />)}</GuestOnly>} />
       <Route path="/verify" element={page(<VerifyPage />)} />
