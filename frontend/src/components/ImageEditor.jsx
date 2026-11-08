@@ -12,8 +12,6 @@ const SIZES = [["S", 0.06], ["M", 0.12], ["L", 0.2], ["XL", 0.32]];
 const REMOVE_RE = /\b(remove|delete|erase|get rid of|take (out|away)|eliminate|hide|lose|clear (away|out))\b/i;
 const ADD_RE = /\b(add|put|place|replace|swap|instead|insert|with a|with an|turn (it )?into)\b/i;
 const guess = (t) => (REMOVE_RE.test(t) && !ADD_RE.test(t) ? "remove" : "change");
-const WHOLE_IDEAS = ["Make it golden hour", "Make it night time", "Brighter and more vibrant"];
-const TRY_STYLES = ["portrait", "skeleton", "anime", "cinematic", "watercolor"];
 const PLACEMENTS = [["1:1", "Feed square"], ["4:5", "Feed portrait"], ["9:16", "Stories & Reels"], ["16:9", "YouTube & display"], ["1.91:1", "Link ads & Google"]];
 const SLASH = /(^|\s)\/([\w-]*)$/; // "/ske" at the end of what's typed opens the style menu
 const hasText = (p) => p.text.trim().length >= 2;
@@ -101,7 +99,6 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
     run(async () => saved(await post(`/api/content/image/${source.id}/edit`, body)), style && !queued.length ? `${style.name} style applied` : "Done. Saved as a new version");
   };
   const tool = (path, body, msg) => run(async () => saved(await post(`/api/content/image/${source.id}/${path}`, body)), msg);
-  const ideas = styles.length ? TRY_STYLES.map((id) => styles.find((s) => s.id === id)).filter(Boolean) : [];
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose?.(); }}>
@@ -115,7 +112,7 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
             <DialogTitle className="truncate text-sm font-semibold text-strong">Edit image</DialogTitle>
             {versions.length > 1 && <span className="rounded-md bg-ink/[0.05] px-1.5 py-0.5 text-xs text-muted">Version {at + 1} of {versions.length}</span>}
           </div>
-          <div className="grid flex-1 place-items-center overflow-auto bg-[repeating-conic-gradient(var(--color-surface-2)_0_25%,transparent_0_50%)] bg-[length:20px_20px] p-4 lg:min-h-0">
+          <div className="grid flex-1 place-items-center overflow-auto p-4 lg:min-h-0">
           <div ref={box} className={cx("relative w-fit select-none", !busy && "cursor-crosshair")} onClick={place}>
             <img src={shownUrl} alt={shown.prompt || "Image"} className="block max-h-[60dvh] w-auto max-w-full rounded-lg shadow-[0_8px_30px_-12px_rgb(40_20_10/0.35)] lg:max-h-[calc(100dvh-17rem)]" draggable={false} />
             {writing && layers.map((l) => (
@@ -155,15 +152,6 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
 
           <Composer {...{ composer, text, setText, style, setStyle, styles, pins: queued, removePin: remove, ready, busy, send }} />
 
-          {!pins.length && !style && !text.trim() && (
-            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-xs text-muted">Try</span>
-              {ideas.map((s) => (
-                <Chip key={s.id} title={s.hint} onClick={() => { setStyle(s); composer.current?.focus(); }}>/{s.id}</Chip>
-              ))}
-              {WHOLE_IDEAS.map((t) => <Chip key={t} onClick={() => { setText(t); composer.current?.focus(); }}>{t}</Chip>)}
-            </div>
-          )}
           </div>
         </div>
 

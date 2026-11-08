@@ -182,6 +182,8 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
   const { data: writers } = useApi(isClient ? null : "/api/providers/options?kind=text", []);
   const { data: docs, setData: setDocs } = useApi("/api/references?kind=document", []);
   const [tab, setTab] = useState("content");
+  // New pages start with the five facts that matter; every other option waits behind "Add more details".
+  const [more, setMore] = useState(!coach);
   const [b, setB] = useState(() => ({
     ...BLANK, ...initial, features: asLines(initial.features), chips: asLines(initial.chips), amenities: asLines(initial.amenities),
     pricing: (initial.pricing || []).map((p) => ({ ...p, features: asLines(p.features) })),
@@ -196,6 +198,7 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
 
   const goTo = (m) => {
     if (ADD_SECTION[m.field]) setB((x) => ({ ...x, sections: [...new Set([...x.sections, ADD_SECTION[m.field]])] }));
+    setMore(true);
     setTab(m.tab);
     setTimeout(() => document.getElementById(`brief-${m.field}`)?.focus(), 60);
   };
@@ -244,8 +247,9 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
 
   return (
     <form onSubmit={submit} className="space-y-5">
-      {coach && <TemplateStrip module="website" onApply={applyTemplate} title="Start from a page template" />}
+      {coach && more && <TemplateStrip module="website" onApply={applyTemplate} title="Start from a page template" />}
       {coach && <ImportBar onImported={applyImport} />}
+      {more ? (<>
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "content", label: "Content" }, { value: "design", label: "Design" },
         { value: "project", label: "Project details" }, { value: "sections", label: "Sections" }, { value: "form", label: "Form & SEO" },
         { value: "ai", label: "AI writer" }]} />
@@ -398,12 +402,25 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
         </div>
       )}
 
-      {coach && <BriefCoach review={review} brief={b} onAnswer={val} onGoTo={goTo} onApplyPlaybook={applyPlaybook} />}
+      </>) : (
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Business name"><input className="input" value={b.business} onChange={set("business")} required minLength={2} maxLength={120} placeholder="Smile Dental" /></Field>
+            <Field label="What you do"><input className="input" value={b.industry} onChange={set("industry")} maxLength={80} placeholder="Dental clinic, real estate, gym…" /></Field>
+            <Field label="Offer" className="sm:col-span-2"><input id="brief-offer" className="input" value={b.offer} onChange={set("offer")} maxLength={160} placeholder="Teeth whitening ₹4,999 this month" /></Field>
+            <Field label="Phone or WhatsApp"><input id="brief-phone" className="input" type="tel" inputMode="tel" autoComplete="tel" value={b.phone} onChange={(e) => setB((x) => ({ ...x, phone: e.target.value, whatsapp: x.whatsapp || e.target.value }))} maxLength={30} placeholder="+91…" /></Field>
+            <Field label="Area or address"><input id="brief-address" className="input" value={b.address} onChange={set("address")} maxLength={200} placeholder="Kukatpally, Hyderabad" /></Field>
+          </div>
+          <button type="button" className="text-sm font-medium text-brand hover:underline" onClick={() => setMore(true)}>Add more details (design, sections, form)</button>
+        </div>
+      )}
+
+      {coach && more && <BriefCoach review={review} brief={b} onAnswer={val} onGoTo={goTo} onApplyPlaybook={applyPlaybook} />}
 
       <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
-        <p className="hidden text-xs text-faint sm:block">Everything except the business name is optional.</p>
+        <p className="hidden text-xs text-faint sm:block">{more ? "Everything except the business name is optional." : "You can change any word or photo on the page after it's made."}</p>
         <div className="ml-auto flex flex-wrap justify-end gap-2">
-          <SaveTemplateButton module="website" getPayload={templatePayload} label="Save layout as template" />
+          {more && <SaveTemplateButton module="website" getPayload={templatePayload} label="Save layout as template" />}
           {b.business.trim().length >= 2 && <DirectionsButton getBrief={payload} onPick={(d) => { setB((x) => ({ ...x, ...d })); toast.success("Design picked. Generate when you're ready."); }} />}
           <Button type="submit" busy={busy}>{submitLabel}</Button>
         </div>

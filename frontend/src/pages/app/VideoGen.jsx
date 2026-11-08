@@ -10,6 +10,7 @@ import { LoadError } from "../../components/LoadError";
 import { del, get, post } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
 import BrandControls from "../../components/BrandControls";
+import { useAuth } from "../../lib/auth";
 import { Advanced, LibraryImagePicker, ProviderPicker, SeedField, STYLES } from "../../components/GenControls";
 import { EnhanceButton, Rate } from "../../components/Quality";
 
@@ -89,6 +90,7 @@ export default function VideoGen() {
   const EMPTY = { prompt: "", aspect_ratio: "16:9", duration: "", resolution: "", negative_prompt: "", seed: null,
                   camera: "", style: "", start: "", generate_audio: false };
   const [form, setForm] = useState(EMPTY);
+  const admin = !!useAuth().user?.is_admin; // the platform owner sees engine and fine-tuning options; customers get the essentials
   const [tab, setTab] = useState("create");
   const [currentIds, setCurrentIds] = useState([]);  // renders started in this session, shown in Create
   const [q, setQ] = useState("");
@@ -174,7 +176,7 @@ export default function VideoGen() {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
         <Card className="h-fit">
           <form onSubmit={submit} className="space-y-4">
-            <TemplateStrip module="video" onApply={(t) => { tpl.apply(t); setForm((f) => ({ ...f, prompt: t.payload.prompt, aspect_ratio: t.payload.aspect_ratio || f.aspect_ratio, camera: t.payload.camera || "", style: t.payload.style || "", negative_prompt: t.payload.negative_prompt || "" })); }} />
+            {admin && <TemplateStrip module="video" onApply={(t) => { tpl.apply(t); setForm((f) => ({ ...f, prompt: t.payload.prompt, aspect_ratio: t.payload.aspect_ratio || f.aspect_ratio, camera: t.payload.camera || "", style: t.payload.style || "", negative_prompt: t.payload.negative_prompt || "" })); }} />}
             <Field label="Prompt">
               <textarea className="input" rows={5} value={form.prompt} onChange={set("prompt")} required minLength={3} maxLength={2000}
                 placeholder="A slow cinematic drone shot over a beachfront villa at sunset, waves and soft music…" />
@@ -200,7 +202,7 @@ export default function VideoGen() {
               </Field>
             </div>
 
-            <Advanced>
+            {admin && <Advanced>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Camera">
                   <select className="input" value={form.camera} onChange={set("camera")}>{CAMERAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
@@ -223,7 +225,7 @@ export default function VideoGen() {
                   This engine renders its own sound
                 </label>
               )}
-            </Advanced>
+            </Advanced>}
 
             <LibraryImagePicker label="Start from an image (optional)" value={form.start} onChange={(v) => setForm((f) => ({ ...f, start: v }))}
               hint="Animates a product photo or one of your generated images." />
@@ -247,7 +249,7 @@ export default function VideoGen() {
 
             <BrandControls brand={brandKit} value={brandOpts} onChange={setBrandOpts} mode="video-plain" />
             <Button type="submit" busy={busy} disabled={!anyAvailable} className="h-11 w-full"><Clapperboard className="size-4" /> Render video</Button>
-            {form.prompt.trim().length >= 3 && <div className="flex justify-center"><SaveTemplateButton module="video" getPayload={tplPayload} /></div>}
+            {admin && form.prompt.trim().length >= 3 && <div className="flex justify-center"><SaveTemplateButton module="video" getPayload={tplPayload} /></div>}
           </form>
         </Card>
         <div>

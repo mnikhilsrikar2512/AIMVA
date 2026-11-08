@@ -17,7 +17,8 @@ export function ProviderPicker({ kind, value, onChange, models: forcedModels, mo
   const { user } = useAuth();
   const { data: options } = useApi(`/api/providers/options?kind=${kind}`, []);
   // Customers pick from AIMVA's engines by plain names; only the platform owner sees model ids and extra providers.
-  if (!user?.is_admin) return <EnginePicker options={options} value={value} onChange={onChange} />;
+  // Customers never pick an engine: AIMVA uses the best one it has. Only the platform owner sees the choice.
+  if (!user?.is_admin) return null;
   const current = options.find((o) => o.ref === value.provider) || options.find((o) => o.available) || options[0];
   const suggestions = forcedModels || current?.models || [];
   const pick = (ref) => {
@@ -45,31 +46,6 @@ export function ProviderPicker({ kind, value, onChange, models: forcedModels, mo
       <Link to="/app/settings?tab=providers" className="inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
         <Plus className="size-3" /> Add another provider or API key
       </Link>
-    </div>
-  );
-}
-
-function EnginePicker({ options, value, onChange }) {
-  const usable = options.filter((o) => o.available);
-  const current = usable.find((o) => o.ref === value.provider) || usable[0];
-  if (!current) return <p className="text-sm text-muted">This isn't switched on for your account yet.</p>;
-  const choices = current.choices || [];
-  return (
-    <div className="space-y-3">
-      {usable.length > 1 && (
-        <Field label="Engine">
-          <select className="input" value={current.ref} onChange={(e) => { const o = usable.find((x) => x.ref === e.target.value); onChange({ provider: o.ref, model: o.model }); }}>
-            {usable.map((o) => <option key={o.ref} value={o.ref}>{o.name}</option>)}
-          </select>
-        </Field>
-      )}
-      {choices.length > 1 && (
-        <Field label="Style of model">
-          <select className="input" value={value.model || current.model} onChange={(e) => onChange({ provider: current.ref, model: e.target.value })}>
-            {choices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-          </select>
-        </Field>
-      )}
     </div>
   );
 }

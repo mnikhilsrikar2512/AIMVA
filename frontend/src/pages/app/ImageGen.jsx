@@ -8,6 +8,7 @@ import { LoadError } from "../../components/LoadError";
 import { api, del, post } from "../../lib/api";
 import { useAction, useApi } from "../../lib/hooks";
 import BrandControls from "../../components/BrandControls";
+import { useAuth } from "../../lib/auth";
 import { Advanced, LibraryImagePicker, ProviderPicker, SeedField, STYLES } from "../../components/GenControls";
 import AdSetDialog from "../../components/AdSet";
 import ImageEditor from "../../components/ImageEditor";
@@ -21,6 +22,7 @@ export default function ImageGen() {
   const { data: options } = useApi("/api/providers/options?kind=image", []);
   const EMPTY = { prompt: "", size: "1:1", width: 1024, height: 1024, count: 1, negative_prompt: "", seed: null, style: "", reference: "", keep_product: false };
   const [form, setForm] = useState(EMPTY);
+  const admin = !!useAuth().user?.is_admin; // the platform owner sees engine and fine-tuning options; customers get the essentials
   const [tab, setTab] = useState("create");
   const [current, setCurrent] = useState([]);  // only the latest generation is shown in Create
   const [q, setQ] = useState("");
@@ -57,7 +59,7 @@ export default function ImageGen() {
     const out = await run(() => post("/api/content/image", {
       prompt: form.prompt, provider: prov.provider, model: prov.model || option?.model || "",
       size: custom ? "1:1" : form.size, width: custom ? Number(form.width) : null, height: custom ? Number(form.height) : null,
-      count: Math.min(Number(form.count), maxCount), negative_prompt: form.negative_prompt, seed: form.seed,
+      count: admin ? Math.min(Number(form.count), maxCount) : Math.min(4, maxCount), negative_prompt: form.negative_prompt, seed: form.seed,
       style: form.style || null, reference: form.reference, keep_product: !!form.reference && !free && form.keep_product,
       ...brandOpts, use_brand: !!brandKit?.is_set_up && brandOpts.use_brand,
     }));
@@ -108,7 +110,7 @@ export default function ImageGen() {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
         <Card className="h-fit lg:sticky lg:top-6">
           <form onSubmit={generate} className="space-y-4">
-            <TemplateStrip module="image" onApply={(t) => { tpl.apply(t); setForm((f) => ({ ...f, prompt: t.payload.prompt, style: t.payload.style || "", size: t.payload.size || f.size, negative_prompt: t.payload.negative_prompt || "" })); }} />
+            {admin && <TemplateStrip module="image" onApply={(t) => { tpl.apply(t); setForm((f) => ({ ...f, prompt: t.payload.prompt, style: t.payload.style || "", size: t.payload.size || f.size, negative_prompt: t.payload.negative_prompt || "" })); }} />}
             <Field label="Prompt">
               <textarea className="input" rows={5} value={form.prompt} onChange={set("prompt")} required minLength={3} maxLength={2000}
                 placeholder="Describe the image you want…" />
@@ -124,11 +126,11 @@ export default function ImageGen() {
                   {SIZE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </Field>
-              <Field label="Images" hint={maxCount === 1 ? "This provider makes 1 at a time" : undefined}>
+              {admin && <Field label="Images" hint={maxCount === 1 ? "This provider makes 1 at a time" : undefined}>
                 <select className="input" value={Math.min(form.count, maxCount)} onChange={set("count")} disabled={maxCount === 1}>
                   {[1, 2, 3, 4].slice(0, maxCount).map((n) => <option key={n}>{n}</option>)}
                 </select>
-              </Field>
+              </Field>}
             </div>
             {form.size === "custom" && (
               <div className="grid grid-cols-2 gap-3">
@@ -136,26 +138,26 @@ export default function ImageGen() {
                 <Field label="Height (px)"><input className="input" type="number" min="256" max="2048" step="16" value={form.height} onChange={set("height")} /></Field>
               </div>
             )}
-            <Advanced>
+            <LibraryImagePicker label="Your photo (optional)" value={form.reference} onChange={(v) => setForm((f) => ({ ...f, reference: v }))}
+              hint={form.keep_product ? "Your product photo. It's cut out and placed in a new scene, unchanged." : "A product or shop photo to build the picture around."} />
+            {form.reference && (
+              <label className={cx("flex items-start gap-2 rounded-xl border border-ink/10 p-3 text-sm", free && "opacity-60")}>
+                <input type="checkbox" className="mt-0.5" disabled={free} checked={!free && form.keep_product}
+                  onChange={(e) => setForm((f) => ({ ...f, keep_product: e.target.checked }))} />
+                <span><b className="text-strong">Keep my product exactly</b>
+                  <span className="block text-xs text-muted">{free ? "Needs Studio images. The free engine redraws the product." : "AI paints only the scene around it, so labels and shape stay true."}</span></span>
+              </label>
+            )}
+            {admin && <Advanced>
               <Field label="Style">
                 <select className="input" value={form.style} onChange={set("style")}>{STYLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
               </Field>
               <Field label="Avoid (negative prompt)"><input className="input" value={form.negative_prompt} onChange={set("negative_prompt")} maxLength={1000} placeholder="text, watermark, blurry, extra fingers" /></Field>
               <SeedField value={form.seed} onChange={(v) => setForm((f) => ({ ...f, seed: v }))} />
-              <LibraryImagePicker label="Reference image" value={form.reference} onChange={(v) => setForm((f) => ({ ...f, reference: v }))}
-                hint={form.keep_product ? "Your product photo. It's cut out and placed in a new scene, unchanged." : "Guides the look and layout of the result."} />
-              {form.reference && (
-                <label className={cx("flex items-start gap-2 rounded-xl border border-ink/10 p-3 text-sm", free && "opacity-60")}>
-                  <input type="checkbox" className="mt-0.5" disabled={free} checked={!free && form.keep_product}
-                    onChange={(e) => setForm((f) => ({ ...f, keep_product: e.target.checked }))} />
-                  <span><b className="text-strong">Keep my product exactly</b>
-                    <span className="block text-xs text-muted">{free ? "Needs Studio images. The free engine redraws the product." : "AI paints only the scene around it, so labels and shape stay true."}</span></span>
-                </label>
-              )}
-            </Advanced>
+            </Advanced>}
             <BrandControls brand={brandKit} value={brandOpts} onChange={setBrandOpts} freeModel={free} />
-            <Button type="submit" busy={busy} className="h-11 w-full"><Wand2 className="size-4" /> Generate</Button>
-            {form.prompt.trim().length >= 3 && <div className="flex justify-center"><SaveTemplateButton module="image" getPayload={tplPayload} /></div>}
+            <Button type="submit" busy={busy} className="h-11 w-full"><Wand2 className="size-4" /> {admin ? "Generate" : "Create pictures"}</Button>
+            {admin && form.prompt.trim().length >= 3 && <div className="flex justify-center"><SaveTemplateButton module="image" getPayload={tplPayload} /></div>}
           </form>
         </Card>
 
