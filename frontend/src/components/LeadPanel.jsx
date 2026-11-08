@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Chip, Spinner, cx } from "./ui";
-import { get, patch, post } from "../lib/api";
+import { del, get, patch, post } from "../lib/api";
 import { parseServerDate, timeAgo } from "../lib/hooks";
 import { useLeadEvents } from "../lib/live";
 import { useIsClient } from "../lib/auth";
@@ -281,6 +281,7 @@ export default function LeadPanel({ leadId, onClose, onChanged, startReply = fal
                   <h2 className="truncate text-lg font-bold text-strong">{lead.name || lead.email || lead.phone}</h2>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
                     <Chip tone={SOURCE_TONE[lead.source] || "slate"}>{lead.source}</Chip>
+                    {lead.opted_out && <Chip tone="rose">Opted out</Chip>}
                     {lead.needs_reply ? <span className="font-semibold text-warm">{waitedText(lead.waiting_since)}</span> : <span>Added {timeAgo(lead.created_at)}</span>}
                     {isClient ? (lead.language_name && <span className="inline-flex items-center gap-1"><Languages className="size-3.5 text-faint" aria-hidden />{lead.language_name}</span>) : <label className="inline-flex items-center gap-1" title="The language replies are drafted in">
                       <Languages className="size-3.5 text-faint" aria-hidden />
@@ -316,13 +317,23 @@ export default function LeadPanel({ leadId, onClose, onChanged, startReply = fal
 
               {/* Quick actions (the agency's team only: a client's view is read-only) */}
               {!isClient && <>
+              {lead.opted_out && (
+                <div className="mt-4 rounded-xl bg-rose-500/10 p-3 text-xs text-ink">
+                  <p><span className="font-semibold">They asked not to be contacted.</span> AIMVA won't WhatsApp or call them, and their follow-ups are cancelled. If they reply START, messages resume by themselves.</p>
+                  <button className="mt-1.5 font-semibold text-muted underline hover:text-ink" disabled={busy === "optin"}
+                    onClick={() => window.confirm("Only resume if the customer asked you to contact them again. Resume messages and calls?")
+                      && act("optin", () => del(`/api/leads/${lead.id}/opt-out`), "Messages and calls resumed.")}>
+                    They asked to hear from us again
+                  </button>
+                </div>
+              )}
               <div className="mt-4 grid grid-cols-3 gap-2">
-                <Button variant="ghost" size="sm" className="h-10" disabled={!lead.phone} busy={busy === "call"}
+                <Button variant="ghost" size="sm" className="h-10" disabled={!lead.phone || lead.opted_out} busy={busy === "call"}
                   title={lead.phone ? "Have your AI voice agent call this lead (calls go out 9 am to 9 pm their time)" : "No phone number"}
                   onClick={() => act("call", () => post(`/api/leads/${lead.id}/call`, {}), (out) => out?.call_note || "AI agent is calling…")}>
                   <PhoneCall className="size-4" /> AI call
                 </Button>
-                <Button variant={composer === "whatsapp" ? "primary" : "ghost"} size="sm" className="h-10" disabled={!lead.phone}
+                <Button variant={composer === "whatsapp" ? "primary" : "ghost"} size="sm" className="h-10" disabled={!lead.phone || lead.opted_out}
                   onClick={() => (composer === "whatsapp" ? (setComposer(null), setDraft(null)) : openWhatsApp())}>
                   <MessageCircle className="size-4" /> WhatsApp
                 </Button>
@@ -332,6 +343,13 @@ export default function LeadPanel({ leadId, onClose, onChanged, startReply = fal
                 </Button>
               </div>
               {!lead.phone && <p className="mt-2 text-xs text-faint">Add a phone number to call or WhatsApp this lead.</p>}
+              {lead.phone && !lead.opted_out && (
+                <button className="mt-2 text-xs text-faint underline hover:text-ink" disabled={busy === "optout"}
+                  onClick={() => window.confirm("Stop all WhatsApp messages and calls to this person?")
+                    && act("optout", () => post(`/api/leads/${lead.id}/opt-out`, {}), "They won't be messaged or called again.")}>
+                  They asked not to be contacted
+                </button>
+              )}
               </>}
               <div className="mt-3"><FollowUps key={lead.id} leadId={lead.id} /></div>
 

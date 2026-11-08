@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from .. import call_hours, lead_reply, live
+from .. import call_hours, lead_reply, live, opt_out
 from ..db import SessionLocal, get_db
 from ..models import Lead, LeadEvent, User, WaMessage, utcnow
 from ..security import current_user
@@ -25,7 +25,9 @@ def lead_out(l: Lead) -> dict:
     return {"id": l.id, "name": l.name, "email": l.email, "phone": l.phone, "message": l.message,
             "source": l.source, "source_ref": l.source_ref, "score": l.score, "stage": l.stage,
             "value": l.value, "synced": l.synced or {}, "language": l.language or "",
-            "language_name": lead_reply.LANGUAGES.get(l.language or "", ""), "created_at": l.created_at.isoformat()}
+            "language_name": lead_reply.LANGUAGES.get(l.language or "", ""), "created_at": l.created_at.isoformat(),
+            "opted_out": l.opted_out_at is not None,
+            "opted_out_at": l.opted_out_at.isoformat() if l.opted_out_at else None}
 
 
 def _cell(v) -> str:
@@ -71,6 +73,7 @@ def create_lead(db: Session, user_id: int, bg: Optional[BackgroundTasks] = None,
         lead.email = email
         db.add(lead)
     lead_reply.remember_language(lead, " ".join(filter(None, [fields.get("message"), fields.get("name")])))
+    opt_out.mark_new_lead(db, lead)
     is_new = lead.id is None
     lead.score = score_lead(lead)
     db.flush()
@@ -346,6 +349,7 @@ def reply_draft(lead_id: int, body: DraftIn, user: User = Depends(current_user),
     lead = _own(db, user, lead_id)
     if not lead.phone:
         raise HTTPException(400, "Add a phone number to message this lead.")
+    opt_out.guard(db, user.id, lead.phone)
     return lead_reply.draft(db, user, lead, body.intent)
 
 
@@ -363,6 +367,7 @@ def reply(lead_id: int, body: ReplyIn, user: User = Depends(current_user), db: S
     lead = _own(db, user, lead_id)
     if not lead.phone:
         raise HTTPException(400, "Add a phone number to message this lead.")
+    opt_out.guard(db, user.id, lead.phone)  # also for "sent from my WhatsApp": the business shouldn't message them either
     language = lead_reply.language_of(db, lead)
     state = lead_reply.send_state(db, user, lead, language, body.intent)
     if body.own_app:
@@ -430,3 +435,29 @@ def call_lead(lead_id: int, body: CallLeadIn, user: User = Depends(current_user)
     return {**lead_view(db, lead), "call_scheduled_for": when.isoformat() if when else None,
             "call_note": f"Outside calling hours ({call_hours.window_text()}). AI call set for "
                          f"{call_hours.label(c.to_number, when)}." if when else ""}
+
+
+class OptOutIn(BaseModel):
+    note: str = Field("", max_length=300)
+
+
+@router.post("/{lead_id}/opt-out")
+def mark_opted_out(lead_id: int, body: OptOutIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """The customer asked the business not to contact them (on a call, in person...): stop all messages and calls."""
+    lead = _own(db, user, lead_id)
+    if not lead.phone:
+        raise HTTPException(400, "This lead has no phone number.")
+    opt_out.opt_out(db, user.id, lead.phone, "manual", body.note.strip())
+    db.refresh(lead)
+    return lead_view(db, lead)
+
+
+@router.delete("/{lead_id}/opt-out")
+def resume(lead_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Allow messages and calls again. Only when the customer asked for it (they can also reply START themselves)."""
+    lead = _own(db, user, lead_id)
+    if not opt_out.opt_in(db, user.id, lead.phone, "manual"):
+        lead.opted_out_at = None  # nothing recorded for the number (e.g. its phone was edited): just clear the flag
+        db.commit()
+    db.refresh(lead)
+    return lead_view(db, lead)

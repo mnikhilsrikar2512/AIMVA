@@ -246,6 +246,8 @@ def _dial(db: Session, c: Call) -> None:
 def place_phone_call(db: Session, user: User, agent: VoiceAgent, to: str, lead_id: Optional[int] = None) -> Call:
     """Phone `to` with this agent now, or, outside 9 am to 9 pm in the lead's time, save it as "scheduled"
     so the scheduler places it when their calling hours open (call_hours.py). Never dropped."""
+    from .. import opt_out
+    opt_out.guard(db, user.id, to)  # they replied STOP: no calls either
     _twilio(db, user.id)  # say "connect Twilio" now, not hours later
     if not call_hours.is_open(to):
         waiting = db.scalar(select(Call).where(Call.user_id == user.id, Call.status == "scheduled", Call.to_number == to))
@@ -271,13 +273,19 @@ def scheduled_for(c: Call):
 
 
 def place_due_calls(db: Session, at=None) -> int:
-    """Scheduler tick: place deferred calls whose lead's calling hours have opened. Stale ones are cancelled."""
+    """Scheduler tick: place deferred calls whose lead's calling hours have opened. Stale ones are cancelled, and so
+    are calls to anyone who replied STOP while the call was waiting."""
+    from .. import opt_out
     from ..models import Lead
     from .leads import add_event
     at = at or call_hours.now()
     placed = 0
     for c in list(db.scalars(select(Call).where(Call.status == "scheduled", Call.channel == "phone").order_by(Call.id))):
         if at - c.created_at > call_hours.STALE_AFTER:
+            c.status = "cancelled"
+            db.commit()
+            continue
+        if opt_out.is_out(db, c.user_id, c.to_number):
             c.status = "cancelled"
             db.commit()
             continue

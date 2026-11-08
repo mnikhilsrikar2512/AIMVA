@@ -35,12 +35,12 @@ def run(tmp_path, mode):
 
 def test_fresh_database_is_built_by_migrations(tmp_path):
     tables, has_col, version, users = run(tmp_path, "fresh")
-    assert int(tables) == 39 and has_col == "True" and version == "0011" and users == "0"  # 38 tables + alembic_version
+    assert int(tables) == 40 and has_col == "True" and version == "0012" and users == "0"  # 39 tables + alembic_version
 
 
 def test_database_from_before_migrations_is_upgraded_in_place(tmp_path):
     tables, has_col, version, users = run(tmp_path, "legacy")
-    assert int(tables) == 39 and has_col == "True" and version == "0011" and users == "1"  # existing data is kept
+    assert int(tables) == 40 and has_col == "True" and version == "0012" and users == "1"  # existing data is kept
 
 
 def test_models_and_migrations_agree():
