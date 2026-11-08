@@ -135,7 +135,7 @@ function TimelineItem({ item }) {
   );
 }
 
-export default function LeadPanel({ leadId, onClose, onChanged, startReply = false, ids = [], onNavigate }) {
+export default function LeadPanel({ leadId, onClose, onChanged, onDelete, startReply = false, ids = [], onNavigate }) {
   const [lead, setLead] = useState(null);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState("all");
@@ -435,6 +435,7 @@ export default function LeadPanel({ leadId, onClose, onChanged, startReply = fal
                     if (v !== lead.value) act("value", () => patch(`/api/leads/${lead.id}`, { value: v }), "Value updated");
                   }} />
               </label>
+              {onDelete && <button type="button" onClick={() => onDelete(lead)} className="mt-3 block text-xs text-muted underline-offset-2 hover:text-rose-600 hover:underline">Delete this lead</button>}
               </>}
             </div>
 
