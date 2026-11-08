@@ -4,6 +4,7 @@ import { ArrowRight, Check } from "lucide-react";
 import { FinalCta, Heading, MarketingLayout, signupHref, useSeo } from "../../components/marketing/Site";
 import { USE_CASES, useCase } from "../../components/marketing/useCases";
 import { useAuth } from "../../lib/auth";
+import SampleGallery from "../../components/marketing/SampleGallery";
 
 export function UseCasesIndex() {
   useSeo("Use cases", "How clinics, builders, coaches, restaurants, solo founders and agencies use AIMVA to get leads and reply to every one of them.");
@@ -19,11 +20,18 @@ export function UseCasesIndex() {
               <Link to={`/use-cases/${u.slug}`} className="group grid gap-3 py-8 md:grid-cols-[0.8fr_1.2fr_auto] md:items-center md:gap-10">
                 <p className="serif-moment text-2xl text-strong sm:text-3xl">{u.short}</p>
                 <p className="text-[15px] leading-relaxed text-muted">{u.lede}</p>
-                <ArrowRight className="hidden size-5 text-warm transition group-hover:translate-x-1 md:block" />
+                <ArrowRight className="hidden size-5 text-warm transition duration-300 group-hover:translate-x-1.5 group-hover:text-brand md:block" />
               </Link>
             </li>
           ))}
         </ul>
+      </section>
+      <section className="border-t border-line">
+        <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+          <Heading label="Made with AIMVA" title="Pages it made for businesses like these."
+            sub="Four sample businesses, four short briefs, four different layouts, straight from the page builder. Open one to scroll the real page; its form is switched off." />
+          <SampleGallery />
+        </div>
       </section>
       <FinalCta from="use-cases" />
     </MarketingLayout>
@@ -43,7 +51,7 @@ export function UseCasePage() {
         <Link to="/use-cases" className="text-sm font-medium text-muted hover:text-strong">Use cases</Link>
         <h1 className="serif-moment mt-3 max-w-3xl text-[36px] leading-[1.05] text-strong sm:text-6xl">{u.title}</h1>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted">{u.lede}</p>
-        <Link to={user ? "/app" : signupHref(from, u.signup)} className="btn-primary mt-8 h-12 px-7 text-[15px]">{user ? "Open app" : "Start free"} <ArrowRight className="size-4" /></Link>
+        <Link to={user ? "/app" : signupHref(from, u.signup)} className="mk-go btn-primary mt-8 h-12 px-7 text-[15px]">{user ? "Open app" : "Start free"} <ArrowRight className="size-4" /></Link>
       </section>
 
       <section className="border-t border-line">

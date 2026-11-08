@@ -1,0 +1,58 @@
+<!doctype html><html lang="en"><head><script>/* AIMVA sample: forms here don't send anything */
+document.addEventListener('submit',function(e){e.preventDefault();e.stopImmediatePropagation();
+var b=document.getElementById('aimva-sample');if(b){b.textContent='This is a sample page, so nothing was sent. Your own page sends leads straight to AIMVA.';b.style.background='#a35700';}},true);
+</script><meta name="robots" content="noindex"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Smile Studio Dental</title>
+<meta name="description" content="Gentle care in Jubilee Hills, Hyderabad. Same-week appointments.">
+<meta property="og:title" content="Smile Studio Dental"><meta property="og:description" content="Free check-up this month">
+<meta name="aimva:layout" content="split">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--p:#0b6b67;--a:#f4a21c;--on-p:#ffffff;--r:20px;--ln:#e2e8f0}*{box-sizing:border-box;margin:0}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#0f172a;background:#f8fafc;line-height:1.6}
+h1,h2,h3{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-weight:800}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0}nav b{font-size:20px}.logo{max-height:44px}
+.btn,.wa,.ghost,.btn-inline{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:12px 22px;border-radius:var(--r);font-weight:600;text-decoration:none}
+.ghost svg,.wa-float svg{flex:none}
+.btn{background:var(--p);color:var(--on-p);border:0;cursor:pointer;font-size:16px;width:100%}.btn-inline{background:var(--p);color:var(--on-p)}
+.wa{background:#25d366;color:#fff}.ghost{border:1.5px solid #e2e8f0;color:#0f172a}
+h1{font-size:clamp(34px,5vw,56px);line-height:1.1;letter-spacing:-.02em}
+h1 span{background:linear-gradient(90deg,var(--p),var(--a));-webkit-background-clip:text;color:transparent}
+.sub{font-size:19px;color:#475569;margin:20px 0 28px}.row{display:flex;gap:12px;flex-wrap:wrap}
+.card{background:#ffffff;border-radius:var(--r);padding:28px;box-shadow:0 20px 50px -20px rgba(15,23,42,.25)}
+.card h2{font-size:22px;margin-bottom:16px}
+input,textarea{width:100%;font-size:16px;padding:13px 14px;border:1.5px solid #e2e8f0;border-radius:calc(var(--r)/2);font:inherit;margin-bottom:12px;background:#f8fafc;color:#0f172a}
+input:focus,textarea:focus{outline:2px solid var(--p);border-color:transparent}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--p);outline-offset:3px}
+.cb{display:flex;gap:10px;align-items:center;font-size:14px;color:#475569;margin:2px 0 14px;cursor:pointer}.cb input{width:18px;height:18px;margin:0;accent-color:var(--p)}
+.hero-img{width:100%;border-radius:var(--r);margin-top:28px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.block{padding-bottom:72px}.block h2{font-size:30px;margin-bottom:20px}
+.f{background:#ffffff;border-radius:var(--r);padding:24px;border:1px solid #e2e8f0}.f h3{font-size:17px}.f.hl{border:2px solid var(--p)}
+.dot{width:36px;height:36px;border-radius:calc(var(--r)/2);background:linear-gradient(135deg,var(--p),var(--a));margin-bottom:14px}
+.price{font-size:28px;font-weight:800;margin:8px 0}.f ul{padding-left:18px;color:#475569}
+blockquote{font-size:16px}figcaption{margin-top:10px;color:#475569;font-size:14px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}.gallery img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:var(--r)}
+details{border-bottom:1px solid #e2e8f0;padding:14px 0}summary{font-weight:600;cursor:pointer}details p{margin-top:8px;color:#475569}
+.wa-float{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:50%;background:#25d366;display:grid;place-items:center;color:#fff;text-decoration:none;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+footer{padding:32px 0;color:#475569;font-size:14px;border-top:1px solid #e2e8f0}
+.top{margin:0 -20px;padding:0 20px;position:relative;isolation:isolate}.top::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none}
+.top::before{background-image:radial-gradient(40% 55% at 12% 8%,color-mix(in srgb,var(--p) 16%,transparent),transparent 70%),radial-gradient(35% 50% at 92% 0%,color-mix(in srgb,var(--a) 18%,transparent),transparent 70%)}
+
+.hero{display:grid;grid-template-columns:1.2fr 1fr;gap:48px;align-items:center;padding:56px 0 72px}
+.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+@media(max-width:820px){.hero{grid-template-columns:1fr!important;padding-top:24px;min-height:0}.cols{grid-template-columns:1fr!important}.cols aside{position:static}}
+</style></head><body><div class="wrap">
+<div class="top"><nav><b>Smile Studio Dental</b><a class="ghost" href="#contact"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>Request a call back</a></nav><section class="hero" data-aimva-section="hero"><div><h1><span>Painless root canal in one visit</span></h1><p class="sub">Gentle care in Jubilee Hills, Hyderabad. Same-week appointments.</p><div class="row"></div></div><div class="card" id="contact"><h2>Book a free check-up</h2><form data-aimva-lead><input name="name" type="text" placeholder="Full name" aria-label="Full name" required><input name="phone" type="tel" placeholder="Phone" aria-label="Phone" required><input name="email" type="email" placeholder="Email" aria-label="Email"><textarea name="message" rows="3" placeholder="How can we help?" aria-label="How can we help?"></textarea><label class="cb"><input type="checkbox" name="callback" value="yes"> Call me now: our assistant will ring you within a minute</label><button class="btn" type="submit">Book a free check-up</button></form></div></section></div><section class="block" data-aimva-section="features"><div class="feats"><div class="f"><div class="dot"></div><h3>Painless root canal</h3></div><div class="f"><div class="dot"></div><h3>Clear aligners</h3></div><div class="f"><div class="dot"></div><h3>Kids&#x27; dentistry</h3></div><div class="f"><div class="dot"></div><h3>Open till 9 pm</h3></div></div></section><section class="block" data-aimva-section="testimonials"><h2>What customers say</h2><div class="grid"><figure class="f"><blockquote>“No pain at all. Done in one visit.”</blockquote><figcaption>— Ravi K.</figcaption></figure></div></section><section class="block" data-aimva-section="faq"><h2>Questions</h2><details><summary>Do you take walk-ins?</summary><p>Yes, until 8 pm.</p></details></section>
+<footer data-aimva-section="footer">© Smile Studio Dental</footer></div><script>
+document.querySelectorAll('form[data-aimva-lead]').forEach(function(f){
+  f.addEventListener('submit',function(e){e.preventDefault();
+    var d=new URLSearchParams(new FormData(f));new URLSearchParams(location.search).forEach(function(v,k){if(k==='aimva_c'||k.indexOf('utm_')===0)d.set(k,v.slice(0,100))});
+    fetch('http://localhost:8000/api/public/sites/dental/lead',{method:'POST',mode:'no-cors',body:d})
+    .finally(function(){var a=document.getElementById(f.getAttribute('data-after')||'');
+      if(a){f.hidden=true;a.hidden=false;return}f.innerHTML='<p style="font-size:18px;padding:24px 0">'+"Thanks! We&#x27;ll be in touch shortly."+'</p>';});
+  });
+});
+</script><div id="aimva-sample" style="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483647;max-width:calc(100% - 32px);background:#0f2b2d;color:#fff;font:500 13px/1.4 system-ui,sans-serif;padding:10px 16px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:center">Sample page made with AIMVA's page builder · <a href="/" style="color:#f4a21c;font-weight:600">Back to AIMVA</a></div></body></html>

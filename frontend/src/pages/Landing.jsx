@@ -1,5 +1,5 @@
 // Home: one promise, how it works, what's inside, who it's for, questions. Each section says something new.
-import { lazy, Suspense, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { MotionConfig, motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowRight, AudioLines, BarChart3, Check, ChevronDown, Globe, Image, Megaphone, MessageCircle, Users } from "lucide-react";
@@ -7,8 +7,9 @@ import { rise, stagger } from "../components/Motion";
 import { FinalCta, Heading, MarketingLayout, cx, signupHref, useSeo } from "../components/marketing/Site";
 import { USE_CASES } from "../components/marketing/useCases";
 import { useAuth } from "../lib/auth";
+import HeroStage from "../components/marketing/HeroStage";
+import ReplyScene from "../components/marketing/ReplyScene";
 
-const ProductDemo = lazy(() => import("../components/ProductDemo"));
 
 const STEPS = [
   { title: "Make a page or an ad", text: "Answer a few questions and your landing page, ad pictures and ad copy start already written. The page goes live in a click." },
@@ -66,11 +67,23 @@ function Steps() {
   );
 }
 
+/** A saffron line draws under the promise once, on load; it follows the words across line breaks. */
+function Underlined({ children }) {
+  const reduce = useReducedMotion();
+  const line = (w) => ({ backgroundImage: "linear-gradient(var(--color-peach), var(--color-peach))", backgroundRepeat: "no-repeat", backgroundPosition: "0 94%", backgroundSize: `${w} 0.07em` });
+  return (
+    <motion.em className="text-warm" style={{ paddingBottom: "0.04em" }}
+      initial={reduce ? false : line("0%")} animate={line("100%")} transition={{ duration: 1, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}>
+      {children}
+    </motion.em>
+  );
+}
+
 function Faq() {
   return (
     <div className="mt-10 divide-y divide-line border-y border-line">
       {FAQ.map(([q, a]) => (
-        <details key={q} className="group py-1">
+        <details key={q} className="mk-faq group py-1">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[17px] font-medium text-strong [&::-webkit-details-marker]:hidden">
             {q}<ChevronDown className="size-5 shrink-0 text-faint transition group-open:rotate-180" />
           </summary>
@@ -89,23 +102,23 @@ export default function Landing() {
       <MarketingLayout from="home">
         {/* Hero */}
         <section className="relative">
-          <div className="aura pointer-events-none absolute inset-x-0 top-0 h-[640px] opacity-70" aria-hidden />
+          <div className="mk-aura pointer-events-none absolute inset-x-0 top-0 h-[640px]" aria-hidden />
           <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-12 pt-8 sm:gap-12 sm:px-6 sm:pb-20 sm:pt-12 lg:grid-cols-[1fr_1.05fr] lg:pb-28 lg:pt-20">
             <motion.div variants={stagger} initial={false} animate="show">{/* visible without waiting for an animation frame */}
               <motion.p variants={rise} className="text-sm font-semibold text-warm">Marketing and lead replies for growing businesses</motion.p>
               <motion.h1 variants={rise} className="serif-moment mt-4 text-[44px] leading-[1.02] text-strong sm:text-6xl xl:text-[72px]">
-                From ad to sale, <em className="text-warm">in one calm place.</em>
+                From ad to sale, <Underlined>in one calm place.</Underlined>
               </motion.h1>
               <motion.p variants={rise} className="mt-5 max-w-xl text-base leading-relaxed text-muted sm:mt-6 sm:text-lg">
                 AIMVA writes your page and your ads. Every new lead gets a WhatsApp hello in seconds and a call back from your AI assistant. You just close.
               </motion.p>
               <motion.div variants={rise} className="mt-7 flex flex-col gap-2 sm:mt-9 sm:flex-row sm:gap-3">
-                <Link to={user ? "/app" : signupHref("home")} className="btn-primary h-12 px-7 text-[15px]">{user ? "Open app" : "Start free"} <ArrowRight className="size-4" /></Link>
+                <Link to={user ? "/app" : signupHref("home")} className="mk-go btn-primary h-12 px-7 text-[15px]">{user ? "Open app" : "Start free"} <ArrowRight className="size-4" /></Link>
                 <Link to="/tour" className="btn-subtle h-12 px-5 text-[15px]">See how it works</Link>
               </motion.div>
               <motion.p variants={rise} className="mt-6 text-sm text-faint">Free while in early access · No card · Connect WhatsApp and Twilio when you're ready</motion.p>
             </motion.div>
-            <Suspense fallback={<div className="h-[440px] w-full rounded-[2rem] bg-surface-2/60" />}><ProductDemo /></Suspense>
+            <HeroStage />
           </div>
         </section>
 
@@ -114,6 +127,15 @@ export default function Landing() {
           <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
             <Heading label="How it works" title="Three steps, and the middle one runs itself." />
             <Steps />
+          </div>
+        </section>
+
+        {/* The reply: the lead's language in, the same language out */}
+        <section id="reply" className="scroll-mt-20 border-t border-line">
+          <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
+            <Heading label="While you're busy" title="A WhatsApp hello in their language, within seconds."
+              sub="When a lead writes in Hindi, Telugu, Hinglish or another language, the hello goes back in the same one. Then your AI assistant calls them back." />
+            <ReplyScene />
           </div>
         </section>
 
@@ -127,9 +149,10 @@ export default function Landing() {
             <ul className="divide-y divide-line border-y border-line">
               {FEATURES.map((f) => (
                 <li key={f.name}>
-                  <Link to={`/tour#${f.tour}`} className="group flex items-start gap-4 py-5">
-                    <f.icon className="mt-0.5 size-5 shrink-0 text-warm" />
-                    <span className="min-w-0 flex-1">
+                  <Link to={`/tour#${f.tour}`} className="group relative flex items-start gap-4 py-5">
+                    <span className="absolute bottom-4 left-0 top-4 w-[2px] origin-center scale-y-0 rounded-full bg-peach transition-transform duration-300 group-hover:scale-y-100 group-focus-visible:scale-y-100" aria-hidden />
+                    <f.icon className="mt-0.5 size-5 shrink-0 text-warm transition-transform duration-300 group-hover:translate-x-2 group-hover:text-brand" />
+                    <span className="min-w-0 flex-1 transition-transform duration-300 group-hover:translate-x-2">
                       <span className="block font-semibold text-strong">{f.name}</span>
                       <span className="mt-1 block text-[15px] leading-relaxed text-muted">{f.text}</span>
                     </span>
