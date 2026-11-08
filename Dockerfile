@@ -3,7 +3,7 @@
 # Run it with deploy/docker-compose.yml (Postgres, HTTPS, backups). See docs/DEPLOY.md.
 
 # --- 1. Build the React app ---
-FROM node:22-alpine AS web
+FROM node:25-alpine AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 # --ignore-scripts: a hijacked package can't run code while installing (the build doesn't need install scripts)
