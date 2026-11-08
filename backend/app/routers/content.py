@@ -34,7 +34,6 @@ IMAGE_MODELS = [
     {"id": "pollinations/flux", "label": "FLUX (free, no key)", "provider": "pollinations"},
     {"id": "pollinations/turbo", "label": "Turbo (free, no key)", "provider": "pollinations"},
     {"id": "fal-ai/flux/schnell", "label": "FLUX Schnell", "provider": "fal"},
-    {"id": "fal-ai/flux/dev", "label": "FLUX Dev", "provider": "fal"},
     {"id": "fal-ai/flux-pro/v1.1", "label": "FLUX 1.1 Pro", "provider": "fal"},
     {"id": "fal-ai/stable-diffusion-v35-large", "label": "Stable Diffusion 3.5", "provider": "fal"},
 ]

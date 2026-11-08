@@ -31,12 +31,10 @@ _MODELS = {
     "flux": ("free-standard", "Standard (free)"),
     "turbo": ("free-fast", "Fast (free)"),
     "fal-ai/flux/schnell": ("studio-fast", "Studio · fast"),
-    "fal-ai/flux/dev": ("studio-detail", "Studio · detailed"),
     "fal-ai/flux-pro/v1.1": ("studio-pro", "Studio · pro"),
     "fal-ai/stable-diffusion-v35-large": ("studio-art", "Studio · artistic"),
     "fal-ai/recraft-v3": ("studio-design", "Studio · design"),
     "fal-ai/ideogram/v2": ("studio-text", "Studio · text in images"),
-    "fal-ai/flux/dev/image-to-image": ("studio-remix", "Studio · from a reference"),
     # video
     "fal-ai/ltx-2/text-to-video": ("video-sound", "Video with sound"),
     "fal-ai/luma-dream-machine/ray-2": ("video-cinematic", "Cinematic video"),
