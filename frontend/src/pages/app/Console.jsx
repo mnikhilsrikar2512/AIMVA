@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Download, ListChecks, ListPlus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, ListChecks, ListPlus, Search, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Chip, Empty, Field, IconButton, ListSkeleton, Modal, Notice, PageHeader, Spinner, Stat, StatStrip, Tabs, cx } from "../../components/ui";
 import { api, get, post } from "../../lib/api";
@@ -49,7 +49,8 @@ function describe(a) {
     case "team.add": return [`added ${d.email} as`, ROLE_LABEL[d.role] || d.role];
     case "team.role": return [`changed ${d.email} from ${ROLE_LABEL[d.from] || d.from} to`, ROLE_LABEL[d.to] || d.to];
     case "team.remove": return [`removed ${d.email} from the team`, ""];
-    case "task.assign": return [d.from ? `handed “${d.title}” from ${d.from} to` : `assigned “${d.title}” to`, d.to];
+    case "task.assign": return [`assigned “${d.title}” to`, Array.isArray(d.to) ? d.to.join(", ") : d.to];
+    case "task.people": return [`changed who is on “${d.title}”`, [d.added?.length && `added ${d.added.join(", ")}`, d.removed?.length && `took off ${d.removed.join(", ")}`].filter(Boolean).join("; ")];
     case "task.status": return [`marked “${d.title}”`, TASK_STATUS_WORD[d.to] || d.to];
     case "template.publish": return ["published the template", d.name];
     case "template.dismiss": return ["dismissed the template", d.name];
@@ -345,7 +346,7 @@ function Customers({ me }) {
 const ACTIONS = [
   ["", "Every action"], ["credits.grant", "Credits granted"], ["plan.change", "Plan changes"], ["signin.unlock", "Sign-ins unlocked"],
   ["signin.revoke", "Signed out everywhere"], ["customer.view", "Customers opened"], ["team.add", "Teammates added"],
-  ["team.role", "Role changes"], ["team.remove", "Teammates removed"], ["task.assign", "Tasks assigned"], ["task.status", "Task updates"], ["template.publish", "Templates published"],
+  ["team.role", "Role changes"], ["team.remove", "Teammates removed"], ["task.assign", "Tasks assigned"], ["task.status", "Task updates"], ["task.people", "Who is on a task"], ["template.publish", "Templates published"],
 ];
 
 function Activity({ me, onOpen }) {
@@ -487,13 +488,37 @@ function Team() {
 }
 
 // ---- tasks ----------------------------------------------------------------------------------------------------------
+// A task can have any number of people on it. Edits send the version the person saw; if someone else saved first the
+// server answers 409 with the latest task, which we show instead of overwriting. Progress notes are an append-only
+// thread, so several people can post at once. The list refreshes itself every 30 seconds while the tab is visible.
 const TASK_STATUS = { open: "To do", doing: "Doing", done: "Done", cancelled: "Cancelled" };
 const dueLabel = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "");
+const personName = (p) => p.name || p.email;
+const peopleLine = (list, max = 3) => {
+  const names = list.map(personName);
+  return names.length <= max ? names.join(", ") : `${names.slice(0, max).join(", ")} +${names.length - max}`;
+};
+
+/** Tick any number of teammates. */
+function PeoplePicker({ me, value, onChange }) {
+  const toggle = (email) => onChange(value.includes(email) ? value.filter((e) => e !== email) : [...value, email]);
+  return (
+    <div className="max-h-52 divide-y divide-line overflow-y-auto rounded-lg ring-1 ring-line-strong">
+      {me.team.map((t) => (
+        <label key={t.email} className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm hover:bg-sunken">
+          <input type="checkbox" className="size-4 accent-[var(--color-strong)]" checked={value.includes(t.email)} onChange={() => toggle(t.email)} />
+          <span className="min-w-0 flex-1 truncate text-strong">{t.name || t.email}{t.email === me.email ? " (you)" : ""}</span>
+          <span className="text-xs text-faint">{ROLE_LABEL[t.role]}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
 
 function TaskDialog({ me, customer, onClose, onDone }) {
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
-  const [assignee, setAssignee] = useState(me.team.find((t) => t.email !== me.email)?.email || me.email);
+  const [people, setPeople] = useState(() => { const first = me.team.find((t) => t.email !== me.email)?.email || me.email; return [first]; });
   const [due, setDue] = useState("");
   const [high, setHigh] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -501,9 +526,9 @@ function TaskDialog({ me, customer, onClose, onDone }) {
     e.preventDefault();
     setBusy(true);
     try {
-      const t = await post("/api/console/tasks", { title: title.trim(), note: note.trim(), assignee, priority: high ? "high" : "normal",
+      const t = await post("/api/console/tasks", { title: title.trim(), note: note.trim(), assignees: people, priority: high ? "high" : "normal",
         due_on: due || null, customer_id: customer?.id ?? null });
-      toast.success(`Assigned to ${t.assignee_name || t.assignee}.`);
+      toast.success(`Assigned to ${peopleLine(t.assignees)}.`);
       onDone?.(t);
     } catch (err) { toast.error(err.message); } finally { setBusy(false); }
   };
@@ -511,34 +536,87 @@ function TaskDialog({ me, customer, onClose, onDone }) {
     <Modal open onClose={onClose} title={customer ? `Assign a task about ${customer.name}` : "Assign a task"}>
       <form onSubmit={submit} className="space-y-3">
         <Field label="What needs doing"><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Call them about the failed images" autoFocus required minLength={3} maxLength={200} /></Field>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Who">
-            <select className="input" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-              {me.team.map((t) => <option key={t.email} value={t.email}>{t.name || t.email}{t.email === me.email ? " (you)" : ""} · {ROLE_LABEL[t.role]}</option>)}
-            </select>
-          </Field>
-          <Field label="Due"><input className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} /></Field>
-        </div>
+        <Field label={`Who${people.length > 1 ? ` (${people.length} people)` : ""}`} hint="Tick everyone who works on it. They all see it on their list.">
+          <PeoplePicker me={me} value={people} onChange={setPeople} />
+        </Field>
+        <Field label="Due"><input className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} /></Field>
         <Field label="Details" hint="Optional."><textarea className="input" rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={high} onChange={(e) => setHigh(e.target.checked)} /> Urgent</label>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="subtle" onClick={onClose}>Cancel</Button>
-          <Button type="submit" busy={busy} disabled={title.trim().length < 3}>Assign</Button>
+          <Button type="submit" busy={busy} disabled={title.trim().length < 3 || people.length === 0}>Assign</Button>
         </div>
       </form>
     </Modal>
   );
 }
 
-function TaskRow({ t, me, onChange, onOpen, showAssignee }) {
+function PeopleDialog({ me, t, onClose, save }) {
+  const [people, setPeople] = useState(t.assignees.map((a) => a.email));
   const [busy, setBusy] = useState(false);
+  return (
+    <Modal open onClose={onClose} title={`Who is on “${t.title}”`}>
+      <div className="space-y-3">
+        <PeoplePicker me={me} value={people} onChange={setPeople} />
+        <p className="text-xs text-faint">People you untick stop seeing it on their list. The change goes in the log.</p>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="subtle" onClick={onClose}>Cancel</Button>
+          <Button busy={busy} disabled={people.length === 0} onClick={async () => { setBusy(true); if (await save({ assignees: people }, "Saved who's on it.")) onClose(); setBusy(false); }}>Save</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function TaskUpdates({ t, onChange }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const send = async (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    setBusy(true);
+    try { onChange(await post(`/api/console/tasks/${t.id}/updates`, { body: text.trim() })); setText(""); }
+    catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+  const hidden = t.updates_count - t.updates.length;
+  return (
+    <div className="mt-2 space-y-2 border-l-2 border-line pl-3">
+      {t.updates.length === 0 && <p className="text-xs text-faint">No updates yet. Say what you did so the others don't repeat it.</p>}
+      {[...t.updates].reverse().map((u) => (
+        <p key={u.id} className="text-[13px]">
+          <span className="font-medium text-strong">{u.by_name || u.by}</span> <span className="text-xs text-faint">{ago(u.at)}</span>
+          <span className="block whitespace-pre-line text-muted">{u.body}</span>
+        </p>
+      ))}
+      {hidden > 0 && <p className="text-xs text-faint">{hidden} older {hidden === 1 ? "update" : "updates"} not shown.</p>}
+      <form onSubmit={send} className="flex gap-2">
+        <input className="input h-8 flex-1 text-[13px]" value={text} onChange={(e) => setText(e.target.value)} placeholder="Add an update" maxLength={2000} aria-label="Add an update" />
+        <Button size="sm" type="submit" busy={busy} disabled={!text.trim()}>Post</Button>
+      </form>
+    </div>
+  );
+}
+
+function TaskRow({ t, me, onChange, onOpen }) {
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [editPeople, setEditPeople] = useState(false);
   const manager = me.permissions.includes("tasks.assign");
   const set = async (body, msg) => {
     setBusy(true);
-    try { onChange(await api(`/api/console/tasks/${t.id}`, { method: "PATCH", body })); if (msg) toast.success(msg); }
-    catch (e) { toast.error(e.message); } finally { setBusy(false); }
+    try {
+      onChange(await api(`/api/console/tasks/${t.id}`, { method: "PATCH", body: { ...body, version: t.version } }));
+      if (msg) toast.success(msg);
+      return true;
+    } catch (e) {
+      const latest = e.status === 409 && e.data?.detail?.task;
+      if (latest) { onChange(latest); toast.warning(e.data.detail.message); } else toast.error(e.message);
+      return false;
+    } finally { setBusy(false); }
   };
   const active = t.status === "open" || t.status === "doing";
+  const others = t.assignees.filter((a) => a.email !== me.email);
+  const onIt = others.length < t.assignees.length;
   return (
     <li className="flex flex-wrap items-start gap-x-3 gap-y-2 py-3">
       <input type="checkbox" aria-label={`Mark “${t.title}” done`} className="mt-1 size-4 accent-[var(--color-strong)]" checked={t.status === "done"} disabled={busy || t.status === "cancelled"}
@@ -547,12 +625,18 @@ function TaskRow({ t, me, onChange, onOpen, showAssignee }) {
         <span className={cx("font-medium", t.status === "done" ? "text-faint line-through" : "text-strong")}>{t.title}</span>
         {t.priority === "high" && active && <span className="ml-2 text-xs font-semibold text-warm">Urgent</span>}
         <span className="mt-0.5 block text-xs text-faint">
-          {showAssignee && <>{t.assignee_name || t.assignee} · </>}
+          <span title={t.assignees.map(personName).join(", ")}>
+            {onIt ? (others.length ? `you with ${peopleLine(others)}` : "you") : peopleLine(t.assignees)}
+          </span>{" · "}
           {t.customer && <>about <button type="button" className="text-brand hover:underline" onClick={() => onOpen(t.customer_id)}>{t.customer}</button> · </>}
           {t.due_on && <span className={cx(t.overdue && "font-semibold text-warm")}>{t.overdue ? "overdue, " : ""}due {dueLabel(t.due_on)} · </span>}
           from {t.created_by_name || t.created_by}
         </span>
         {t.note && <span className="mt-1 block whitespace-pre-line text-[13px] text-muted">{t.note}</span>}
+        <button type="button" className="mt-1 text-xs text-brand hover:underline" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {open ? "Hide updates" : t.updates_count ? `${t.updates_count} ${t.updates_count === 1 ? "update" : "updates"}${t.updates[0] ? `, last from ${t.updates[0].by_name || t.updates[0].by} ${ago(t.updates[0].at)}` : ""}` : "Add an update"}
+        </button>
+        {open && <TaskUpdates t={t} onChange={onChange} />}
       </span>
       <span className="flex items-center gap-1.5">
         <label><span className="sr-only">Status</span>
@@ -561,15 +645,9 @@ function TaskRow({ t, me, onChange, onOpen, showAssignee }) {
             {Object.entries(TASK_STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </label>
-        {manager && active && (
-          <label><span className="sr-only">Assigned to</span>
-            <select className="h-8 max-w-40 rounded-lg bg-surface px-2 text-[13px] ring-1 ring-line-strong" value={t.assignee} disabled={busy}
-              onChange={(e) => set({ assignee: e.target.value }, "Reassigned.")}>
-              {me.team.map((m) => <option key={m.email} value={m.email}>{m.name || m.email}</option>)}
-            </select>
-          </label>
-        )}
+        {manager && active && <IconButton label="Who is on it" onClick={() => setEditPeople(true)} disabled={busy}><Users className="size-4" /></IconButton>}
       </span>
+      {editPeople && <PeopleDialog me={me} t={t} onClose={() => setEditPeople(false)} save={set} />}
     </li>
   );
 }
@@ -583,9 +661,14 @@ function Tasks({ me, onOpen }) {
   const [assigning, setAssigning] = useState(false);
   const qs = new URLSearchParams({ scope, status, ...(scope === "all" && who ? { assignee: who } : {}) });
   const { data, setData, loading, error, reload } = useApi(`/api/console/tasks?${qs}`);
+  // Others on the same task change it too: pick their changes up every 30 seconds while this tab is on screen.
+  useEffect(() => {
+    const id = setInterval(() => { if (document.visibilityState === "visible") reload(); }, 30000);
+    return () => clearInterval(id);
+  }, [reload]);
   const replace = (t) => setData((d) => {
     const fits = (status === "active") === (t.status === "open" || t.status === "doing") || status === "all";
-    const stillMine = scope !== "mine" || t.assignee === me.email;
+    const stillMine = scope !== "mine" || t.assignees.some((a) => a.email === me.email);
     return { ...d, items: fits && stillMine ? d.items.map((x) => (x.id === t.id ? t : x)) : d.items.filter((x) => x.id !== t.id) };
   });
   return (
@@ -610,10 +693,10 @@ function Tasks({ me, onOpen }) {
       {error ? <Notice tone="rose" icon={AlertTriangle} action={<Button size="sm" variant="ghost" onClick={reload}>Retry</Button>}>{error.message}</Notice>
         : loading || !data ? <ListSkeleton rows={5} /> : data.items.length === 0 ? (
           <Empty compact icon={ListChecks} title={status === "active" ? (scope === "mine" ? "Nothing on your list." : "No open tasks.") : "Nothing here yet."}
-            text={scope === "mine" && status === "active" ? (manager ? "Tasks you assign to yourself show here too." : "When an owner or manager gives you a task, it shows here.") : null} />
+            text={scope === "mine" && status === "active" ? (manager ? "Tasks you put yourself on show here too." : "When an owner or manager puts you on a task, it shows here.") : null} />
         ) : (
           <ul className="card divide-y divide-line px-4 sm:px-5">
-            {data.items.map((t) => <TaskRow key={t.id} t={t} me={me} onChange={replace} onOpen={onOpen} showAssignee={scope === "all"} />)}
+            {data.items.map((t) => <TaskRow key={t.id} t={t} me={me} onChange={replace} onOpen={onOpen} />)}
           </ul>
         )}
       {assigning && <TaskDialog me={me} onClose={() => setAssigning(false)} onDone={() => { setAssigning(false); reload(); }} />}
@@ -623,7 +706,7 @@ function Tasks({ me, onOpen }) {
 
 // ---- overview -------------------------------------------------------------------------------------------------------
 const ACTION_WORD = { "credits.grant": "credits", "plan.change": "plan changes", "signin.unlock": "unlocks", "signin.revoke": "sign-outs",
-  "task.status": "task updates", "task.assign": "tasks assigned", "team.add": "team changes", "team.role": "role changes", "team.remove": "removals",
+  "task.status": "task updates", "task.assign": "tasks assigned", "task.people": "task people changes", "team.add": "team changes", "team.role": "role changes", "team.remove": "removals",
   "template.publish": "templates", "template.dismiss": "templates" };
 
 function Overview({ me, onTab }) {

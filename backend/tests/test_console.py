@@ -244,52 +244,105 @@ from app.models import StaffTask  # noqa: E402
 
 
 def test_owner_assigns_a_task_and_the_teammate_works_it(owner, support, customer, db):
-    r = owner.post("/api/console/tasks", json={"title": "Call Shop about failed images", "assignee": "help@example.com",
+    r = owner.post("/api/console/tasks", json={"title": "Call Shop about failed images", "assignees": ["help@example.com"],
                                                 "customer_id": customer.id, "priority": "high", "due_on": "2026-11-01"})
     assert r.status_code == 200, r.text
     t = r.json()
     assert t["customer"] == "shop@example.com" and t["overdue"] and t["created_by"] == "owner@example.com"
+    assert [a["email"] for a in t["assignees"]] == ["help@example.com"] and t["version"] == 1
     mine = support.get("/api/console/tasks").json()["items"]
     assert [x["id"] for x in mine] == [t["id"]]
     assert owner.get("/api/console/tasks").json()["items"] == []  # the owner's own list is empty
     # The assignee moves it along and adds a note, but can't hand it on or retitle it.
-    assert support.patch(f"/api/console/tasks/{t['id']}", json={"status": "doing", "note": "Left a voicemail"}).status_code == 200
-    assert support.patch(f"/api/console/tasks/{t['id']}", json={"assignee": "owner@example.com"}).status_code == 403
-    assert support.patch(f"/api/console/tasks/{t['id']}", json={"status": "done"}).json()["done_at"]
+    t = support.patch(f"/api/console/tasks/{t['id']}", json={"version": 1, "status": "doing", "note": "Left a voicemail"}).json()
+    assert t["version"] == 2 and t["note"] == "Left a voicemail"
+    assert support.patch(f"/api/console/tasks/{t['id']}", json={"version": 2, "assignees": ["owner@example.com"]}).status_code == 403
+    assert support.patch(f"/api/console/tasks/{t['id']}", json={"version": 2, "status": "done"}).json()["done_at"]
     assert support.get("/api/console/tasks").json()["items"] == []
     assert len(support.get("/api/console/tasks", params={"status": "done"}).json()["items"]) == 1
     assert [a.detail["to"] for a in log(db, "task.status")] == ["doing", "done"]
     assert len(log(db, "task.assign")) == 1
 
 
+def test_many_people_on_one_task(owner, support):
+    names = [f"crew{i}@example.com" for i in range(5)]
+    crew = [teammate(owner, e, "developer") for e in names]
+    t = owner.post("/api/console/tasks", json={"title": "Fix the Hindi voice", "assignees": ["help@example.com", *names, names[0]]}).json()
+    assert [a["email"] for a in t["assignees"]] == ["help@example.com", *names]  # duplicates dropped, order kept
+    for c in [support, *crew]:
+        assert [x["id"] for x in c.get("/api/console/tasks").json()["items"]] == [t["id"]]
+    # Everyone posts a progress note at once: nothing clashes, every note is kept.
+    for i, c in enumerate(crew):
+        assert c.post(f"/api/console/tasks/{t['id']}/updates", json={"body": f"Checked part {i}"}).status_code == 200
+    full = owner.get(f"/api/console/tasks/{t['id']}").json()
+    assert full["updates_count"] == 5 and len(full["updates"]) == 5 and full["updates"][0]["body"] == "Checked part 4"
+    listed = owner.get("/api/console/tasks", params={"scope": "all"}).json()["items"][0]
+    assert listed["updates_count"] == 5 and len(listed["updates"]) == 5
+    assert full["version"] == 1  # notes don't touch the task, so they never cause a conflict
+
+
+def test_two_saves_at_once_dont_overwrite(owner, support, db):
+    dev = teammate(owner, "dev@example.com", "developer")
+    t = owner.post("/api/console/tasks", json={"title": "Pilot list", "assignees": ["help@example.com", "dev@example.com"]}).json()
+    # Both opened version 1. Support saves first; the developer's save on the old version is refused, not merged blindly.
+    assert support.patch(f"/api/console/tasks/{t['id']}", json={"version": 1, "note": "Called 3 of 10"}).status_code == 200
+    r = dev.patch(f"/api/console/tasks/{t['id']}", json={"version": 1, "note": "Fixed the import"})
+    assert r.status_code == 409
+    latest = r.json()["detail"]["task"]
+    assert latest["note"] == "Called 3 of 10" and latest["version"] == 2
+    assert dev.patch(f"/api/console/tasks/{t['id']}", json={"version": 2, "note": "Called 3 of 10. Fixed the import"}).json()["version"] == 3
+    # Saving with nothing changed doesn't bump the version.
+    assert dev.patch(f"/api/console/tasks/{t['id']}", json={"version": 3, "status": "open"}).json()["version"] == 3
+
+
+def test_manager_changes_who_is_on_a_task(owner, support, db):
+    dev = teammate(owner, "dev@example.com", "developer")
+    t = owner.post("/api/console/tasks", json={"title": "Pilot list", "assignees": ["help@example.com"]}).json()
+    t = owner.patch(f"/api/console/tasks/{t['id']}", json={"version": 1, "assignees": ["help@example.com", "dev@example.com", "owner@example.com"]}).json()
+    assert len(t["assignees"]) == 3 and t["version"] == 2
+    t = owner.patch(f"/api/console/tasks/{t['id']}", json={"version": 2, "assignees": ["dev@example.com"]}).json()
+    assert [a["email"] for a in t["assignees"]] == ["dev@example.com"]
+    assert support.get("/api/console/tasks").json()["items"] == []
+    assert support.post(f"/api/console/tasks/{t['id']}/updates", json={"body": "hi"}).status_code == 404
+    assert owner.patch(f"/api/console/tasks/{t['id']}", json={"version": 3, "assignees": []}).status_code == 422
+    assert [(a.detail["added"], a.detail["removed"]) for a in log(db, "task.people")] == [
+        (["dev@example.com", "owner@example.com"], []), ([], ["help@example.com", "owner@example.com"])]
+    filtered = owner.get("/api/console/tasks", params={"scope": "all", "assignee": "dev@example.com"}).json()["items"]
+    assert [x["id"] for x in filtered] == [t["id"]]
+    assert owner.get("/api/console/tasks", params={"scope": "all", "assignee": "help@example.com"}).json()["items"] == []
+
+
 def test_only_owners_and_managers_assign(owner, support):
-    assert support.post("/api/console/tasks", json={"title": "Do a thing", "assignee": "help@example.com"}).status_code == 403
+    assert support.post("/api/console/tasks", json={"title": "Do a thing", "assignees": ["help@example.com"]}).status_code == 403
     assert support.get("/api/console/tasks", params={"scope": "all"}).status_code == 403
     mgr = teammate(owner, "boss@example.com", "manager")
-    assert mgr.post("/api/console/tasks", json={"title": "Review pilot list", "assignee": "help@example.com"}).status_code == 200
+    assert mgr.post("/api/console/tasks", json={"title": "Review pilot list", "assignees": ["help@example.com"]}).status_code == 200
     every = owner.get("/api/console/tasks", params={"scope": "all"}).json()
     assert len(every["items"]) == 1 and "help@example.com" in every["assignees"]
 
 
 def test_tasks_go_only_to_the_team(owner):
-    r = owner.post("/api/console/tasks", json={"title": "Do a thing", "assignee": "stranger@example.com"})
-    assert r.status_code == 400
+    r = owner.post("/api/console/tasks", json={"title": "Do a thing", "assignees": ["owner@example.com", "stranger@example.com"]})
+    assert r.status_code == 400 and "stranger@example.com" in r.json()["detail"]
+    assert owner.post("/api/console/tasks", json={"title": "Do a thing", "assignees": []}).status_code == 422
 
 
 def test_someone_elses_task_is_invisible(owner, support, db):
-    t = owner.post("/api/console/tasks", json={"title": "Owner's own", "assignee": "owner@example.com"}).json()
-    assert support.patch(f"/api/console/tasks/{t['id']}", json={"status": "done"}).status_code == 404
+    t = owner.post("/api/console/tasks", json={"title": "Owner's own", "assignees": ["owner@example.com"]}).json()
+    assert support.patch(f"/api/console/tasks/{t['id']}", json={"version": 1, "status": "done"}).status_code == 404
+    assert support.get(f"/api/console/tasks/{t['id']}").status_code == 404
 
 
 def test_overview(owner, support, customer, db):
     support.post(f"/api/console/customers/{customer.id}/credits", json={"meter": "images", "quantity": 5, "reason": "Goodwill credits"})
     support.get(f"/api/console/customers/{customer.id}")
-    owner.post("/api/console/tasks", json={"title": "Follow up", "assignee": "help@example.com", "due_on": "2026-01-01"})
+    owner.post("/api/console/tasks", json={"title": "Follow up", "assignees": ["help@example.com", "owner@example.com"], "due_on": "2026-01-01"})
     o = owner.get("/api/console/overview").json()
     assert o["platform"]["leads"] == 1 and o["platform"]["customers"] >= 3
     helper = next(r for r in o["team"] if r["email"] == "help@example.com")
     assert helper["role"] == "support" and helper["actions"] == 1 and helper["customers_opened"] == 1
     assert helper["tasks"]["open"] == 1 and helper["tasks"]["overdue"] == 1
+    assert next(r for r in o["team"] if r["email"] == "owner@example.com")["tasks"]["open"] == 1  # shared task counts for both
     assert support.get("/api/console/overview").status_code == 403
     dev = teammate(owner, "dev@example.com", "developer")
     assert dev.get("/api/console/overview").status_code == 403

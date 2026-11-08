@@ -1,4 +1,4 @@
-"""AIMVA team console: tasks the owner or a manager assigns to teammates
+"""AIMVA team console: tasks the owner or a manager assigns, worked on by any number of teammates at once
 
 Revision ID: 0014
 Revises: 0013
@@ -22,7 +22,7 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('title', sa.String(length=200), nullable=False),
         sa.Column('note', sa.Text(), nullable=False),
-        sa.Column('assignee_email', sa.String(length=255), nullable=False),
+        sa.Column('version', sa.Integer(), nullable=False),
         sa.Column('created_by', sa.Integer(), nullable=True),
         sa.Column('created_by_email', sa.String(length=255), nullable=False),
         sa.Column('customer_id', sa.Integer(), nullable=True),
@@ -37,14 +37,44 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
     )
     with op.batch_alter_table('staff_tasks', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_staff_tasks_assignee_email'), ['assignee_email'], unique=False)
         batch_op.create_index(batch_op.f('ix_staff_tasks_customer_id'), ['customer_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_staff_tasks_status'), ['status'], unique=False)
+    op.create_table(
+        'staff_task_people',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('task_id', sa.Integer(), nullable=False),
+        sa.Column('email', sa.String(length=255), nullable=False),
+        sa.Column('added_at', sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(['task_id'], ['staff_tasks.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('task_id', 'email'),
+    )
+    with op.batch_alter_table('staff_task_people', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_staff_task_people_task_id'), ['task_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_staff_task_people_email'), ['email'], unique=False)
+    op.create_table(
+        'staff_task_updates',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('task_id', sa.Integer(), nullable=False),
+        sa.Column('author_email', sa.String(length=255), nullable=False),
+        sa.Column('body', sa.Text(), nullable=False),
+        sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(['task_id'], ['staff_tasks.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id'),
+    )
+    with op.batch_alter_table('staff_task_updates', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_staff_task_updates_task_id'), ['task_id'], unique=False)
 
 
 def downgrade() -> None:
+    with op.batch_alter_table('staff_task_updates', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_staff_task_updates_task_id'))
+    op.drop_table('staff_task_updates')
+    with op.batch_alter_table('staff_task_people', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_staff_task_people_email'))
+        batch_op.drop_index(batch_op.f('ix_staff_task_people_task_id'))
+    op.drop_table('staff_task_people')
     with op.batch_alter_table('staff_tasks', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_staff_tasks_status'))
         batch_op.drop_index(batch_op.f('ix_staff_tasks_customer_id'))
-        batch_op.drop_index(batch_op.f('ix_staff_tasks_assignee_email'))
     op.drop_table('staff_tasks')

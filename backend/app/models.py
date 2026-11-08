@@ -599,13 +599,14 @@ class StaffAction(Base):
 
 
 class StaffTask(Base):
-    """Work an owner or manager hands to someone on the AIMVA team, optionally about one customer.
-    Assignee is an email (like StaffMember) so owners from ADMIN_EMAILS can get tasks too."""
+    """Work an owner or manager hands to people on the AIMVA team, optionally about one customer.
+    Any number of people can work on it at once (staff_task_people). `version` goes up on every change, so two
+    people saving at the same moment get a "someone changed this" answer instead of overwriting each other."""
     __tablename__ = "staff_tasks"
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
     note: Mapped[str] = mapped_column(Text, default="")
-    assignee_email: Mapped[str] = mapped_column(String(255), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_by_email: Mapped[str] = mapped_column(String(255))
     customer_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # users.id, no FK (like staff_actions)
@@ -616,3 +617,23 @@ class StaffTask(Base):
     done_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class StaffTaskPerson(Base):
+    """One person working on a task. Keyed by email (like StaffMember) so owners from ADMIN_EMAILS can be on tasks."""
+    __tablename__ = "staff_task_people"
+    __table_args__ = (UniqueConstraint("task_id", "email"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("staff_tasks.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class StaffTaskUpdate(Base):
+    """A progress note on a task. Append-only, so several people can post at once without clashing."""
+    __tablename__ = "staff_task_updates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("staff_tasks.id", ondelete="CASCADE"), index=True)
+    author_email: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

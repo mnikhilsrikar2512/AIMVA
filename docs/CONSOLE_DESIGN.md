@@ -61,11 +61,13 @@ The first tab for owners and managers. It answers two questions: how is the plat
 
 ## Tasks (everyone)
 
-- Default tab for Development and Support: **Mine**, the tasks given to me, urgent first, then soonest due.
-- Owners and managers also get **Everyone's** with a person filter, and **Assign a task** (title, who, due date, details, urgent). A task can be about a customer: "Assign a task" on the customer pane fills that in.
-- Each row: a checkbox to mark it done, the title, Urgent in warm, then "person · about customer · due 12 Nov · from Priya". Overdue dates are warm and bold. A status menu (To do, Doing, Done, Cancelled) and, for owners and managers, a reassign menu.
-- The assignee can change status and the details note. Only owners and managers change title, person, priority or due date.
-- Every assignment and status change goes in the Activity log.
+- Default tab for Development and Support: **Mine**, every task I'm on (alone or with others), urgent first, then soonest due.
+- Owners and managers also get **Everyone's** with a person filter, and **Assign a task** (title, who, due date, details, urgent). "Who" is a tick list: any number of people, no cap. A task can be about a customer: "Assign a task" on the customer pane fills that in.
+- Each row: a checkbox to mark it done, the title, Urgent in warm, then "you with Rahul, Sneha · about customer · due 12 Nov · from Priya" (more than three names shows "+2"). Overdue dates are warm and bold. A status menu (To do, Doing, Done, Cancelled) and, for owners and managers, a people icon that opens the same tick list to add or take people off.
+- **Updates**: under each task, "3 updates, last from Rahul 2h" opens a thread of short progress notes (newest five in the list) with an "Add an update" box. Anyone on the task posts there; notes only ever add a line, so people posting at once never clash.
+- **Two people saving at once**: every save carries the version the person was looking at. If someone else saved first, the save is refused, the row swaps to the latest version, and an amber toast says "Someone else changed this task just now. Here's the latest; make your change again." Nothing is silently overwritten. The list also refreshes itself every 30 seconds while the tab is on screen.
+- Anyone on the task can change status and the details note. Only owners and managers change title, people, priority or due date. The task has one status for everyone: whoever marks it done marks it done for all.
+- Every assignment, change of people and status change goes in the Activity log.
 
 ## Billing (Owner, Management, Accounts; read-only)
 
@@ -112,7 +114,7 @@ After an action: a toast ("Granted 20 pictures to Shop Kumar"), the pane refresh
 
 A single list, newest first. Each row: when ("2h"), who and their role, what in plain words ("granted 20 pictures to shop@…"), and the reason in muted text under it. Filters: action type and person. A row with a customer links to that customer. Support sees only customer actions.
 
-Plain words for each action: `customer.view` "opened", `credits.grant` "granted", `plan.change` "moved … from Trial to Growth", `signin.unlock` "unlocked sign-in for", `signin.revoke` "signed … out everywhere", `team.add` "added … as Support", `team.role` "changed … to Management", `team.remove` "removed … from the team", `task.assign` "assigned “…” to", `task.status` "marked “…” done", `template.publish` / `template.dismiss`.
+Plain words for each action: `customer.view` "opened", `credits.grant` "granted", `plan.change` "moved … from Trial to Growth", `signin.unlock` "unlocked sign-in for", `signin.revoke` "signed … out everywhere", `team.add` "added … as Support", `team.role` "changed … to Management", `team.remove` "removed … from the team", `task.assign` "assigned “…” to", `task.people` "changed who is on “…”: added …; took off …", `task.status` "marked “…” done", `template.publish` / `template.dismiss`.
 
 ## Team (Owner only)
 

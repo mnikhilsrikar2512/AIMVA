@@ -10,14 +10,14 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from . import billing, staff
 from .config import settings
 from .db import get_db
 from .models import (Asset, Call, Campaign, CreditGrant, Integration, Invite, Lead, Membership, Site, StaffAction,
-                     StaffMember, StaffTask, Subscription, User, WaMessage, utcnow)
+                     StaffMember, StaffTask, StaffTaskPerson, StaffTaskUpdate, Subscription, User, WaMessage, utcnow)
 from .routers.integrations import PLATFORM
 from .security import rate_limit
 from .staff import need, require_staff
@@ -325,26 +325,36 @@ def remove_member(mid: int, person: User = Depends(require_staff), db: Session =
 
 
 # ---- tasks ------------------------------------------------------------------------------------------------------
+# A task can have any number of people on it at once. Two rules keep them from stepping on each other:
+# - every change to the task itself sends the `version` the person was looking at; if someone else saved in
+#   between, the answer is 409 with the latest task, never a silent overwrite;
+# - progress notes go in an append-only thread (staff_task_updates), so people can post at the same time.
 TASK_STATUSES = ("open", "doing", "done", "cancelled")
+UPDATES_IN_LIST = 5  # newest notes shown with each task in the list; the task itself returns all
 
 
 class TaskIn(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     note: str = Field("", max_length=4000)
-    assignee: EmailStr
+    assignees: list[EmailStr] = Field(min_length=1)
     customer_id: Optional[int] = None
     priority: Literal["normal", "high"] = "normal"
     due_on: Optional[date] = None
 
 
 class TaskPatch(BaseModel):
+    version: int
     status: Optional[Literal["open", "doing", "done", "cancelled"]] = None
     title: Optional[str] = Field(None, min_length=3, max_length=200)
     note: Optional[str] = Field(None, max_length=4000)
-    assignee: Optional[EmailStr] = None
+    assignees: Optional[list[EmailStr]] = Field(None, min_length=1)
     priority: Optional[Literal["normal", "high"]] = None
     due_on: Optional[date] = None
     clear_due: bool = False
+
+
+class TaskUpdateIn(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
 
 
 def _staff_emails(db: Session) -> set:
@@ -352,40 +362,90 @@ def _staff_emails(db: Session) -> set:
 
 
 def _names(db: Session, emails) -> dict:
-    emails = {e for e in emails if e}
+    emails = {e.lower() for e in emails if e}
     if not emails:
         return {}
     return {e.lower(): n for e, n in db.execute(select(User.email, User.name).where(func.lower(User.email).in_(emails)))}
 
 
-def _task_out(t: StaffTask, names: dict, today: date) -> dict:
-    return {"id": t.id, "title": t.title, "note": t.note, "assignee": t.assignee_email, "assignee_name": names.get(t.assignee_email, ""),
-            "created_by": t.created_by_email, "created_by_name": names.get(t.created_by_email.lower(), ""),
-            "customer_id": t.customer_id, "customer": t.customer_label, "priority": t.priority, "status": t.status,
-            "due_on": t.due_on.isoformat() if t.due_on else None,
-            "overdue": bool(t.due_on and t.due_on < today and t.status in ("open", "doing")),
-            "done_at": _iso(t.done_at), "created_at": _iso(t.created_at), "updated_at": _iso(t.updated_at)}
+def _people(db: Session, ids) -> dict:
+    out = defaultdict(list)
+    if ids:
+        for p in db.scalars(select(StaffTaskPerson).where(StaffTaskPerson.task_id.in_(ids)).order_by(StaffTaskPerson.id)):
+            out[p.task_id].append(p.email)
+    return out
 
 
-def _assignee(db: Session, email: str) -> str:
-    email = email.lower()
-    if email not in _staff_emails(db):
-        raise HTTPException(400, "Tasks go to people on the AIMVA team. Add them on the Team tab first.")
-    return email
+def _updates(db: Session, ids, per_task: Optional[int]) -> tuple[dict, dict]:
+    """Newest first: {task_id: [update]} (at most per_task each) and {task_id: total}."""
+    out, total = defaultdict(list), defaultdict(int)
+    if ids:
+        for u in db.scalars(select(StaffTaskUpdate).where(StaffTaskUpdate.task_id.in_(ids))
+                            .order_by(StaffTaskUpdate.created_at.desc(), StaffTaskUpdate.id.desc())):
+            total[u.task_id] += 1
+            if per_task is None or len(out[u.task_id]) < per_task:
+                out[u.task_id].append(u)
+    return out, total
+
+
+def _tasks_out(db: Session, rows: list, per_task: Optional[int] = UPDATES_IN_LIST) -> list:
+    ids = [t.id for t in rows]
+    people = _people(db, ids)
+    updates, totals = _updates(db, ids, per_task)
+    names = _names(db, {e for es in people.values() for e in es} | {t.created_by_email for t in rows}
+                   | {u.author_email for us in updates.values() for u in us})
+    today = utcnow().date()
+    return [{"id": t.id, "title": t.title, "note": t.note, "version": t.version,
+             "assignees": [{"email": e, "name": names.get(e, "")} for e in people[t.id]],
+             "created_by": t.created_by_email, "created_by_name": names.get(t.created_by_email.lower(), ""),
+             "customer_id": t.customer_id, "customer": t.customer_label, "priority": t.priority, "status": t.status,
+             "due_on": t.due_on.isoformat() if t.due_on else None,
+             "overdue": bool(t.due_on and t.due_on < today and t.status in ("open", "doing")),
+             "updates": [{"id": u.id, "by": u.author_email, "by_name": names.get(u.author_email.lower(), ""), "body": u.body,
+                          "at": _iso(u.created_at)} for u in updates[t.id]],
+             "updates_count": totals[t.id],
+             "done_at": _iso(t.done_at), "created_at": _iso(t.created_at), "updated_at": _iso(t.updated_at)} for t in rows]
+
+
+def _task_out(db: Session, t: StaffTask, per_task: Optional[int] = None) -> dict:
+    return _tasks_out(db, [t], per_task)[0]
+
+
+def _clean_assignees(db: Session, emails) -> list:
+    """Lower-cased, de-duplicated, in the order given; everyone must be on the team."""
+    team, out = _staff_emails(db), []
+    for e in emails:
+        e = e.lower()
+        if e not in team:
+            raise HTTPException(400, f"{e} isn't on the AIMVA team. Add them on the Team tab first.")
+        if e not in out:
+            out.append(e)
+    return out
+
+
+def _load_task(db: Session, person: User, tid: int) -> tuple[StaffTask, bool]:
+    """The task and whether the person may manage it. 404 for anyone who is neither a manager nor on it."""
+    t = db.get(StaffTask, tid)
+    manager = staff.can(person.staff_role, "tasks.assign")
+    on_it = t is not None and db.scalar(select(StaffTaskPerson.id).where(
+        StaffTaskPerson.task_id == t.id, StaffTaskPerson.email == person.email.lower())) is not None
+    if not t or not (manager or on_it):
+        raise HTTPException(404, "Task not found.")
+    return t, manager
 
 
 @router.get("/api/console/tasks")
 def tasks(scope: Literal["mine", "all"] = "mine", status: Literal["active", "done", "all"] = "active",
           assignee: str = "", customer_id: Optional[int] = None,
           person: User = Depends(require_staff), db: Session = Depends(get_db)):
-    """Mine = assigned to me. All = everyone's (owners and managers)."""
+    """Mine = tasks I'm on (alone or with others). All = everyone's (owners and managers)."""
     stmt = select(StaffTask)
+    who = person.email.lower()
     if scope == "all":
         need(person, "tasks.assign")
-        if assignee:
-            stmt = stmt.where(StaffTask.assignee_email == assignee.strip().lower())
-    else:
-        stmt = stmt.where(StaffTask.assignee_email == person.email.lower())
+        who = assignee.strip().lower()
+    if who:
+        stmt = stmt.where(StaffTask.id.in_(select(StaffTaskPerson.task_id).where(StaffTaskPerson.email == who)))
     if status == "active":
         stmt = stmt.where(StaffTask.status.in_(("open", "doing")))
     elif status == "done":
@@ -398,10 +458,14 @@ def tasks(scope: Literal["mine", "all"] = "mine", status: Literal["active", "don
     else:
         stmt = stmt.order_by(StaffTask.updated_at.desc(), StaffTask.id.desc())
     rows = list(db.scalars(stmt.limit(300)))
-    names = _names(db, {t.assignee_email for t in rows} | {t.created_by_email.lower() for t in rows})
-    today = utcnow().date()
-    return {"items": [_task_out(t, names, today) for t in rows],
+    return {"items": _tasks_out(db, rows),
             "assignees": sorted(_staff_emails(db)) if staff.can(person.staff_role, "tasks.assign") else []}
+
+
+@router.get("/api/console/tasks/{tid}")
+def get_task(tid: int, person: User = Depends(require_staff), db: Session = Depends(get_db)):
+    t, _ = _load_task(db, person, tid)
+    return _task_out(db, t)
 
 
 @router.post("/api/console/tasks")
@@ -412,43 +476,85 @@ def create_task(body: TaskIn, person: User = Depends(require_staff), db: Session
         target = db.get(User, body.customer_id)
         if not target:
             raise HTTPException(404, "No customer with that id.")
-    t = StaffTask(title=body.title.strip(), note=body.note.strip(), assignee_email=_assignee(db, body.assignee),
+    people = _clean_assignees(db, body.assignees)
+    t = StaffTask(title=body.title.strip(), note=body.note.strip(), version=1,
                   created_by=person.id, created_by_email=person.email, customer_id=target.id if target else None,
                   customer_label=(target.email if target and target.kind == "person" else target.name if target else "")[:255],
                   priority=body.priority, due_on=body.due_on)
     db.add(t)
     db.flush()
-    staff.record(db, person, "task.assign", target, "", {"task_id": t.id, "title": t.title, "to": t.assignee_email})
+    db.add_all(StaffTaskPerson(task_id=t.id, email=e) for e in people)
+    staff.record(db, person, "task.assign", target, "", {"task_id": t.id, "title": t.title, "to": people})
     db.commit()
-    return _task_out(t, _names(db, {t.assignee_email, person.email.lower()}), utcnow().date())
+    return _task_out(db, t)
 
 
 @router.patch("/api/console/tasks/{tid}")
 def update_task(tid: int, body: TaskPatch, person: User = Depends(require_staff), db: Session = Depends(get_db)):
-    t = db.get(StaffTask, tid)
-    manager = staff.can(person.staff_role, "tasks.assign")
-    mine = t is not None and t.assignee_email == person.email.lower()
-    if not t or not (manager or mine):
-        raise HTTPException(404, "Task not found.")
+    t, manager = _load_task(db, person, tid)
     edits = body.model_dump(exclude_unset=True)
+    edits.pop("version", None)
     if not manager and set(edits) - {"status", "note"}:
-        raise HTTPException(403, "Only an owner or a manager can change who does a task, or its title, priority or due date.")
+        raise HTTPException(403, "Only an owner or a manager can change who is on a task, or its title, priority or due date.")
     target = db.get(User, t.customer_id) if t.customer_id else None
+    changed = False
     if body.status and body.status != t.status:
         staff.record(db, person, "task.status", target, "", {"task_id": t.id, "title": t.title, "from": t.status, "to": body.status})
         t.status = body.status
         t.done_at = utcnow() if body.status in ("done", "cancelled") else None
-    if body.assignee and body.assignee.lower() != t.assignee_email:
-        new = _assignee(db, body.assignee)
-        staff.record(db, person, "task.assign", target, "", {"task_id": t.id, "title": t.title, "to": new, "from": t.assignee_email})
-        t.assignee_email = new
+        changed = True
+    if body.assignees is not None:
+        new = _clean_assignees(db, body.assignees)
+        rows = list(db.scalars(select(StaffTaskPerson).where(StaffTaskPerson.task_id == t.id)))
+        old = [p.email for p in rows]
+        added, removed = [e for e in new if e not in old], [e for e in old if e not in new]
+        if added or removed:
+            for p in rows:
+                if p.email in removed:
+                    db.delete(p)
+            db.add_all(StaffTaskPerson(task_id=t.id, email=e) for e in added)
+            staff.record(db, person, "task.people", target, "", {"task_id": t.id, "title": t.title, "added": added, "removed": removed})
+            changed = True
     for f in ("title", "note", "priority", "due_on"):
         if f in edits and edits[f] is not None:
-            setattr(t, f, edits[f].strip() if isinstance(edits[f], str) else edits[f])
-    if body.clear_due and manager:
+            v = edits[f].strip() if isinstance(edits[f], str) else edits[f]
+            if v != getattr(t, f):
+                setattr(t, f, v)
+                changed = True
+    if body.clear_due and manager and t.due_on is not None:
         t.due_on = None
+        changed = True
+    if not changed:
+        db.rollback()
+        return _task_out(db, t)
+    # Bump the version only if nobody else saved since this person loaded the task. Done as one UPDATE ... WHERE
+    # version = n, so two saves landing at the same moment can't both win, on SQLite or Postgres.
+    db.flush()
+    bumped = db.execute(update(StaffTask).where(StaffTask.id == t.id, StaffTask.version == body.version)
+                        .values(version=StaffTask.version + 1, updated_at=utcnow())).rowcount
+    if not bumped:
+        db.rollback()
+        latest = db.get(StaffTask, tid)
+        db.refresh(latest)
+        raise HTTPException(409, {"message": "Someone else changed this task just now. Here's the latest; make your change again.",
+                                  "task": _task_out(db, latest)})
     db.commit()
-    return _task_out(t, _names(db, {t.assignee_email, t.created_by_email.lower()}), utcnow().date())
+    db.refresh(t)
+    return _task_out(db, t)
+
+
+@router.post("/api/console/tasks/{tid}/updates")
+def add_task_update(tid: int, body: TaskUpdateIn, person: User = Depends(require_staff), db: Session = Depends(get_db)):
+    """A progress note from anyone on the task (or a manager). Never clashes: it only ever adds a line."""
+    rate_limit(f"console-task-update:{person.id}", 120, 3600)
+    t, _m = _load_task(db, person, tid)
+    text = body.body.strip()
+    if not text:
+        raise HTTPException(400, "Write something first.")
+    db.add(StaffTaskUpdate(task_id=t.id, author_email=person.email.lower(), body=text))
+    t.updated_at = utcnow()
+    db.commit()
+    return _task_out(db, t)
 
 
 # ---- overview ---------------------------------------------------------------------------------------------------
@@ -495,9 +601,11 @@ def overview(days: int = Query(7, ge=1, le=90), person: User = Depends(require_s
         if r["last"] is None or a.created_at > r["last"]:
             r["last"] = a.created_at
     tasks_by = defaultdict(lambda: {"open": 0, "doing": 0, "overdue": 0, "done": 0})
-    for t in db.scalars(select(StaffTask).where(StaffTask.assignee_email.in_(emails), or_(
-            StaffTask.status.in_(("open", "doing")), StaffTask.done_at >= since))):
-        r = tasks_by[t.assignee_email]
+    # A task with three people on it counts once for each of them.
+    for email, t in db.execute(select(StaffTaskPerson.email, StaffTask).join(StaffTask, StaffTask.id == StaffTaskPerson.task_id)
+                               .where(StaffTaskPerson.email.in_(emails), or_(
+                                   StaffTask.status.in_(("open", "doing")), StaffTask.done_at >= since))):
+        r = tasks_by[email]
         if t.status in ("open", "doing"):
             r[t.status] += 1
             r["overdue"] += bool(t.due_on and t.due_on < today)
