@@ -63,6 +63,11 @@ SECURITY_HEADERS = [
 ]
 
 
+def _app_host() -> str:
+    from urllib.parse import urlsplit
+    return (urlsplit(settings.public_url).hostname or "localhost").lower()
+
+
 class RequestContextMiddleware:
     """Gives every request an id (kept from X-Request-ID if a proxy set one), returns it as a header, adds security
     headers and writes one access-log line. Plain ASGI, so streaming responses (live updates) pass straight through."""
@@ -87,6 +92,11 @@ class RequestContextMiddleware:
                 extra = [(b"x-request-id", rid.encode())] + SECURITY_HEADERS
                 if not path.startswith("/s/"):  # published sites may be framed elsewhere; the app may not
                     extra.append((b"x-frame-options", b"SAMEORIGIN"))
+                host = headers.get(b"host", b"").decode("latin-1").split(":")[0].lower()
+                on_app_host = host in ("", "localhost", "127.0.0.1", "testserver", _app_host())
+                if on_app_host and path not in ("/", "/robots.txt") and not path.startswith(("/s/", "/api/public/sites/")):
+                    # app screens, sign-in pages and the API never belong in a search engine or an AI index
+                    extra.append((b"x-robots-tag", b"noindex, nofollow, noarchive, noai, noimageai"))
                 if settings.is_production and settings.public_url.startswith("https://"):
                     extra.append((b"strict-transport-security", b"max-age=31536000; includeSubDomains"))
                 existing = list(message.get("headers", []))
