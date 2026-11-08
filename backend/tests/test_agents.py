@@ -232,7 +232,7 @@ def test_page_fixer_runs_on_new_pages_and_on_demand(auth_client):
 
 def test_agents_list_and_privacy(auth_client, other_client):
     kinds = [a["kind"] for a in auth_client.get("/api/agents").json()]
-    assert kinds == ["launch", "concierge", "autopilot", "weekly_report", "page_fixer"]
+    assert kinds == ["launch", "concierge", "autopilot", "weekly_report", "page_fixer", "lead_alerts"]
     s = auth_client.post("/api/sites", json={"business": "Acme", "offer": "x offer", "use_ai": False}).json()
     assert other_client.post("/api/agents/page_fixer/run", json={"site_id": s["id"]}).status_code == 404
     job = auth_client.post("/api/agents/autopilot/run").json()["job"]

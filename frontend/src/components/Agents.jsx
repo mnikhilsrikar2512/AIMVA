@@ -147,7 +147,7 @@ export function LaunchCard({ initialWhat = "" } = {}) {
   );
 }
 
-const KIND_TONE = { launch: "bg-violet-500", concierge: "bg-emerald-500", autopilot: "bg-sky-500", weekly_report: "bg-amber-500", page_fixer: "bg-pink-500" };
+const KIND_TONE = { launch: "bg-violet-500", concierge: "bg-emerald-500", autopilot: "bg-sky-500", weekly_report: "bg-amber-500", page_fixer: "bg-pink-500", lead_alerts: "bg-rose-500" };
 
 /** On/off (and suggest/auto) for one agent, shown on the page whose work it does. */
 export function AgentSwitch({ kind, title, text, modes }) {

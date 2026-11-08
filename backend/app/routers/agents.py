@@ -15,7 +15,7 @@ from ..models import AgentJob, ReferenceFile, Site, User
 from ..security import current_user, rate_limit
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
-Kind = Literal["launch", "concierge", "autopilot", "weekly_report", "page_fixer"]
+Kind = Literal["launch", "concierge", "autopilot", "weekly_report", "page_fixer", "lead_alerts"]
 
 
 def setting_out(s) -> dict:
@@ -40,6 +40,7 @@ ALLOWED_CONFIG = {  # what each agent's config may contain, with limits
     "concierge": {"messages"},
     "autopilot": {"max_actions", "allow_scale", "max_scale_pct"},
     "weekly_report": {"email"},
+    "lead_alerts": {"email"},
 }
 
 

@@ -27,6 +27,7 @@ KINDS = {
                   "config": {"max_actions": 3, "allow_scale": False, "max_scale_pct": 20}},
     "weekly_report": {"label": "Weekly Report", "mode": "auto", "config": {"email": True}},
     "page_fixer": {"label": "Page Fixer", "mode": "auto", "config": {}},
+    "lead_alerts": {"label": "Lead alerts", "mode": "auto", "config": {"email": True}},  # app/alerts.py
 }
 
 

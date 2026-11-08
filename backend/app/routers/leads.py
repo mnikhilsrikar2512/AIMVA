@@ -94,7 +94,20 @@ def create_lead(db: Session, user_id: int, bg: Optional[BackgroundTasks] = None,
         bg.add_task(auto_sync, user_id, lead.id)
         if is_new:
             bg.add_task(_concierge, lead.id)
+            bg.add_task(_alert, lead.id)
     return lead
+
+
+def _alert(lead_id: int) -> None:
+    """New lead → email the owner at once (app/alerts.py)."""
+    from ..alerts import on_new_lead
+    db = SessionLocal()
+    try:
+        on_new_lead(db, lead_id)
+    except Exception:
+        logging.getLogger("aimva.alerts").exception("Lead alert failed for lead %s", lead_id)
+    finally:
+        db.close()
 
 
 def _concierge(lead_id: int) -> None:

@@ -11,6 +11,7 @@ import { useOnboarding } from "../../components/AppLayout";
 // Owner-only, and its own chunk: customers never download the AI providers screen.
 const ProvidersPanel = lazy(() => import("../../components/ProvidersPanel"));
 import { TeamPanel } from "../../components/Team";
+import { AgentSwitch } from "../../components/Agents";
 
 function Profile() {
   const { user, setUser } = useAuth();
@@ -180,6 +181,7 @@ export default function Settings() {
       <PageHeader icon={SettingsIcon} tone="slate" title="Settings" subtitle="Your profile, team and connected accounts."
         actions={<Link to="/app/brand" className="btn-ghost"><Palette className="size-4" /> Brand kit</Link>} />
       <div className="mb-6"><Tabs value={tab} onChange={(v) => setParams({ tab: v })} tabs={[{ value: "profile", label: "Profile" }, { value: "team", label: "Team" }, ...(isClient ? [] : [{ value: "integrations", label: "Accounts" }]), ...(owner ? [{ value: "providers", label: "AI providers" }] : [])]} /></div>
+      {tab === "profile" && !isClient && <div className="mb-6"><AgentSwitch kind="lead_alerts" title="Lead alerts" text="Email me the moment a new lead arrives, with a one-tap WhatsApp reply." /></div>}
       {tab === "profile" ? <Profile /> : tab === "team" ? <TeamPanel /> : tab === "providers" ? <Suspense fallback={<ListSkeleton />}><ProvidersPanel /></Suspense> : isClient ? <Profile /> : <Integrations />}
       <p className="mt-10 flex items-center gap-2 text-xs text-faint"><Chip>v1.0</Chip> AIMVA</p>
     </div>
