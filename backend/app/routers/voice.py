@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import ai_registry, speech
+from .. import ai_registry, call_hours, speech
 from ..config import settings
 from ..db import get_db
 from ..models import Call, User, VoiceAgent
@@ -51,7 +51,8 @@ def agent_out(a: VoiceAgent) -> dict:
 def call_out(c: Call) -> dict:
     return {"id": c.id, "agent_id": c.agent_id, "lead_id": c.lead_id, "channel": c.channel, "to_number": c.to_number,
             "transcript": c.transcript, "sentiment": c.sentiment, "answers": c.answers, "status": c.status,
-            "created_at": c.created_at.isoformat()}
+            "created_at": c.created_at.isoformat(),
+            "scheduled_for": (lambda t: t.isoformat() if t else None)(scheduled_for(c))}
 
 
 def _agent(db: Session, user: User, aid: int) -> VoiceAgent:
@@ -196,6 +197,10 @@ def end_call(cid: int, bg: BackgroundTasks, user: User = Depends(current_user), 
     c = db.get(Call, cid)
     if not c or c.user_id != user.id:
         raise HTTPException(404, "Call not found.")
+    if c.status == "scheduled":  # a call waiting for calling hours: ending it cancels it
+        c.status = "cancelled"
+        db.commit()
+        return call_out(c)
     if c.status == "active":
         c.status = "completed"
     db.commit()
@@ -214,30 +219,83 @@ class DialIn(BaseModel):
     to: str = Field(min_length=8, max_length=20)
 
 
-def place_phone_call(db: Session, user: User, agent: VoiceAgent, to: str, lead_id: Optional[int] = None) -> Call:
+def _twilio(db: Session, user_id: int):
     from ..services import get_integration
-    tw = integration_secret(db, user.id, "twilio")
-    integ = get_integration(db, user.id, "twilio")
+    tw = integration_secret(db, user_id, "twilio")
+    integ = get_integration(db, user_id, "twilio")
     sid = tw.get("account_sid") or settings.twilio_account_sid
     tok = tw.get("auth_token") or settings.twilio_auth_token
     frm = (integ.meta or {}).get("from_number") if integ else settings.twilio_from_number
     if not (sid and tok and frm):
         raise HTTPException(400, "Connect Twilio in Settings → Integrations to place real phone calls.")
+    return sid, tok, frm
+
+
+def _dial(db: Session, c: Call) -> None:
+    sid, tok, frm = _twilio(db, c.user_id)
+    c.status = "active"  # before dialling: Twilio's /start webhook only answers active calls
+    db.commit()
+    r = httpx.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json", auth=(sid, tok), timeout=30,
+                   data={"To": c.to_number, "From": frm, "Url": f"{settings.public_url}/api/public/voice/twilio/{c.id}/start"})
+    if r.status_code >= 400:
+        c.status = "failed"
+        db.commit()
+        raise HTTPException(502, f"Twilio error: {r.text[:300]}")
+
+
+def place_phone_call(db: Session, user: User, agent: VoiceAgent, to: str, lead_id: Optional[int] = None) -> Call:
+    """Phone `to` with this agent now, or, outside 9 am to 9 pm in the lead's time, save it as "scheduled"
+    so the scheduler places it when their calling hours open (call_hours.py). Never dropped."""
+    _twilio(db, user.id)  # say "connect Twilio" now, not hours later
+    if not call_hours.is_open(to):
+        waiting = db.scalar(select(Call).where(Call.user_id == user.id, Call.status == "scheduled", Call.to_number == to))
+        if waiting:  # pressing "AI call" twice at night still makes one call in the morning
+            return waiting
     first = agent.questions[0] if agent.questions else ""
     from ..models import Lead
     lead = db.get(Lead, lead_id) if lead_id else None
     lang = speech.call_language(agent.language, (lead.message if lead and lead.user_id == user.id else "") or "")
     c = Call(user_id=user.id, agent_id=agent.id, channel="phone", to_number=to, lead_id=lead_id,
+             status="active" if call_hours.is_open(to) else "scheduled", created_at=call_hours.now(),
              transcript=[{"role": "agent", "text": f"{agent.greeting} {first}".strip(), "lang": lang}])
     db.add(c)
     db.commit()
-    r = httpx.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json", auth=(sid, tok), timeout=30,
-                   data={"To": to, "From": frm, "Url": f"{settings.public_url}/api/public/voice/twilio/{c.id}/start"})
-    if r.status_code >= 400:
-        c.status = "failed"
-        db.commit()
-        raise HTTPException(502, f"Twilio error: {r.text[:300]}")
+    if c.status == "active":
+        _dial(db, c)
     return c
+
+
+def scheduled_for(c: Call):
+    """When a deferred call will be placed (naive UTC), or None if it isn't waiting."""
+    return call_hours.next_open(c.to_number, c.created_at) if c.status == "scheduled" else None
+
+
+def place_due_calls(db: Session, at=None) -> int:
+    """Scheduler tick: place deferred calls whose lead's calling hours have opened. Stale ones are cancelled."""
+    from ..models import Lead
+    from .leads import add_event
+    at = at or call_hours.now()
+    placed = 0
+    for c in list(db.scalars(select(Call).where(Call.status == "scheduled", Call.channel == "phone").order_by(Call.id))):
+        if at - c.created_at > call_hours.STALE_AFTER:
+            c.status = "cancelled"
+            db.commit()
+            continue
+        if not call_hours.is_open(c.to_number, at):
+            continue
+        lead = db.get(Lead, c.lead_id) if c.lead_id else None
+        try:
+            _dial(db, c)
+            placed += 1
+            if lead and lead.stage == "new":
+                lead.stage = "contacted"
+                db.commit()
+        except HTTPException as e:
+            c.status = "failed"
+            if lead:
+                add_event(db, lead, "call", "Scheduled call failed", str(e.detail))
+            db.commit()
+    return placed
 
 
 @router.post("/api/voice/agents/{aid}/dial")

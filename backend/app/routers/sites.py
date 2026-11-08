@@ -1619,8 +1619,14 @@ def _dial_back(user_id: int, lead_id: int, number: str, agent_id: Optional[int])
             add_event(db, lead, "call", "Call back waiting", "Create a voice agent so AIMVA can call leads back automatically.")
         else:
             try:
-                place_phone_call(db, user, agent, number, lead_id=lead.id)
-                add_event(db, lead, "call", f"{agent.name} is calling them back")
+                c = place_phone_call(db, user, agent, number, lead_id=lead.id)
+                if c.status == "scheduled":
+                    from .. import call_hours
+                    from .voice import scheduled_for
+                    add_event(db, lead, "call", f"{agent.name} will call them back at {call_hours.label(number, scheduled_for(c))}",
+                              f"Calls only go out {call_hours.window_text()} in the lead's time.")
+                else:
+                    add_event(db, lead, "call", f"{agent.name} is calling them back")
             except HTTPException as e:
                 add_event(db, lead, "call", "Call back waiting", str(e.detail))
         db.commit()

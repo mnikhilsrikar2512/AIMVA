@@ -61,6 +61,16 @@ def fresh_state():
 
 
 @pytest.fixture(autouse=True)
+def calls_any_hour(monkeypatch, request):
+    """Calling hours (9 am to 9 pm) depend on the wall clock, so the suite opens them all day.
+    test_call_hours.py pins the clock and the real window itself."""
+    if request.module.__name__.rsplit(".", 1)[-1] != "test_call_hours":
+        from app import call_hours
+        monkeypatch.setattr(call_hours, "START_HOUR", 0)
+        monkeypatch.setattr(call_hours, "END_HOUR", 24)
+
+
+@pytest.fixture(autouse=True)
 def hermetic_dns(monkeypatch):
     """No real DNS in tests: the SSRF guard (providers.safe_url) resolves names, which fails offline or behind a proxy.
     Public names resolve to a public documentation IP; files that need private ranges override this fixture."""
