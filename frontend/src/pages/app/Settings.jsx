@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CheckCircle2, Download, ExternalLink, KeyRound, Link2, Palette, Settings as SettingsIcon, Trash2, Unplug } from "lucide-react";
+import { BellRing, CheckCircle2, Download, ExternalLink, KeyRound, Link2, Palette, Settings as SettingsIcon, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Chip, Field, Modal, PageHeader, Spinner, Tabs, ListSkeleton } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
@@ -12,6 +12,30 @@ import { useOnboarding } from "../../components/AppLayout";
 const ProvidersPanel = lazy(() => import("../../components/ProvidersPanel"));
 import { TeamPanel } from "../../components/Team";
 import { AgentSwitch } from "../../components/Agents";
+import { currentDevice, needsInstall, pushSupported, turnOffPhoneAlerts, turnOnPhoneAlerts } from "../../lib/push";
+
+/** Turn on a phone notification for every new lead, on this device. */
+function PhoneAlerts() {
+  const [on, setOn] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { currentDevice().then((s) => setOn(!!s)).catch(() => setOn(false)); }, []);
+  if (!pushSupported()) return null;
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      if (on) { await turnOffPhoneAlerts(); setOn(false); toast.success("Phone alerts are off on this device."); }
+      else { await turnOnPhoneAlerts(); setOn(true); toast.success("Done. New leads now pop up on this device."); }
+    } catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-muted">
+      <BellRing className="size-3.5" />
+      {needsInstall() ? <>On iPhone, first tap Share, then <b className="text-strong">Add to Home Screen</b>, and open AIMVA from there to get alerts.</>
+        : on ? <>New leads pop up on this device.</> : <>Get a notification on this device too, even when AIMVA is closed.</>}
+      {!needsInstall() && on !== null && <button type="button" disabled={busy} onClick={toggle} className="font-medium text-brand hover:underline disabled:opacity-50">{on ? "Turn off here" : "Turn on here"}</button>}
+    </p>
+  );
+}
 
 function Profile() {
   const { user, setUser } = useAuth();
@@ -181,7 +205,7 @@ export default function Settings() {
       <PageHeader icon={SettingsIcon} tone="slate" title="Settings" subtitle="Your profile, team and connected accounts."
         actions={<Link to="/app/brand" className="btn-ghost"><Palette className="size-4" /> Brand kit</Link>} />
       <div className="mb-6"><Tabs value={tab} onChange={(v) => setParams({ tab: v })} tabs={[{ value: "profile", label: "Profile" }, { value: "team", label: "Team" }, ...(isClient ? [] : [{ value: "integrations", label: "Accounts" }]), ...(owner ? [{ value: "providers", label: "AI providers" }] : [])]} /></div>
-      {tab === "profile" && !isClient && <div className="mb-6"><AgentSwitch kind="lead_alerts" title="Lead alerts" text="Email me the moment a new lead arrives, with a one-tap WhatsApp reply." /></div>}
+      {tab === "profile" && !isClient && <div className="mb-6 space-y-2"><AgentSwitch kind="lead_alerts" title="Lead alerts" text="Email me the moment a new lead arrives, with a one-tap WhatsApp reply." /><PhoneAlerts /></div>}
       {tab === "profile" ? <Profile /> : tab === "team" ? <TeamPanel /> : tab === "providers" ? <Suspense fallback={<ListSkeleton />}><ProvidersPanel /></Suspense> : isClient ? <Profile /> : <Integrations />}
       <p className="mt-10 flex items-center gap-2 text-xs text-faint"><Chip>v1.0</Chip> AIMVA</p>
     </div>
