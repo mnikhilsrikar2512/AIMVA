@@ -9,7 +9,7 @@ def keys_done(status):
 
 def test_new_user_starts_with_verify_only(auth_client):
     s = auth_client.get("/api/onboarding").json()
-    assert keys_done(s) == {"verify"} and s["completed"] == 1 and s["total"] == 7
+    assert keys_done(s) == {"verify"} and s["completed"] == 1 and s["total"] == 8
     assert s["needs_profile"] and not s["dismissed"] and not s["all_done"]
     assert {i["value"] for i in s["industries"]} >= {"real_estate", "healthcare", "saas"}
 
@@ -44,7 +44,11 @@ def test_checklist_follows_real_activity(auth_client, client):
     auth_client.post(f"/api/voice/agents/{agent['id']}/calls")
     auth_client.post("/api/integrations/fal/key", json={"values": {"api_key": "k"}})
     s = auth_client.get("/api/onboarding").json()
-    assert s["all_done"] and s["completed"] == 7
+    assert s["completed"] == 7 and "alerts" not in keys_done(s)
+    auth_client.post("/api/alerts/devices", json={"endpoint": "https://fcm.googleapis.com/fcm/send/abc",
+                                                  "keys": {"p256dh": "B" + "A" * 86, "auth": "A" * 22}})
+    s = auth_client.get("/api/onboarding").json()
+    assert s["all_done"] and s["completed"] == 8
 
 
 def test_dismiss_and_restore(auth_client):
@@ -88,3 +92,13 @@ def test_signup_answers_are_saved_step_by_step(auth_client):
     assert auth_client.post("/api/onboarding/answers", json={"answers": {"for_whom": "personal"}}).json()["answers"]["for_whom"] == "personal"
     assert auth_client.post("/api/onboarding/answers", json={"answers": {"unknown": 1}}).status_code == 422
     assert auth_client.post("/api/onboarding/answers", json={"answers": {"agency_name": "x" * 301}}).status_code == 422
+
+
+def test_alerts_step_is_done_by_a_phone_or_a_connected_whatsapp(auth_client, db):
+    from app.models import AgentSetting, User
+    keys = lambda: {s["key"] for s in auth_client.get("/api/onboarding").json()["steps"] if s["done"]}
+    assert "alerts" not in keys()
+    uid = db.query(User).filter_by(email="owner@example.com").one().id
+    db.add(AgentSetting(user_id=uid, kind="lead_alerts", enabled=True, mode="auto", config={"push": [{"endpoint": "https://fcm.googleapis.com/x"}]}))
+    db.commit()
+    assert "alerts" in keys()
