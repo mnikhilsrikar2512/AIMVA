@@ -30,10 +30,11 @@ def _setup(c):
     bad = c.post("/api/campaigns", json={"platform": "google", "name": "Bad", "daily_budget": 1000, "product_id": p["id"]}).json()
     for x in (good, bad):
         c.patch(f"/api/campaigns/{x['id']}", json={"status": "active"})
-    c.post(f"/api/campaigns/{good['id']}/results", json={"spend": 3000, "impressions": 20000, "clicks": 400})
+    # Good: 20 leads where 12 were expected at target. Enough to be sure it's really cheap, not a lucky week.
+    c.post(f"/api/campaigns/{good['id']}/results", json={"spend": 6000, "impressions": 20000, "clicks": 400})
     c.post(f"/api/campaigns/{bad['id']}/results", json={"spend": 8000, "impressions": 30000, "clicks": 150})
     uid = _uid()
-    _leads(uid, 10, good["id"], p["id"])
+    _leads(uid, 20, good["id"], p["id"])
     _leads(uid, 2, bad["id"], p["id"])
     return p, good, bad
 
@@ -53,7 +54,7 @@ def test_overview_rolls_up_and_scores_campaigns(auth_client):
     p, good, bad = _setup(auth_client)
     o = auth_client.get("/api/command/overview?days=30").json()
     prod = o["products"][0]
-    assert prod["spend"] == 11000 and prod["leads"] == 12 and prod["cpl"] == round(11000 / 12, 2)
+    assert prod["spend"] == 14000 and prod["leads"] == 22 and prod["cpl"] == round(14000 / 22, 2)
     by = {c["name"]: c for c in prod["campaigns"]}
     assert by["Good"]["cpl"] == 300 and by["Good"]["health"] == "great"
     assert by["Bad"]["cpl"] == 4000 and by["Bad"]["health"] == "attention"
@@ -63,7 +64,8 @@ def test_overview_rolls_up_and_scores_campaigns(auth_client):
     fix = next(r for r in o["recommendations"] if r["key"].startswith("fix"))
     assert fix["alt"]["type"] == "move_budget" and "Good" in fix["alt"]["label"]  # cheaper option inside the same product
     assert sum(1 for r in o["recommendations"] if r["campaign_id"] == bad["id"]) == 1  # one card per campaign
-    assert o["plan"]["leads_next_7"] == round(12 / 30 * 7, 1) and "12 leads" in o["summary"]
+    assert o["plan"]["leads_next_7"] == round(22 / 30 * 7, 1) and "22 leads" in o["summary"]
+    assert "sure" not in fix["why"] and "lucky" not in fix["why"]  # how the judge decided stays behind the scenes
 
 
 def test_period_maths_uses_snapshots(auth_client):
@@ -111,7 +113,10 @@ def test_snooze_and_dismiss_hide_suggestions(auth_client, other_client):
 def test_pause_when_spending_without_leads(auth_client):
     c = auth_client.post("/api/campaigns", json={"platform": "linkedin", "name": "Leaky", "daily_budget": 500}).json()
     auth_client.patch(f"/api/campaigns/{c['id']}", json={"status": "active"})
+    # 60 clicks and no lead happens to 1 in 6 healthy campaigns (3% convert), so no target and 60 clicks isn't enough.
     auth_client.post(f"/api/campaigns/{c['id']}/results", json={"spend": 4000, "impressions": 9000, "clicks": 60})
+    assert not any(r["key"] == f"pause:{c['id']}" for r in auth_client.get("/api/command/overview").json()["recommendations"])
+    auth_client.post(f"/api/campaigns/{c['id']}/results", json={"spend": 2000, "impressions": 5000, "clicks": 60})
     r = next(r for r in auth_client.get("/api/command/overview").json()["recommendations"] if r["key"] == f"pause:{c['id']}")
     assert r["priority"] == "high" and "no leads" in r["title"]
 
@@ -221,3 +226,25 @@ def test_hot_leads_card_promises_what_it_does(auth_client):
     _leads(_uid(), 9, score=90, days_ago=1, phone="+919876543210")
     r = next(r for r in auth_client.get("/api/command/overview").json()["recommendations"] if r["key"].startswith("call_hot"))
     assert r["title"] == "Call your 5 hottest leads now" and "9 leads" in r["why"] and r["group"] == "leads"
+
+
+def test_a_product_without_a_target_is_offered_its_break_even(auth_client):
+    p = auth_client.post("/api/products", json={"name": "Facial", "price": 3000}).json()
+    c = auth_client.post("/api/campaigns", json={"platform": "meta", "name": "Glow", "daily_budget": 500, "product_id": p["id"]}).json()
+    auth_client.patch(f"/api/campaigns/{c['id']}", json={"status": "active"})
+    auth_client.post(f"/api/campaigns/{c['id']}/results", json={"spend": 5000, "impressions": 9000, "clicks": 200})
+    uid = _uid()
+    _leads(uid, 18, c["id"], p["id"])
+    _leads(uid, 2, c["id"], p["id"], stage="won", value=3000)
+    r = next(r for r in auth_client.get("/api/command/overview").json()["recommendations"] if r["key"] == f"target:{p['id']}")
+    assert r["action"]["target_cpl"] == 300 and "2 of your last 20" in r["why"]  # 3,000 × 2/20
+    out = auth_client.post(f"/api/command/recommendations/{r['key']}/decide", json={"decision": "accepted"}).json()
+    assert "₹300" in out["result"] and auth_client.get("/api/products").json()[0]["target_cpl"] == 300
+
+
+def test_judge_waits_for_enough_data():
+    from app.judge import judge
+    assert judge(500, 0, 20, 500)["verdict"] is None  # 1 lead expected at target: zero is bad luck, not proof
+    assert judge(5000, 0, 200, 500)["verdict"] == "pause"
+    assert judge(1500, 1, 40, 500)["verdict"] is None  # ₹1,500 a lead after one lead: too early
+    assert judge(20000, 8, 600, 500)["verdict"] == "fix"

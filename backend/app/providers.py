@@ -67,7 +67,7 @@ PRESETS = {
     "stability": {"kind": "image", "adapter": "stability", "label": "Stability AI", "base_url": "https://api.stability.ai",
                   "model": "core", "models": ["core", "ultra", "sd3"], "docs": "https://platform.stability.ai/account/keys"},
     "fal_image": {"kind": "image", "adapter": "fal", "label": "fal.ai (any image model)", "base_url": "https://fal.run",
-                  "model": "fal-ai/flux/schnell", "models": ["fal-ai/flux/schnell", "fal-ai/flux/dev", "fal-ai/flux-pro/v1.1", "fal-ai/recraft-v3", "fal-ai/ideogram/v2"],
+                  "model": "fal-ai/flux/schnell", "models": ["fal-ai/flux/schnell", "fal-ai/flux-pro/v1.1", "fal-ai/recraft-v3", "fal-ai/ideogram/v2"],
                   "docs": "https://fal.ai/dashboard/keys"},
     "comfyui_image": {"kind": "image", "adapter": "comfyui", "label": "ComfyUI (self-hosted)", "base_url": "http://localhost:8188",
                       "model": "", "models": [], "key_optional": True, "needs_workflow": True, "docs": "https://github.com/comfyanonymous/ComfyUI"},

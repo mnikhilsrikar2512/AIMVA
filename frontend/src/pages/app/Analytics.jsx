@@ -96,7 +96,7 @@ export default function Analytics() {
                     <XAxis type="number" hide allowDecimals={false} />
                     <YAxis type="category" dataKey="stage" width={72} {...axis} />
                     <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                    <Bar dataKey="count" name="leads" radius={[0, 6, 6, 0]} fill="#8b7bff" />
+                    <Bar dataKey="count" name="leads" radius={[0, 6, 6, 0]} fill="#0b6b67" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

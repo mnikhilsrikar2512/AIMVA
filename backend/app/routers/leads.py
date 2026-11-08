@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+from datetime import timedelta
 from typing import Literal, Optional
 
 import httpx
@@ -41,6 +42,7 @@ def _row(l: Lead) -> list:
     return [_cell(d[c]) for c in COLUMNS]
 
 
+_SLACK = timedelta(minutes=1)  # the welcome row is written just after its message
 SOURCE_LABEL = {"website": "landing page", "meta": "Meta ads", "google": "Google ads", "linkedin": "LinkedIn ads",
                 "whatsapp": "WhatsApp", "voice": "voice call", "manual": "manual entry"}
 AD_SOURCES = ("meta", "google", "linkedin")
@@ -94,7 +96,20 @@ def create_lead(db: Session, user_id: int, bg: Optional[BackgroundTasks] = None,
         bg.add_task(auto_sync, user_id, lead.id)
         if is_new:
             bg.add_task(_concierge, lead.id)
+            bg.add_task(_alert, lead.id)
     return lead
+
+
+def _alert(lead_id: int) -> None:
+    """New lead → email the owner at once (app/alerts.py)."""
+    from ..alerts import on_new_lead
+    db = SessionLocal()
+    try:
+        on_new_lead(db, lead_id)
+    except Exception:
+        logging.getLogger("aimva.alerts").exception("Lead alert failed for lead %s", lead_id)
+    finally:
+        db.close()
 
 
 def _concierge(lead_id: int) -> None:
@@ -182,11 +197,40 @@ class LeadPatch(BaseModel):
     language: Optional[str] = Field(None, max_length=12)
 
 
+def welcomes(db: Session, user_id: int, leads: list) -> dict:
+    """Did each lead's automatic WhatsApp welcome really go out? {lead_id: {"status", "note"}}.
+
+    "sent" only means WhatsApp accepted it; when WhatsApp later reports the message failed, the lead says so."""
+    from ..models import FollowUp
+    if not leads:
+        return {}
+    by_id = {l.id: l for l in leads}
+    rows = {f.lead_id: f for f in db.scalars(select(FollowUp).where(
+        FollowUp.user_id == user_id, FollowUp.step == "welcome", FollowUp.lead_id.in_(list(by_id))))}
+    out = {lid: {"status": f.status, "note": f.note or ""} for lid, f in rows.items()}
+    sent = {lid: lead_reply._contacts(by_id[lid].phone) for lid, f in rows.items() if f.status == "sent"}
+    contacts = set().union(*sent.values()) if sent else set()
+    if contacts:
+        first = {}  # the first message sent to each number after its welcome
+        for m in db.scalars(select(WaMessage).where(WaMessage.user_id == user_id, WaMessage.direction == "out",
+                                                    WaMessage.contact.in_(contacts)).order_by(WaMessage.created_at)):
+            for lid, cs in sent.items():
+                if m.contact in cs and lid not in first and m.created_at >= rows[lid].due_at.replace(microsecond=0) - _SLACK:
+                    first[lid] = m
+        for lid, m in first.items():
+            if m.status == "failed":
+                out[lid] = {"status": "failed", "note": "WhatsApp couldn't deliver it"}
+            elif m.status in ("delivered", "read"):
+                out[lid]["status"] = m.status
+    return out
+
+
 def with_activity(db: Session, user_id: int, leads: list) -> list:
     act = lead_reply.activity(db, user_id, leads)
+    wel = welcomes(db, user_id, leads)
     out = []
     for l in leads:
-        row = {**lead_out(l), **act[l.id]}
+        row = {**lead_out(l), **act[l.id], "welcome": wel.get(l.id)}
         if not row["language"]:  # leads saved before languages were remembered: read it from their message
             guess = lead_reply.detect(l.message)
             if guess:

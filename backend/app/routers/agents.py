@@ -15,11 +15,14 @@ from ..models import AgentJob, ReferenceFile, Site, User
 from ..security import current_user, rate_limit
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
-Kind = Literal["launch", "concierge", "autopilot", "weekly_report", "page_fixer"]
+Kind = Literal["launch", "concierge", "autopilot", "weekly_report", "page_fixer", "lead_alerts"]
 
 
 def setting_out(s) -> dict:
-    return {"kind": s.kind, "label": KINDS[s.kind]["label"], "enabled": s.enabled, "mode": s.mode, "config": s.config or {},
+    cfg = dict(s.config or {})
+    if "push" in cfg:  # device addresses stay on the server; the page only needs to know how many
+        cfg["push_devices"] = len(cfg.pop("push") or [])
+    return {"kind": s.kind, "label": KINDS[s.kind]["label"], "enabled": s.enabled, "mode": s.mode, "config": cfg,
             "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None}
 
 
@@ -40,6 +43,7 @@ ALLOWED_CONFIG = {  # what each agent's config may contain, with limits
     "concierge": {"messages"},
     "autopilot": {"max_actions", "allow_scale", "max_scale_pct"},
     "weekly_report": {"email"},
+    "lead_alerts": {"email"},
 }
 
 

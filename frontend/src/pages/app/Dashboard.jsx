@@ -1,19 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Rocket } from "lucide-react";
-import { motion } from "framer-motion";
-import { CountUp, rise, spring, stagger } from "../../components/Motion";
-import { Chip, Modal, cx } from "../../components/ui";
+import { MessageCircle, Rocket } from "lucide-react";
+import { CountUp } from "../../components/Motion";
+import { Modal } from "../../components/ui";
 import { useOnboarding } from "../../components/AppLayout";
 import { FirstLeadPath } from "../../components/Onboarding";
 import { post } from "../../lib/api";
 import { useLeadEvents } from "../../lib/live";
 import { useAuth } from "../../lib/auth";
-import { useApi } from "../../lib/hooks";
+import { timeAgo, useApi } from "../../lib/hooks";
 import { LaunchCard } from "../../components/Agents";
 import { RecentWork } from "../../components/RecentWork";
-import { nextLeadMilestone } from "../../components/Celebrate";
 import { answersFrom } from "../../lib/onboardingAnswers";
+import { LoadErrorBar } from "../../components/LoadError";
 
 export const SOURCE_TONE = { website: "pink", meta: "blue", google: "green", linkedin: "cyan", whatsapp: "green", voice: "violet", manual: "slate" };
 
@@ -29,44 +28,80 @@ export function ChartTooltip({ active, payload, label }) {
   );
 }
 
-const STAGE = { new: ["New", "bg-sky-400"], contacted: ["Contacted", "bg-violet-400"], qualified: ["Qualified", "bg-amber-400"],
-  won: ["Won", "bg-emerald-500"], lost: ["Lost", "bg-slate-300"] };
+const inr = (v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+const SOURCE_WORD = { website: "your page", meta: "Meta ads", google: "Google ads", linkedin: "LinkedIn ads", whatsapp: "WhatsApp", voice: "calls", manual: "added by hand" };
+const plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
 
-/** Where leads are in the pipeline; bars grow to their share so stuck stages stand out. */
-function Pipeline({ funnel }) {
-  const max = Math.max(1, ...funnel.map((f) => f.count));
-  return (
-    <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-3">
-      {funnel.map((f) => {
-        const [label, color] = STAGE[f.stage] || [f.stage, "bg-slate-300"];
-        return (
-          <motion.div key={f.stage} variants={rise}>
-            <div className="mb-1 flex justify-between text-sm"><span className="text-ink">{label}</span><span className="font-semibold text-strong"><CountUp value={f.count} /></span></div>
-            <div className="h-2 overflow-hidden rounded-full bg-ink/[0.06]">
-              <motion.div className={cx("h-full rounded-full", color)} initial={{ width: 0 }} animate={{ width: `${(f.count / max) * 100}%` }} transition={{ ...spring, delay: 0.15 }} />
-            </div>
-          </motion.div>
-        );
-      })}
-    </motion.div>
-  );
+/** When the owner last opened Home, kept in this browser. Read once per visit, then moved to now. */
+function useLastVisit(userId) {
+  const [since] = useState(() => {
+    const key = `aimva.home.seen.${userId}`;
+    let prev = null;
+    try { prev = localStorage.getItem(key); localStorage.setItem(key, new Date().toISOString()); } catch { /* private window */ }
+    // A visit a minute ago says nothing: look back at least an hour.
+    return prev && Date.now() - Date.parse(prev) > 3600e3 ? prev : new Date(Date.now() - 24 * 3600e3).toISOString();
+  });
+  return since;
 }
 
-const inr = (v) => `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+function sinceWords(iso, firstVisit) {
+  const d = new Date(iso);
+  if (Date.now() - d.getTime() <= 24.5 * 3600e3 && firstVisit) return "In the last 24 hours";
+  const day = d.toDateString() === new Date().toDateString() ? "today" : d.toLocaleDateString(undefined, { weekday: "long" });
+  return `Since you were last here (${day}, ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })})`;
+}
 
-/** One sentence of numbers instead of a row of stat boxes. */
-function NumbersLine({ k }) {
-  if (!k) return <p className="h-5 w-72 max-w-full animate-pulse rounded-full bg-surface-2" aria-label="Loading numbers" />;
-  const change = k.leads_change == null ? null : k.leads_change;
+/** What came in, who is waiting, what AIMVA does by itself later. The 30-day numbers live on Results. */
+function Today({ t, error, onRetry, isClient }) {
+  if (error && !t) return <LoadErrorBar what="today" onRetry={onRetry} className="max-w-3xl" />;
+  if (!t) return <div className="space-y-3" aria-label="Loading">{[0, 1].map((i) => <div key={i} className="h-6 max-w-xl animate-pulse rounded-full bg-surface-2" />)}</div>;
+  const n = t.new.count;
+  const sources = Object.entries(t.new.by_source).map(([s, c]) => `${c} from ${SOURCE_WORD[s] || s}`);
+  const firstVisit = Math.abs(Date.parse(t.since + "Z") - (Date.now() - 24 * 3600e3)) < 120e3;
+  const later = [t.later.follow_ups && `send ${plural(t.later.follow_ups, "follow-up")} on WhatsApp`,
+    t.later.calls && `ring ${plural(t.later.calls, "lead")} once it's 9am where they are`].filter(Boolean);
   return (
-    <p className="text-[15px] leading-relaxed text-ink">
-      <b className="font-semibold text-strong"><CountUp value={k.leads} /> lead{k.leads === 1 ? "" : "s"}</b> in the last 30 days
-      {change != null && change !== 0 && <span className={change > 0 ? "text-emerald-700" : "text-muted"}> ({change > 0 ? "+" : ""}{change}%)</span>}
-      {k.hot_leads > 0 && <>, <b className="font-semibold text-warm">{k.hot_leads} hot</b></>}.
-      {k.cpl ? <> <b className="font-semibold text-strong">{inr(k.cpl)}</b> a lead.</> : null}
-      {k.calls > 0 && <> {k.calls} call{k.calls === 1 ? "" : "s"} answered.</>}
-      {" "}<Link to="/app/analytics" className="text-sm font-medium text-brand hover:underline">Charts</Link>
-    </p>
+    <div className="max-w-3xl space-y-6">
+      <p className="text-[15px] leading-relaxed text-ink">
+        <span className="text-muted">{sinceWords(t.since + "Z", firstVisit)}: </span>
+        {n ? <><b className="font-semibold text-strong"><CountUp value={n} /> new lead{n === 1 ? "" : "s"}</b>{sources.length > 1 || n > 1 ? ` (${sources.join(", ")})` : ` from ${SOURCE_WORD[Object.keys(t.new.by_source)[0]] || "somewhere"}`}.</> : "no new leads."}
+        {t.won.count > 0 && <> <b className="font-semibold text-emerald-700">{plural(t.won.count, "sale")}{t.won.value ? ` worth ${inr(t.won.value)}` : ""}</b>.</>}
+        {t.calls > 0 && <> {plural(t.calls, "call")} answered for you.</>}
+      </p>
+
+      {t.welcome_not_sent.count > 0 && !isClient && (
+        <p className="text-sm text-warm">
+          {t.welcome_not_sent.count === 1 ? "One welcome" : `${t.welcome_not_sent.count} welcomes`} didn't go out{t.welcome_not_sent.why ? `: ${t.welcome_not_sent.why}` : ""}.{" "}
+          <Link to={/connected/i.test(t.welcome_not_sent.why) ? "/app/settings?tab=integrations" : `/app/leads?lead=${t.welcome_not_sent.lead_id}`} className="font-medium text-brand hover:underline">
+            {/connected/i.test(t.welcome_not_sent.why) ? "Connect WhatsApp" : "Send it yourself"}
+          </Link>
+        </p>
+      )}
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-strong">{t.waiting.count ? `Waiting on ${isClient ? "a reply" : "you"} (${t.waiting.count})` : "Nobody is waiting"}</h2>
+        {t.waiting.count ? (
+          <ul className="divide-y divide-line">
+            {t.waiting.leads.map((l) => (
+              <li key={l.id} className="flex items-center gap-3 py-2.5">
+                <Link to={`/app/leads?lead=${l.id}`} className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-x-2 text-sm">
+                    <span className="font-semibold text-strong hover:underline">{l.name}</span>
+                    <span className="text-xs text-warm">waiting {timeAgo(l.waiting_since).replace(/ ago$/, "")}</span>
+                    {l.language_name && <span className="text-xs text-muted">{l.language_name}</span>}
+                  </p>
+                  {l.message && <p className="line-clamp-1 text-sm text-muted">{l.message}</p>}
+                </Link>
+                {!isClient && l.phone && <Link to={`/app/leads?lead=${l.id}&reply=1`} className="btn-primary btn-sm shrink-0"><MessageCircle className="size-3.5" /> Reply</Link>}
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-sm text-muted">Everyone has had an answer. New leads land here first.</p>}
+        {t.waiting.count > t.waiting.leads.length && <Link to="/app/leads" className="mt-1 inline-block text-sm font-medium text-brand hover:underline">All {t.waiting.count} waiting</Link>}
+      </section>
+
+      {later.length > 0 && !isClient && <p className="text-sm text-muted">Later today AIMVA will {later.join(" and ")}. Nothing for you to do.</p>}
+    </div>
   );
 }
 
@@ -79,7 +114,8 @@ export default function Dashboard() {
   // Getting started until the first lead exists or the person skips the guide. Data decides, not a setting.
   const starting = !!ob && !ob.dismissed && !steps.lead;
   const isClient = user?.workspace?.role === "client";
-  const { data, reload } = useApi(starting || !ob ? null : "/api/analytics/overview?days=30");
+  const since = useLastVisit(user.id);
+  const { data, reload, error } = useApi(starting || !ob ? null : `/api/today?since=${encodeURIComponent(since)}`);
   const sites = useApi(starting ? "/api/sites" : null, []);
   useLeadEvents(() => { reload(); });
   const [launch, setLaunch] = useState(false);
@@ -88,8 +124,6 @@ export default function Dashboard() {
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const first = user.name.split(" ")[0];
-  const k = data?.kpis;
-  const next = k ? nextLeadMilestone(k.leads) : null;
 
   return (
     <div>
@@ -103,7 +137,9 @@ export default function Dashboard() {
         )}
       </div>
 
-      {!ob ? (
+      {!ob && onboarding?.error ? (
+        <LoadErrorBar what="your home page" onRetry={onboarding.reload} className="max-w-3xl" />
+      ) : !ob ? (
         <div className="space-y-3" aria-label="Loading">{[0, 1, 2].map((i) => <div key={i} className="h-10 max-w-3xl animate-pulse rounded-lg bg-surface-2" style={{ opacity: 1 - i * 0.25 }} />)}</div>
       ) : starting ? (
         <>
@@ -117,29 +153,10 @@ export default function Dashboard() {
         </>
       ) : (
         <>
-          <NumbersLine k={k} />
-          {next && <p className="mt-1 text-xs text-muted">{next.left} more to {next.target} leads.</p>}
-
-          <div className="mt-8 grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <div className="min-w-0"><RecentWork limit={12} /></div>
-            <aside className="min-w-0">
-              <h2 className="mb-3 text-sm font-semibold text-strong">Pipeline</h2>
-              {data ? <Pipeline funnel={data.funnel} /> : <div className="h-32 animate-pulse rounded-lg bg-surface-2" />}
-              <h2 className="mb-3 mt-8 text-sm font-semibold text-strong">Top leads</h2>
-              {data?.top_leads?.length ? (
-                <ul className="space-y-2.5">
-                  {data.top_leads.map((l) => (
-                    <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
-                      <Link to={`/app/leads?lead=${l.id}`} className="truncate py-1 text-ink hover:text-brand hover:underline">{l.name}</Link>
-                      <span className="flex items-center gap-2">
-                        <Chip tone={SOURCE_TONE[l.source] || "slate"}>{l.source}</Chip>
-                        <span className={cx("w-8 text-right font-semibold", l.score >= 70 ? "text-warm" : "text-strong")}>{l.score}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : data ? <p className="text-sm text-muted">Your best leads show up here, scored by how likely they are to buy.</p> : null}
-            </aside>
+          <Today t={data} error={error} onRetry={reload} isClient={isClient} />
+          <div className="mt-10 max-w-3xl">
+            <RecentWork limit={8} />
+            <p className="mt-4 text-xs text-muted">Your 30-day numbers and charts are on <Link to="/app/analytics" className="font-medium text-brand hover:underline">Results</Link>.</p>
           </div>
         </>
       )}

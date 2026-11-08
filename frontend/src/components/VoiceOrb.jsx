@@ -9,7 +9,7 @@ import * as THREE from "three";
  * `level` is a ref ({ current: 0..1 }) so audio updates never re-render React.
  */
 
-export const SENTIMENT_COLORS = { calm: "#34d399", neutral: "#fbbf24", upset: "#f43f5e", idle: "#8b7bff" };
+export const SENTIMENT_COLORS = { calm: "#34d399", neutral: "#fbbf24", upset: "#f43f5e", idle: "#5eb8ac" };
 
 export function sentimentColor(s) {
   if (s == null) return new THREE.Color(SENTIMENT_COLORS.idle);

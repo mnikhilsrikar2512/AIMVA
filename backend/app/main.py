@@ -15,7 +15,7 @@ from .db import check_database, migrate
 from .security import current_user
 from .domains import CustomDomainMiddleware, router as domains_router
 from .observability import RequestContextMiddleware, request_id_var, setup_logging, setup_sentry
-from .routers import agents, analytics, auth, brand, campaigns, command, templates, providers, references, content, events, feedback, integrations, leads, onboarding, sites, voice, whatsapp
+from .routers import agents, analytics, auth, brand, campaigns, command, templates, providers, references, content, events, feedback, integrations, leads, onboarding, sites, voice, whatsapp, story, today
 
 setup_logging()
 log = logging.getLogger("aimva")
@@ -34,9 +34,11 @@ app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url], allow_
 app.add_middleware(CustomDomainMiddleware)
 app.add_middleware(RequestContextMiddleware)  # added last = runs first, so every response gets its id and headers
 
-for r in (auth, onboarding, events, brand, providers, references, integrations, content, sites, feedback, templates, leads, campaigns, command, whatsapp, voice, analytics, agents):
+for r in (auth, onboarding, events, brand, providers, references, integrations, content, sites, feedback, templates, leads, campaigns, command, whatsapp, voice, analytics, agents, story, today):
     app.include_router(r.router)
 app.include_router(domains_router)
+from .alerts import router as alerts_router  # noqa: E402
+app.include_router(alerts_router)
 from .billing import router as billing_router  # noqa: E402
 app.include_router(billing_router)
 from .workspaces import router as workspaces_router  # noqa: E402
@@ -129,4 +131,8 @@ if DIST.exists():
             return JSONResponse({"detail": "Not found."}, status_code=404)
         f = (DIST / path).resolve()
         ok = path and f.is_file() and DIST.resolve() in f.parents
+        if ok and path == "sw.js":  # the phone must pick up a new service worker straight away
+            return FileResponse(f, media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+        if ok and path.endswith(".webmanifest"):
+            return FileResponse(f, media_type="application/manifest+json")
         return FileResponse(f if ok else DIST / "index.html")

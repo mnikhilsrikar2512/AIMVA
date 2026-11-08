@@ -63,7 +63,7 @@ export default function WhatsApp() {
 
   return (
     <div>
-      <PageHeader icon={MessageCircle} tone="green" title="WhatsApp" subtitle="Chat with leads, send scheduling messages and capture enquiries."
+      <PageHeader title="WhatsApp" subtitle={connected ? "Answer leads, follow up, and see what the concierge sent for you." : undefined}
         actions={<>
           {connected && <Button variant="ghost" onClick={() => setApprovedOpen(true)}><BadgeCheck className="size-4" /> Approved templates</Button>}
           {user?.can_simulate && <Button variant="ghost" onClick={() => setSim(true)}><FlaskConical className="size-4" /> Simulate inbound</Button>}
@@ -72,7 +72,7 @@ export default function WhatsApp() {
       {integError && <LoadErrorBar what="your WhatsApp connection" onRetry={reloadIntegrations} />}
       {!connected && !integLoading && !integError && (
         <Notice tone="green" icon={MessageCircle} action={<Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect number</Link>}>
-          Sandbox mode: messages are saved but not delivered. Connect a WhatsApp Cloud API number to send for real.
+          Not connected yet, so messages here are saved but not delivered. Connect your WhatsApp Business number to send for real.
         </Notice>
       )}
       <Card className="grid h-[640px] grid-cols-1 overflow-hidden p-0 sm:p-0 md:grid-cols-[300px_1fr]">

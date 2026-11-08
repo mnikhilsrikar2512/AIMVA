@@ -75,7 +75,7 @@ export default function AdSetDialog({ asset, open, onClose, onMade }) {
               <div className="grid gap-2 sm:grid-cols-2">
                 {SIZES.map(([k, l, px]) => (
                   <label key={k} className={cx("flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm", f.sizes.includes(k) ? "bg-lavender/70" : "bg-surface-2/60")}>
-                    <input type="checkbox" className="size-4 accent-violet-500" checked={f.sizes.includes(k)} onChange={() => toggle(k)} />
+                    <input type="checkbox" className="size-4 accent-brand" checked={f.sizes.includes(k)} onChange={() => toggle(k)} />
                     <span className="font-medium text-strong">{l}</span><span className="ml-auto text-xs text-faint">{px}</span>
                   </label>
                 ))}
@@ -85,7 +85,7 @@ export default function AdSetDialog({ asset, open, onClose, onMade }) {
               <label className="flex items-center gap-2">Text at the
                 <select className="input h-9 w-auto" value={f.position} onChange={set("position")}><option value="bottom">bottom</option><option value="top">top</option></select>
               </label>
-              {brand?.logos?.length > 0 && <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-violet-500" checked={f.add_logo} onChange={set("add_logo")} /> Add my logo</label>}
+              {brand?.logos?.length > 0 && <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-brand" checked={f.add_logo} onChange={set("add_logo")} /> Add my logo</label>}
             </div>
             <div className="flex justify-end">
               <Button onClick={make} busy={busy} disabled={!f.sizes.length}><LayoutGrid className="size-4" /> Make {f.sizes.length} size{f.sizes.length === 1 ? "" : "s"}</Button>

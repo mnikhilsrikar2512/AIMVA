@@ -154,7 +154,7 @@ export function PageHeader({ icon: Icon, title, subtitle, actions, tone = "viole
 
 export const TONES = {
   cyan: { tile: "bg-cyan-50 text-cyan-600", chip: "border-transparent bg-cyan-50 text-cyan-700", dot: "bg-cyan-500", text: "text-cyan-600" },
-  violet: { tile: "bg-violet-50 text-violet-600", chip: "border-transparent bg-violet-50 text-violet-700", dot: "bg-violet-500", text: "text-violet-600" },
+  violet: { tile: "bg-lavender text-brand", chip: "border-transparent bg-lavender text-brand", dot: "bg-brand", text: "text-brand" },  // the brand tone (teal since 2026-11-08); name kept for callers
   green: { tile: "bg-emerald-50 text-emerald-600", chip: "border-transparent bg-emerald-50 text-emerald-700", dot: "bg-emerald-500", text: "text-emerald-600" },
   pink: { tile: "bg-pink-50 text-pink-600", chip: "border-transparent bg-pink-50 text-pink-700", dot: "bg-pink-500", text: "text-pink-600" },
   amber: { tile: "bg-amber-50 text-amber-600", chip: "border-transparent bg-amber-50 text-amber-700", dot: "bg-amber-500", text: "text-amber-600" },

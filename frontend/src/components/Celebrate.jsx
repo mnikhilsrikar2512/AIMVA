@@ -10,7 +10,7 @@ import { parseServerDate } from "../lib/hooks";
 import { useLeadEvents } from "../lib/live";
 
 /* ---- confetti: a tiny canvas burst, no dependency ------------------------------------------------- */
-const COLORS = ["#a34d22", "#ff9f7a", "#6d5dfc", "#0e9fb8", "#f2c14e", "#7fb069"];
+const COLORS = ["#0b6b67", "#f4a21c", "#13827a", "#a35700", "#7cc6b8", "#ffd27a"];
 const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 export function confetti({ big = false } = {}) {

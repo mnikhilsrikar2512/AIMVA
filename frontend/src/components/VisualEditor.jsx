@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { ArrowUp, Check, CloudOff, ImagePlus, Loader2, Monitor, MousePointerClick, Palette, Redo2, Smartphone, Sparkles, Undo2, X } from "lucide-react";
+import { ArrowUp, Check, CloudOff, ImagePlus, Loader2, Monitor, MessageSquarePlus, MousePointerClick, Palette, Redo2, Smartphone, Sparkles, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Field, Modal, cx } from "./ui";
 import { post } from "../lib/api";
@@ -16,20 +16,21 @@ import { ACCEPT_IMAGES, UploadTile } from "./References";
 const EDITOR_JS = String.raw`(function(){
 var TEXT='h1,h2,h3,h4,h5,h6,p,li,a,button,figcaption,blockquote,summary,label,td,th,dt,dd,small,span';
 var SECTION='[data-aimva-section],section,header,footer,aside';
-var undo=[],redo=[],editing=null,hoverSec=null,target=null,ids=0,bgOpen=false,fxOpen=false;
+var undo=[],redo=[],editing=null,hoverSec=null,target=null,ids=0,bgOpen=false,fxOpen=false,cmode=false;
 var css=document.createElement('style');css.setAttribute('data-aimva-editor','');
-css.textContent='[data-ae-hover]{outline:2px dashed rgba(109,93,252,.55)!important;outline-offset:-2px}'+
-'[data-ae-target]{outline:3px solid #6d5dfc!important;outline-offset:-3px}'+
-'[contenteditable=true]{outline:2px solid #6d5dfc!important;outline-offset:3px;cursor:text;min-width:1em}'+
-'[data-ae-text]:hover{outline:1px solid rgba(109,93,252,.45);outline-offset:2px;cursor:text}img{cursor:pointer}img:hover{outline:3px solid #6d5dfc;outline-offset:-3px}'+
-'.ae-bar{position:absolute;z-index:2147483647;display:flex;align-items:center;gap:2px;background:#14121f;border-radius:999px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.3);font:600 12px/1 system-ui,sans-serif;max-width:calc(100vw - 16px);flex-wrap:wrap}'+
+css.textContent='[data-ae-hover]{outline:2px dashed rgba(11,107,103,.55)!important;outline-offset:-2px}'+
+'[data-ae-target]{outline:3px solid #0b6b67!important;outline-offset:-3px}'+
+'[contenteditable=true]{outline:2px solid #0b6b67!important;outline-offset:3px;cursor:text;min-width:1em}'+
+'[data-ae-text]:hover{outline:1px solid rgba(11,107,103,.45);outline-offset:2px;cursor:text}img{cursor:pointer}img:hover{outline:3px solid #0b6b67;outline-offset:-3px}'+
+'.ae-bar{position:absolute;z-index:2147483647;display:flex;align-items:center;gap:2px;background:#0f2b2d;border-radius:999px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.3);font:600 12px/1 system-ui,sans-serif;max-width:calc(100vw - 16px);flex-wrap:wrap}'+
 '.ae-bar button{all:unset;color:#fff;padding:7px 10px;border-radius:999px;cursor:pointer;white-space:nowrap}.ae-bar button:hover{background:rgba(255,255,255,.16)}'+
 '.ae-bar .ae-sw{width:18px;height:18px;padding:0;margin:0 3px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.35)}.ae-bar .ae-sw:hover{box-shadow:0 0 0 2px #fff}'+
-'[data-ae-drop=before]{box-shadow:0 -4px 0 #6d5dfc!important}[data-ae-drop=after]{box-shadow:0 4px 0 #6d5dfc!important}[data-ae-dragging]{opacity:.45}'+
-'[data-ae-img]{outline:3px solid #6d5dfc!important;outline-offset:-3px}'+
-'.ae-handle{position:absolute;z-index:2147483646;width:16px;height:16px;background:#6d5dfc;border:2px solid #fff;border-radius:4px;cursor:nwse-resize;touch-action:none;box-shadow:0 2px 8px rgba(0,0,0,.3)}'+
+'[data-ae-drop=before]{box-shadow:0 -4px 0 #0b6b67!important}[data-ae-drop=after]{box-shadow:0 4px 0 #0b6b67!important}[data-ae-dragging]{opacity:.45}'+
+'[data-ae-img]{outline:3px solid #0b6b67!important;outline-offset:-3px}'+
+'.ae-handle{position:absolute;z-index:2147483646;width:16px;height:16px;background:#0b6b67;border:2px solid #fff;border-radius:4px;cursor:nwse-resize;touch-action:none;box-shadow:0 2px 8px rgba(0,0,0,.3)}'+
 '.ae-bar .ae-grip{cursor:grab;touch-action:none}'+
-'.ae-bar .ae-sep{width:1px;height:18px;background:rgba(255,255,255,.2);margin:0 3px}.ae-bar .ae-ai{background:#6d5dfc}.ae-bar .ae-ai:hover{background:#7f71ff}';
+'html[data-ae-cmode],html[data-ae-cmode] *{cursor:crosshair!important}html[data-ae-cmode] [data-ae-text]:hover,html[data-ae-cmode] img:hover{outline:none!important}'+
+'.ae-bar .ae-sep{width:1px;height:18px;background:rgba(255,255,255,.2);margin:0 3px}.ae-bar .ae-ai{background:#0b6b67}.ae-bar .ae-ai:hover{background:#13827a}';
 document.head.appendChild(css);
 function send(m){parent.postMessage(Object.assign({aimva:1},m),'*')}
 function state(){send({type:'history',undo:undo.length,redo:redo.length})}
@@ -130,8 +131,11 @@ function editable(el){if(!el||el.closest('[data-aimva-editor]'))return null;var 
 function mark(root){root.querySelectorAll(TEXT).forEach(function(el){if(el.textContent.trim())el.setAttribute('data-ae-text','')})}
 mark(document);
 document.addEventListener('submit',function(e){e.preventDefault()},true);
-document.addEventListener('mouseover',function(e){if(editing||imgSel||e.target.closest('[data-aimva-editor]'))return;var s=e.target.closest(SECTION);if(s&&s!==hoverSec){if(hoverSec)hoverSec.removeAttribute('data-ae-hover');hoverSec=s;bgOpen=false;fxOpen=false;s.setAttribute('data-ae-hover','');sectionBar(s)}});
+document.addEventListener('mouseover',function(e){if(cmode||editing||imgSel||e.target.closest('[data-aimva-editor]'))return;var s=e.target.closest(SECTION);if(s&&s!==hoverSec){if(hoverSec)hoverSec.removeAttribute('data-ae-hover');hoverSec=s;bgOpen=false;fxOpen=false;s.setAttribute('data-ae-hover','');sectionBar(s)}});
 document.addEventListener('click',function(e){if(e.target.closest('[data-aimva-editor]'))return;
+  if(cmode){e.preventDefault();e.stopPropagation();var cs=e.target.closest(SECTION)||e.target.closest('body > *');if(!cs)return;if(!cs.getAttribute('data-ae-sid'))cs.setAttribute('data-ae-sid','s'+(++ids));
+    var lt=(e.target.closest('h1,h2,h3,h4,p,li,a,button,img,label')||cs);var lb=lt.tagName==='IMG'?'the picture'+(lt.alt?' “'+lt.alt.slice(0,40)+'”':''):'“'+(lt.textContent||'').replace(/\s+/g,' ').trim().slice(0,60)+'”';
+    send({type:'comment',id:cs.getAttribute('data-ae-sid'),label:lb,section:label(cs),x:e.clientX,y:e.clientY+window.scrollY});return}
   if(e.target.tagName==='IMG'){e.preventDefault();stop();hide('ae-sec');imageBar(e.target);return}
   unselectImg();
   var t=editable(e.target);if(t&&!e.target.closest('input,textarea,select')){e.preventDefault();if(editing===t)return;stop();snap();editing=t;t.__before=t.innerHTML;t.setAttribute('contenteditable','true');t.focus();hide('ae-sec');textBar(t);return}
@@ -147,7 +151,9 @@ function strip(root){root.querySelectorAll('[data-aimva-editor]').forEach(functi
   root.querySelectorAll(ATTRS.map(function(a){return '['+a+']'}).join(',')).forEach(function(n){ATTRS.forEach(function(a){n.removeAttribute(a)})});
   if(root.removeAttribute)ATTRS.forEach(function(a){root.removeAttribute(a)});return root}
 function clean(){return '<!doctype html>\n'+strip(document.documentElement.cloneNode(true)).outerHTML}
+window.addEventListener('scroll',function(){if(cmode)send({type:'scroll',y:window.scrollY})},{passive:true});
 window.addEventListener('message',function(e){if(e.source!==parent)return;var m=e.data||{};
+  if(m.type==='comment-mode'){cmode=!!m.on;stop();unselectImg();hide('ae-sec');if(hoverSec){hoverSec.removeAttribute('data-ae-hover');hoverSec=null}if(cmode)document.documentElement.setAttribute('data-ae-cmode','');else document.documentElement.removeAttribute('data-ae-cmode');send({type:'scroll',y:window.scrollY});return}
   if(m.type==='set-image'){var img=document.querySelector('img[data-ae-id="'+m.id+'"]');if(img){snap();img.src=m.src;img.removeAttribute('srcset');if(m.alt!==undefined)img.alt=m.alt;changed()}}
   else if(m.type==='insert-image'){var sc=document.querySelector('[data-ae-sid="'+m.sid+'"]');if(sc){snap();var box=sc.children.length===1&&sc.firstElementChild.children.length?sc.firstElementChild:sc;
     var im=document.createElement('img');im.src=m.src;im.alt=m.alt||'';im.style.cssText='display:block;width:100%;max-width:100%;height:auto;border-radius:12px;margin:16px auto';box.appendChild(im);changed();im.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(function(){imageBar(im)},350)}}
@@ -259,6 +265,10 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
   const [imgLink, setImgLink] = useState("");
   const [target, setTarget] = useState(null);  // {id, label}: the section Ask AI will change
   const [ask, setAsk] = useState("");
+  // Comment mode: click a spot on the page, leave a Claude-style comment, and AI changes that section.
+  const [commenting, setCommenting] = useState(false);
+  const [note, setNote] = useState(null);  // {id, label, section, x, y, text, busy}
+  const [scrollY, setScrollY] = useState(0);
   const [asking, setAsking] = useState(false);
   const waiters = useRef({});  // pending replies from the page, by message type
   const timer = useRef(null);
@@ -313,6 +323,8 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
       else if (m.type === "image") { setPicking({ id: m.id, alt: m.alt }); setImgRef(""); setImgLink(""); }
       else if (m.type === "add-image") { setPicking({ sid: m.sid, alt: "" }); setImgRef(""); setImgLink(""); }
       else if (m.type === "link") setLinking({ id: m.id, href: m.href });
+      else if (m.type === "comment") setNote((n) => (n?.busy ? n : { id: m.id, label: m.label, section: m.section, x: m.x, y: m.y, text: "" }));
+      else if (m.type === "scroll") setScrollY(m.y);
       else if (m.type === "target") {
         setTarget(m.id ? { id: m.id, label: m.label } : null);
         if (m.id) setTimeout(() => askBox.current?.focus(), 30);
@@ -356,6 +368,31 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
     if (vars?.main) send({ type: "set-var", name: vars.main, value: main });
     if (vars?.accent) send({ type: "set-var", name: vars.accent, value: accent });
     setVars((v) => ({ ...v, mainValue: main, accentValue: accent }));
+  };
+
+  const toggleComments = () => {
+    const on = !commenting;
+    setCommenting(on);
+    setNote(null);
+    send({ type: "comment-mode", on });
+  };
+  const runNote = async (e) => {
+    e?.preventDefault();
+    const n = note;
+    if (!n || n.text.trim().length < 3 || n.busy) return;
+    setNote({ ...n, busy: true });
+    try {
+      const section = await request({ type: "get-section", id: n.id }, "section");
+      if (!section) throw new Error("That part of the page is gone. Click it again.");
+      const out = await post(`/api/sites/${siteId}/ai-edit`, { instruction: `${n.text.trim()} (This is about ${n.label} in this section.)`, section });
+      send({ type: "replace-section", id: n.id, html: out.section });
+      send({ type: "clear-target" });
+      setNote(null);
+      toast.success("Done. Undo if you don't like it.");
+    } catch (err) {
+      toast.error(err.message);
+      setNote((x) => (x ? { ...x, busy: false } : x));
+    }
   };
 
   const runAsk = async (e) => {
@@ -443,20 +480,48 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
       <div className="relative min-h-0 flex-1 overflow-hidden p-2 sm:p-3">
         <iframe ref={frame} title="Page editor" srcDoc={doc} sandbox="allow-scripts" 
           className={cx("mx-auto block h-full rounded-xl bg-white shadow-sm transition-all", view === "mobile" ? "w-[390px] max-w-full" : "w-full")} />
+        {commenting && note && frame.current && (() => {
+          const fx = frame.current.offsetLeft, fy = frame.current.offsetTop, fw = frame.current.clientWidth;
+          const top = fy + note.y - scrollY;
+          if (top < fy - 4 || top > fy + frame.current.clientHeight) return null;
+          const flip = note.x > fw - 300;
+          return (
+            <div className="absolute z-10" style={{ left: fx + note.x, top }}>
+              <span className={cx("absolute bottom-0 left-0 grid size-6 place-items-center rounded-[50%_50%_50%_2px] text-[11px] font-semibold text-white shadow-md ring-[1.5px] ring-white", note.busy ? "bg-strong" : "bg-violet-600")}>
+                {note.busy ? <Loader2 className="size-3 animate-spin" /> : 1}
+              </span>
+              <form onSubmit={runNote} className={cx("absolute top-2 w-72 max-w-[80vw] rounded-xl bg-surface shadow-xl ring-1 ring-ink/10", flip ? "right-1" : "left-2")}>
+                <div className="flex items-end gap-1 p-1.5">
+                  <textarea autoFocus rows={1} maxLength={600} value={note.text} disabled={note.busy} placeholder={`Comment on ${note.label.length > 30 ? "this spot" : note.label}…`}
+                    className="min-h-7 flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-5 text-strong outline-none placeholder:text-muted"
+                    onChange={(e) => { setNote({ ...note, text: e.target.value }); e.target.style.height = "auto"; e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`; }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runNote(); } if (e.key === "Escape") setNote(null); }} />
+                  <button type="submit" aria-label="Apply" disabled={note.busy || note.text.trim().length < 3}
+                    className="grid size-7 shrink-0 place-items-center rounded-full bg-violet-600 text-white disabled:bg-ink/15"><ArrowUp className="size-3.5" /></button>
+                </div>
+                {note.busy && <p className="px-3 pb-2 text-xs text-muted">Changing this part of the page…</p>}
+              </form>
+            </div>
+          );
+        })()}
       </div>
 
       <form onSubmit={runAsk} className="border-t border-line bg-surface px-3 py-2.5 sm:px-4">
         <div className="mx-auto flex max-w-3xl flex-col gap-2">
           <div className="flex items-center gap-2 text-xs text-muted">
-            {target ? (
+            <button type="button" onClick={toggleComments} aria-pressed={commenting} title="Click any spot on the page and say what to change"
+              className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold", commenting ? "bg-violet-600 text-white" : "bg-surface-2 text-strong hover:bg-lavender")}>
+              <MessageSquarePlus className="size-3.5" /> {commenting ? "Commenting · click the page" : "Comment"}
+            </button>
+            {commenting ? <span className="truncate">Click any spot, say what should change, press Enter.</span> : target ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-lavender px-2.5 py-1 font-medium text-strong">
                 Changing: {target.label}
                 <button type="button" aria-label="Change the whole page instead" onClick={() => send({ type: "clear-target" })} className="text-muted hover:text-strong"><X className="size-3.5" /></button>
               </span>
             ) : (
-              <span className="flex items-center gap-1.5"><MousePointerClick className="size-3.5 text-brand" /> Click text to type · click an image to resize, move or swap it · hover a section for colour, order or <b className="text-ink">✨ Ask AI</b></span>
+              <span className="hidden items-center gap-1.5 sm:flex"><MousePointerClick className="size-3.5 text-brand" /> Click text to type · click an image to resize, move or swap it · hover a section for colour, order or <b className="text-ink">✨ Ask AI</b></span>
             )}
-            {!ask && <span className="hidden min-w-0 flex-1 gap-1.5 overflow-hidden lg:flex">{AI_IDEAS.slice(0, target ? 3 : 2).map((x) => (
+            {!ask && !commenting && <span className="hidden min-w-0 flex-1 gap-1.5 overflow-hidden lg:flex">{AI_IDEAS.slice(0, target ? 3 : 2).map((x) => (
               <button key={x} type="button" className="shrink-0 whitespace-nowrap rounded-full bg-surface-2 px-2.5 py-1 hover:bg-lavender" onClick={() => { setAsk(x); askBox.current?.focus(); }}>{x}</button>
             ))}</span>}
           </div>

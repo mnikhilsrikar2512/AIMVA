@@ -368,3 +368,18 @@ def test_site_conversion_never_exceeds_100(auth_client, client):
     for i in range(3):
         client.post(f"/api/public/sites/{site['slug']}/lead", data={"phone": f"+91999999990{i}"})
     assert auth_client.get("/api/analytics/overview").json()["kpis"]["conversion"] == 100.0
+
+
+def test_insights_rank_channels_by_buyers_not_by_count(auth_client):
+    from app.db import SessionLocal
+    from app.models import Lead, User
+    db = SessionLocal()
+    uid = db.query(User).filter_by(email="owner@example.com").one().id
+    for i in range(20):  # WhatsApp sends most leads, but website leads buy
+        db.add(Lead(user_id=uid, name=f"W{i}", source="whatsapp", stage="lost" if i else "won", value=1000 if not i else 0))
+    for i in range(8):
+        db.add(Lead(user_id=uid, name=f"S{i}", source="website", stage="won" if i < 4 else "new", value=1000 if i < 4 else 0))
+    db.commit()
+    db.close()
+    first = auth_client.get("/api/analytics/insights").json()["items"][0]
+    assert "4 of 8 'website' leads bought" in first and "'whatsapp'" in first

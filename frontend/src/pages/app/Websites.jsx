@@ -18,6 +18,7 @@ import { BriefCoach, ImportBar, Rate, ReadinessPanel, useBriefReview } from "../
 import { DECORS, DirectionsButton, LayoutPicker } from "../../components/Designs";
 import VisualEditor from "../../components/VisualEditor";
 import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
+import { StoryLine, Outcome } from "../../components/Story";
 
 const TEMPLATE_KEYS = ["page_type", "layout", "decor", "look", "theme", "font", "sections", "form_fields", "contact_mode", "cta", "form_title",
   "offer", "headline", "subheadline", "features"];
@@ -182,6 +183,8 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
   const { data: writers } = useApi(isClient ? null : "/api/providers/options?kind=text", []);
   const { data: docs, setData: setDocs } = useApi("/api/references?kind=document", []);
   const [tab, setTab] = useState("content");
+  // New pages start with the five facts that matter; every other option waits behind "Add more details".
+  const [more, setMore] = useState(!coach);
   const [b, setB] = useState(() => ({
     ...BLANK, ...initial, features: asLines(initial.features), chips: asLines(initial.chips), amenities: asLines(initial.amenities),
     pricing: (initial.pricing || []).map((p) => ({ ...p, features: asLines(p.features) })),
@@ -196,6 +199,7 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
 
   const goTo = (m) => {
     if (ADD_SECTION[m.field]) setB((x) => ({ ...x, sections: [...new Set([...x.sections, ADD_SECTION[m.field]])] }));
+    setMore(true);
     setTab(m.tab);
     setTimeout(() => document.getElementById(`brief-${m.field}`)?.focus(), 60);
   };
@@ -244,8 +248,9 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
 
   return (
     <form onSubmit={submit} className="space-y-5">
-      {coach && <TemplateStrip module="website" onApply={applyTemplate} title="Start from a page template" />}
+      {coach && more && <TemplateStrip module="website" onApply={applyTemplate} title="Start from a page template" />}
       {coach && <ImportBar onImported={applyImport} />}
+      {more ? (<>
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "content", label: "Content" }, { value: "design", label: "Design" },
         { value: "project", label: "Project details" }, { value: "sections", label: "Sections" }, { value: "form", label: "Form & SEO" },
         { value: "ai", label: "AI writer" }]} />
@@ -291,8 +296,8 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
             hint="Pick from your library (embedded into the page) or paste an https:// link below." />
           <input className="input" value={libraryHero ? "" : b.hero_image} onChange={set("hero_image")} placeholder="https://… (optional)" maxLength={1000} />
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink">
-            <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-violet-500" checked={b.include_logo} onChange={set("include_logo")} /> Show my Brand Kit logo</label>
-            <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-violet-500" checked={b.whatsapp_button} onChange={set("whatsapp_button")} /> Floating WhatsApp button</label>
+            <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-brand" checked={b.include_logo} onChange={set("include_logo")} /> Show my Brand Kit logo</label>
+            <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-brand" checked={b.whatsapp_button} onChange={set("whatsapp_button")} /> Floating WhatsApp button</label>
           </div>
         </div>
       )}
@@ -365,7 +370,7 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
         <div className="space-y-4">
           <div className="rounded-2xl bg-surface-2/60 px-4 py-3 text-sm">
             <label className="flex cursor-pointer items-center gap-2 font-medium text-strong">
-              <input type="checkbox" className="size-4 accent-violet-500" checked={b.use_ai} onChange={set("use_ai")} />
+              <input type="checkbox" className="size-4 accent-brand" checked={b.use_ai} onChange={set("use_ai")} />
               Write the page with AI
             </label>
             {b.use_ai && <p className="mt-1 pl-6 text-xs text-muted"><AiStatus ai={ai} writer={b.writer} writers={writers} /></p>}
@@ -398,12 +403,25 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
         </div>
       )}
 
-      {coach && <BriefCoach review={review} brief={b} onAnswer={val} onGoTo={goTo} onApplyPlaybook={applyPlaybook} />}
+      </>) : (
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Business name"><input className="input" value={b.business} onChange={set("business")} required minLength={2} maxLength={120} placeholder="Smile Dental" /></Field>
+            <Field label="What you do"><input className="input" value={b.industry} onChange={set("industry")} maxLength={80} placeholder="Dental clinic, real estate, gym…" /></Field>
+            <Field label="Offer" className="sm:col-span-2"><input id="brief-offer" className="input" value={b.offer} onChange={set("offer")} maxLength={160} placeholder="Teeth whitening ₹4,999 this month" /></Field>
+            <Field label="Phone or WhatsApp"><input id="brief-phone" className="input" type="tel" inputMode="tel" autoComplete="tel" value={b.phone} onChange={(e) => setB((x) => ({ ...x, phone: e.target.value, whatsapp: x.whatsapp || e.target.value }))} maxLength={30} placeholder="+91…" /></Field>
+            <Field label="Area or address"><input id="brief-address" className="input" value={b.address} onChange={set("address")} maxLength={200} placeholder="Kukatpally, Hyderabad" /></Field>
+          </div>
+          <button type="button" className="text-sm font-medium text-brand hover:underline" onClick={() => setMore(true)}>Add more details (design, sections, form)</button>
+        </div>
+      )}
+
+      {coach && more && <BriefCoach review={review} brief={b} onAnswer={val} onGoTo={goTo} onApplyPlaybook={applyPlaybook} />}
 
       <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
-        <p className="hidden text-xs text-faint sm:block">Everything except the business name is optional.</p>
+        <p className="hidden text-xs text-faint sm:block">{more ? "Everything except the business name is optional." : "You can change any word or photo on the page after it's made."}</p>
         <div className="ml-auto flex flex-wrap justify-end gap-2">
-          <SaveTemplateButton module="website" getPayload={templatePayload} label="Save layout as template" />
+          {more && <SaveTemplateButton module="website" getPayload={templatePayload} label="Save layout as template" />}
           {b.business.trim().length >= 2 && <DirectionsButton getBrief={payload} onPick={(d) => { setB((x) => ({ ...x, ...d })); toast.success("Design picked. Generate when you're ready."); }} />}
           <Button type="submit" busy={busy}>{submitLabel}</Button>
         </div>
@@ -697,7 +715,7 @@ function SiteCard({ s, onOpen, onDelete, viewOnly }) {
           <p className="truncate font-semibold text-strong">{s.name}</p>
           {s.published ? <Chip tone="green">Live</Chip> : <Chip>Draft</Chip>}
         </div>
-        <p className="mt-1 text-xs text-faint">Updated {timeAgo(s.updated_at)} · {s.visits} visits</p>
+        <p className="mt-1 text-xs text-faint">Updated {timeAgo(s.updated_at)} · {s.visits} visits{s.published ? " · " : ""}{s.published && <Outcome kind="page" id={s.id} />}</p>
         <div className="mt-auto flex gap-2 pt-4">
           {viewOnly ? <Button variant="ghost" size="sm" onClick={onOpen}><Eye className="size-3.5" /> Preview</Button>
             : <Button variant="ghost" size="sm" onClick={onOpen}><Code2 className="size-3.5" /> Edit</Button>}
@@ -734,8 +752,9 @@ export default function Websites() {
 
   return (
     <div>
-      <PageHeader icon={Globe} tone="pink" title="Pages" subtitle={isClient ? "The landing pages your agency made for you." : "Landing pages with a lead form built in."}
+      <PageHeader title="Pages" subtitle={isClient ? "The landing pages your agency made for you." : undefined}
         actions={!isClient && <Button onClick={startNew}><Plus className="size-4" /> New page</Button>} />
+      <StoryLine module="pages" />
       {!isClient && <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${sites.length ? ` (${sites.length})` : ""}` }]} /></div>}
 
       {current && !isClient && <Editor key={current.id} site={current} feedback={feedback} onChange={(s) => { setCurrent(s); reload(); }}

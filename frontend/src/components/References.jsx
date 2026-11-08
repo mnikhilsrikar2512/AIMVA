@@ -72,7 +72,7 @@ export function DocumentPicker({ docs, value, onChange, onDeleted }) {
         const on = value.includes(d.id);
         return (
           <li key={d.id} className={cx("flex items-center gap-3 rounded-xl px-3 py-2 text-sm", on ? "bg-lavender/70" : "bg-surface-2/60")}>
-            <input type="checkbox" className="size-4 accent-violet-500" checked={on} aria-label={`Use ${d.filename}`}
+            <input type="checkbox" className="size-4 accent-brand" checked={on} aria-label={`Use ${d.filename}`}
               onChange={() => onChange(on ? value.filter((x) => x !== d.id) : value.length < 10 ? [...value, d.id] : value)} />
             <FileText className="size-4 shrink-0 text-faint" />
             <span className="min-w-0 flex-1">

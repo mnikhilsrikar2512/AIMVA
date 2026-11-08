@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useParams } from "react-router-dom";
-import { Facebook, Linkedin, Megaphone, Pause, Play, Plus, RefreshCw, Search, Send, Sparkles, Trash2, Plug } from "lucide-react";
+import { Facebook, Linkedin, Pause, Play, Plus, RefreshCw, Search, Send, Sparkles, Trash2, Plug } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, Modal, Notice, PageHeader, Spinner, cx, ListSkeleton, IconButton } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
 import { del, get, patch, post } from "../../lib/api";
@@ -9,6 +9,7 @@ import { useAuth } from "../../lib/auth";
 import AdPlacements from "../../components/AdPlacements";
 import { ApprovalGate } from "../../components/Approval";
 import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
+import { StoryLine, Outcome } from "../../components/Story";
 
 const META = {
   meta: { title: "Meta Ads", sub: "Facebook & Instagram campaigns with instant lead forms.", icon: Facebook, tone: "blue", provider: "meta",
@@ -159,7 +160,7 @@ export default function Ads() {
 
   return (
     <div>
-      <PageHeader icon={Megaphone} tone={cfg.tone} title="Campaigns" subtitle={cfg.sub}
+      <PageHeader title="Campaigns" subtitle={cfg.sub}
         actions={<Button onClick={() => setCreating(true)}><Plus className="size-4" /> New campaign</Button>} />
       {/* One Campaigns page; the platforms are tabs, not three sidebar items. */}
       <nav aria-label="Platform" className="-mt-4 mb-6 flex gap-1 border-b border-line">
@@ -170,6 +171,7 @@ export default function Ads() {
           </NavLink>
         ))}
       </nav>
+      <StoryLine module="campaigns" className="mt-0 sm:mt-0" />
 
       {integ && !integ.connected && (
         <Notice tone="blue" icon={Plug} action={<Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect account</Link>}>
@@ -197,9 +199,10 @@ export default function Ads() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-strong">{c.name}</p>
                       <p className="text-xs text-muted">₹{Number(c.daily_budget).toLocaleString("en-IN")}/day · {c.objective}{c.external_id ? ` · ID ${c.external_id}` : ""}</p>
+                      <Outcome id={c.id} className="sm:hidden" />
                     </div>
                     <div className="hidden text-right text-xs text-muted sm:block">
-                      <p>₹{Number(c.spend || 0).toLocaleString("en-IN")} spent</p><p>{c.clicks} clicks · {c.ctr}% CTR</p>
+                      <p>₹{Number(c.spend || 0).toLocaleString("en-IN")} spent · {c.clicks} clicks</p><Outcome id={c.id} />
                     </div>
                     <Chip tone={STATUS_TONE[c.status]}>{c.status}</Chip>
                   </button>
