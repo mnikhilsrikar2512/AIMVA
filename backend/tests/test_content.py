@@ -1,3 +1,4 @@
+import json
 import httpx
 
 FAL_KEY = {"values": {"api_key": "fal-test"}}
@@ -201,3 +202,21 @@ def test_add_sound_to_existing_video(auth_client, other_client, mock_http):
     done = auth_client.get(f"/api/content/video/{a['id']}").json()
     assert done["url"] == "https://cdn.fal/with-sound.mp4"
     assert auth_client.post(f"/api/content/video/{a['id']}/sound", json={}).status_code == 400  # already has sound
+
+
+def test_video_new_version_from_comments(auth_client, other_client, mock_http):
+    auth_client.post("/api/integrations/fal/key", json=FAL_KEY)
+    route = mock_http.post("https://queue.fal.run/fal-ai/luma-dream-machine/ray-2").respond(
+        json={"request_id": "r1", "status_url": "https://queue.fal.run/status/r1", "response_url": "https://queue.fal.run/res/r1"})
+    first = auth_client.post("/api/content/video", json={"prompt": "drone shot over beach", "model": "fal-ai/luma-dream-machine/ray-2", "add_sound": False}).json()
+    changes = [{"t": 3.4, "x": 0.1, "y": 0.1, "text": "show our logo here"}, {"t": 61, "x": 0.5, "y": 0.5, "text": "slower"}]
+    v2 = auth_client.post("/api/content/video", json={"prompt": "drone shot over beach", "model": "fal-ai/luma-dream-machine/ray-2",
+                                                      "add_sound": False, "parent_id": first["id"], "changes": changes}).json()
+    sent = json.loads(route.calls[-1].request.content)["prompt"]
+    assert "At 0:03, near the top left of the frame: show our logo here" in sent
+    assert "At 1:01, in the centre of the frame: slower" in sent
+    assert v2["prompt"] == "drone shot over beach"  # the title stays the original idea
+    assert v2["params"]["parent"] == first["id"] and len(v2["params"]["changes"]) == 2
+    # someone else's video can't be the parent
+    r = other_client.post("/api/content/video", json={"prompt": "x y z", "parent_id": first["id"], "changes": changes})
+    assert r.status_code == 404

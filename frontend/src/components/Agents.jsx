@@ -5,6 +5,7 @@ import { ArrowRight, Bot, Check, CircleDashed, Clock, Globe, Minus, Rocket, X } 
 import { toast } from "sonner";
 import { Button, Card, cx } from "./ui";
 import { get, post, put } from "../lib/api";
+import { LoadErrorBar } from "./LoadError";
 import { parseServerDate, timeAgo, useApi } from "../lib/hooks";
 import { useAgentEvents } from "../lib/live";
 import { ease } from "./Motion";
@@ -115,7 +116,7 @@ export function LaunchCard({ initialWhat = "" } = {}) {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" className="size-4 accent-violet-500" checked={f.publish} onChange={(e) => setF({ ...f, publish: e.target.checked })} />
+              <input type="checkbox" className="size-4 accent-brand" checked={f.publish} onChange={(e) => setF({ ...f, publish: e.target.checked })} />
               Put the page live straight away <span className="text-faint">(ads always wait for you)</span>
             </label>
             <Button type="submit" busy={busy}><Bot className="size-4" /> Do it for me</Button>
@@ -146,13 +147,14 @@ export function LaunchCard({ initialWhat = "" } = {}) {
   );
 }
 
-const KIND_TONE = { launch: "bg-violet-500", concierge: "bg-emerald-500", autopilot: "bg-sky-500", weekly_report: "bg-amber-500", page_fixer: "bg-pink-500" };
+const KIND_TONE = { launch: "bg-violet-500", concierge: "bg-emerald-500", autopilot: "bg-sky-500", weekly_report: "bg-amber-500", page_fixer: "bg-pink-500", lead_alerts: "bg-rose-500" };
 
 /** On/off (and suggest/auto) for one agent, shown on the page whose work it does. */
 export function AgentSwitch({ kind, title, text, modes }) {
-  const { data: agents, setData } = useApi("/api/agents", []);
+  const { data: agents, setData, error, reload } = useApi("/api/agents", []);
   const a = agents.find((x) => x.kind === kind);
   const [saving, setSaving] = useState(false);
+  if (!a && error) return <LoadErrorBar what={`the ${title} switch`} onRetry={reload} />;
   if (!a) return null;
   const save = async (patch) => {
     setSaving(true);
@@ -187,9 +189,11 @@ export function AgentSwitch({ kind, title, text, modes }) {
 
 /** The concierge's planned follow-ups for one lead. */
 export function FollowUps({ leadId }) {
-  const { data } = useApi(`/api/agents/leads/${leadId}/follow-ups`, []);
+  const { data, error, reload } = useApi(`/api/agents/leads/${leadId}/follow-ups`, []);
+  if (error && !data.length) return <LoadErrorBar what="planned follow-ups" onRetry={reload} className="mb-0" />;
   if (!data.length) return null;
-  const label = { day2: "Day-2 follow-up", day7: "Day-7 follow-up" };
+  const label = { welcome: "Welcome", day2: "Day-2 follow-up", day7: "Day-7 follow-up" };
+  const done = { sent: "Sent", drafted: "Drafted, not sent", failed: "Not sent" };
   return (
     <div className="rounded-2xl bg-surface-2/60 px-3 py-2.5 text-xs">
       <p className="mb-1 flex items-center gap-1.5 font-semibold text-strong"><Bot className="size-3.5 text-brand" /> Lead Concierge</p>
@@ -197,9 +201,10 @@ export function FollowUps({ leadId }) {
         {data.map((f) => (
           <li key={f.step} className="flex justify-between gap-2">
             <span>{label[f.step]}</span>
-            <span className={cx(f.status === "sent" && "text-emerald-600", f.status === "skipped" && "text-faint")}>
+            <span title={f.step === "welcome" ? f.note || undefined : undefined}
+              className={cx(f.status === "sent" && "text-emerald-600", ["drafted", "failed"].includes(f.status) && "text-warm", f.status === "skipped" && "text-faint")}>
               {f.status === "pending" ? parseServerDate(f.due_at).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
-                : f.status === "sent" ? "Sent" : f.note || "Skipped"}
+                : done[f.status] ? done[f.status] + (f.status !== "sent" && f.note ? `: ${f.note}` : "") : f.note || "Skipped"}
             </span>
           </li>
         ))}

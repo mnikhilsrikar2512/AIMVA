@@ -7,12 +7,13 @@ Videos: fal.ai queue API (needs a key). The key never reaches the browser.
 import logging
 import random
 import uuid
+from types import SimpleNamespace
 from typing import List, Literal, Optional
 from urllib.parse import quote
 
 import httpx
 from PIL import Image
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Session
 from .. import discreet
 from ..config import settings
 from ..db import get_db
+from ..prompt_sense import read_prompt
 from .. import providers as P
 from ..brand import BadImage, brand_prompt, composite_logo, data_uri, fetch_image, get_kit, primary_logo, save_generated, save_media
 from ..models import Asset, BrandAsset, User
@@ -34,7 +36,6 @@ IMAGE_MODELS = [
     {"id": "pollinations/flux", "label": "FLUX (free, no key)", "provider": "pollinations"},
     {"id": "pollinations/turbo", "label": "Turbo (free, no key)", "provider": "pollinations"},
     {"id": "fal-ai/flux/schnell", "label": "FLUX Schnell", "provider": "fal"},
-    {"id": "fal-ai/flux/dev", "label": "FLUX Dev", "provider": "fal"},
     {"id": "fal-ai/flux-pro/v1.1", "label": "FLUX 1.1 Pro", "provider": "fal"},
     {"id": "fal-ai/stable-diffusion-v35-large", "label": "Stable Diffusion 3.5", "provider": "fal"},
 ]
@@ -138,6 +139,7 @@ class ImageIn(BaseModel):
     seed: Optional[int] = Field(None, ge=0, le=2**31 - 1)
     style: Optional[Style] = None
     reference: str = Field("", max_length=40)  # "brand:<id>", "asset:<id>" or "ref:<id>": image to guide the result
+    size_auto: bool = False  # the person never picked a shape: take it from the prompt ("story" -> 9:16) when it says one
     use_brand: bool = False  # fold the saved Brand Kit (style, colours, audience, avoid) into the prompt
     add_logo: bool = False  # composite the primary brand logo onto each result
     logo_position: LogoPosition = "bottom-right"
@@ -266,6 +268,15 @@ def _snap(v: int) -> int:
 @router.post("/image")
 def generate_image(body: ImageIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     rate_limit(f"img:{user.id}", 30, 300)
+    # Read quietly, never announced (owner rule 2026-11-08): words meant for the picture ("poster saying 'Diwali
+    # Sale'") are kept off the image model, which misspells them, and typeset on afterwards; a prompt that names a
+    # shape ("for my story") gets that shape unless the person picked one (app/prompt_sense.py).
+    typed = body.prompt
+    sense = read_prompt(typed)
+    if sense["words"]:
+        body = body.model_copy(update={"prompt": sense["scene"][:2000] if len(sense["scene"]) >= 3 else typed})
+    if body.size_auto and sense["format"] in SIZES and not (body.width and body.height):
+        body = body.model_copy(update={"size": sense["format"]})
     w, h = (_snap(body.width), _snap(body.height)) if body.width and body.height else SIZES.get(body.size, SIZES["1:1"])
     kit = get_kit(db, user.id) if body.use_brand else None
     logo = primary_logo(db, user.id) if body.add_logo else None
@@ -325,14 +336,18 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
         raise HTTPException(502, str(e))
     except P.ProviderError as e:
         raise http_error(e)
+    layers = [{"text": sense["words"][:160], "x": 0.5, "y": 0.86, "size": 0.07, "color": "#ffffff", "weight": "bold", "bg": "band"}] \
+        if sense["words"] else []
     assets = []
     batch = uuid.uuid4().hex[:12]
     for u in urls:
-        a = Asset(user_id=user.id, kind="image", prompt=body.prompt, model=model_label, url=u,
+        plain, u = u, _with_text(user, u, layers)
+        a = Asset(user_id=user.id, kind="image", prompt=typed, model=model_label, url=u,
                   params={"size": body.size if not body.width else f"{w}x{h}", "width": w, "height": h, "brand": bool(kit),
                           "logo": bool(logo), "provider": ref, "style": body.style, "seed": seed,
                           "negative_prompt": body.negative_prompt, "reference": bool(reference), "batch": batch,
-                          "kept_product": body.keep_product, "brief": brief, "prompt_sent": sent,
+                          "kept_product": body.keep_product, "brief": brief, "prompt_sent": sent, "words": sense["words"],
+                          **({"text_layers": layers, "text_plain_url": plain} if u != plain else {}),
                           "provider_label": "Your product, new scene" if body.keep_product
                           else "Free FLUX" if ref == "builtin:pollinations" else model_label})
         db.add(a)
@@ -341,12 +356,33 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
     return [asset_out(a) for a in assets]
 
 
+def _with_text(user: User, url: str, layers: list) -> str:
+    """The image with its words typeset on, or the plain image when there are none or drawing them fails."""
+    if not layers:
+        return url
+    from .. import image_edit as IE
+    from .. import text_layers as TL
+    try:
+        out = TL.render(IE.open_rgb(_asset_bytes(SimpleNamespace(url=url))), layers)
+        return "/api/files/" + save_media(user.id, IE.png_bytes(out), "image")
+    except Exception:  # noqa: BLE001 - the picture still counts; the words can be added in the editor
+        log.warning("typesetting words on a new picture failed", exc_info=True)
+        return url
+
+
 CAMERA_PRESETS = {
     "static": "locked-off static camera", "push_in": "slow push-in camera move", "pull_out": "slow pull-out reveal",
     "pan_left": "smooth pan left", "pan_right": "smooth pan right", "orbit": "slow orbit around the subject",
     "drone": "aerial drone flyover", "handheld": "subtle handheld camera", "tilt_up": "slow tilt up",
 }
 Camera = Literal["static", "push_in", "pull_out", "pan_left", "pan_right", "orbit", "drone", "handheld", "tilt_up"]
+
+
+class VideoChange(BaseModel):
+    t: float = Field(0, ge=0, le=600)  # seconds into the clip
+    x: float = Field(0.5, ge=0, le=1)
+    y: float = Field(0.5, ge=0, le=1)
+    text: str = Field(min_length=2, max_length=300)
 
 
 class VideoIn(BaseModel):
@@ -370,6 +406,10 @@ class VideoIn(BaseModel):
     start_ref: str = Field("", max_length=40)  # or any library/uploaded image: "brand:<id>" | "asset:<id>" | "ref:<id>"
     add_sound: bool = True  # silent models only: add matching audio with MMAudio once the clip is ready
     sound_prompt: str = Field("", max_length=500)
+    # A new version of one of your videos, made from comments on it. The prompt already carries the changes;
+    # the version keeps its parent's prompt as its title and remembers the comments.
+    parent_id: Optional[int] = None
+    changes: List[VideoChange] = Field(default_factory=list, max_length=12)
 
 
 # Image-to-video endpoints for each text-to-video model, used when starting from a brand image.
@@ -408,6 +448,13 @@ def _start_sound(a: Asset, key: str, prompt: str) -> None:
 
 
 
+def _where(x: float, y: float) -> str:
+    """Plain words for a spot on the frame, for a video model that can't take coordinates."""
+    v = "top" if y < 0.34 else "bottom" if y > 0.66 else "middle"
+    h = "left" if x < 0.34 else "right" if x > 0.66 else "centre"
+    return "in the centre of the frame" if (v, h) == ("middle", "centre") else f"near the {v} {h} of the frame"
+
+
 def _video_prompt(db: Session, user: User, body: VideoIn) -> str:
     prompt = brand_prompt(body.prompt, get_kit(db, user.id) if body.use_brand else None)
     prompt = _styled(prompt, body.style)
@@ -438,6 +485,16 @@ def generate_video(body: VideoIn, user: User = Depends(current_user), db: Sessio
     if ref == "builtin:fal" and not body.model:
         body.model = VIDEO_MODELS[0]["id"]
     prompt = _video_prompt(db, user, body)
+    parent = None
+    if body.parent_id is not None:
+        parent = db.get(Asset, body.parent_id)
+        if not parent or parent.user_id != user.id or parent.kind != "video":
+            raise HTTPException(404, "That video isn't in your account.")
+    title = parent.prompt if parent else body.prompt
+    lineage = {"parent": parent.id, "changes": [c.model_dump() for c in body.changes]} if parent else {}
+    if parent and body.changes:
+        prompt += "\n\nKeep everything else the same, but make these changes:\n" + "\n".join(
+            f"- At {int(c.t // 60)}:{int(c.t % 60):02d}, {_where(c.x, c.y)}: {c.text.strip()}" for c in body.changes)
     start = _start_image(db, user, body)
     spec = VIDEO_BY_ID.get(body.model) if ref == "builtin:fal" else None
 
@@ -464,12 +521,12 @@ def generate_video(body: VideoIn, user: User = Depends(current_user), db: Sessio
                 raise HTTPException(400, "This model can't start from an image.")
             model, payload["image_url"] = IMAGE_TO_VIDEO[model], start
         q = _fal_queue(key, model, payload)
-        a = Asset(user_id=user.id, kind="video", prompt=body.prompt, model=model, status="queued",
+        a = Asset(user_id=user.id, kind="video", prompt=title, model=model, status="queued",
                   params={"aspect_ratio": body.aspect_ratio if spec["aspect_ratio"] else "", "duration": duration or "5",
                           "brand": body.use_brand, "start_image": bool(start), "stage": "video", "provider": ref,
                           "has_audio": spec["audio"], "add_sound": body.add_sound and not spec["audio"],
                           "sound_prompt": body.sound_prompt.strip(), "camera": body.camera, "style": body.style,
-                          "status_url": q.get("status_url"), "response_url": q.get("response_url")})
+                          "status_url": q.get("status_url"), "response_url": q.get("response_url"), **lineage})
     else:  # any model on fal, Replicate or a self-hosted ComfyUI
         conn = resolve(db, user, ref, "video", body.model)
         opts = {"prompt": prompt, "negative_prompt": body.negative_prompt, "seed": body.seed, "aspect_ratio": body.aspect_ratio,
@@ -482,12 +539,12 @@ def generate_video(body: VideoIn, user: User = Depends(current_user), db: Sessio
         except (KeyError, TypeError, ValueError):
             raise HTTPException(502, f"{conn['name']} answered in an unexpected format. Check the model makes videos.")
         has_fal = bool(_fal_key(db, user))
-        a = Asset(user_id=user.id, kind="video", prompt=body.prompt, model=conn["model"] or conn["name"], status="queued",
+        a = Asset(user_id=user.id, kind="video", prompt=title, model=conn["model"] or conn["name"], status="queued",
                   params={"aspect_ratio": body.aspect_ratio, "duration": body.duration, "brand": body.use_brand,
                           "start_image": bool(start), "stage": "video", "provider": ref, "job": job,
                           "has_audio": bool(body.generate_audio),
                           "add_sound": body.add_sound and not body.generate_audio and has_fal,
-                          "sound_prompt": body.sound_prompt.strip(), "camera": body.camera, "style": body.style})
+                          "sound_prompt": body.sound_prompt.strip(), "camera": body.camera, "style": body.style, **lineage})
     db.add(a)
     db.commit()
     return asset_out(a)
@@ -981,8 +1038,9 @@ def set_text(asset_id: int, body: TextIn, user: User = Depends(current_user), db
     if not base or base.user_id != user.id or base.kind != "image" or not base.url:
         base = src
     layers = [l.model_dump() for l in body.layers if l.text.strip()]
+    plain = (base.params or {}).get("text_plain_url")  # a new picture made with its words already on
     try:
-        out = TL.render(IE.open_rgb(_asset_bytes(base)), layers)
+        out = TL.render(IE.open_rgb(_asset_bytes(SimpleNamespace(url=plain) if plain else base)), layers)
     except IE.EditFailed as e:
         raise _edit_error(e)
     label = f"Text · {layers[0]['text'][:24]}" if layers else "Text removed"

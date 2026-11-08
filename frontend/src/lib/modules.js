@@ -3,13 +3,16 @@ import {
   Palette, Search, Server, Settings, Users, Video, Facebook,
 } from "lucide-react";
 
-// Single source of truth for the app's modules. The rail follows the journey (make → reach → see);
+// Single source of truth for the app's modules. The rail keeps only the main jobs (2026-11-08 owner rule:
+// "main options only, no more no less"): Home, Leads, WhatsApp, Pages, Pictures, Videos, Campaigns, Results, Settings.
+// WhatsApp came back to the rail the same day: it is where owners answer leads, so it can't be a search away. The rail follows the journey (make → reach → see);
 // pages left out of the rail (`rail: false`) are still one keystroke away in the Ctrl/Cmd+K palette.
 // `client: true` marks what a view-only client of an agency can see.
 export const NAV = [
   { group: "Overview", items: [
     { to: "/app", label: "Home", icon: LayoutDashboard, end: true, client: true, keywords: "dashboard activity" },
     { to: "/app/leads", label: "Leads", icon: Users, client: true, desc: "Everyone who asked, from every channel", keywords: "crm sheets sync" },
+    { to: "/app/whatsapp", label: "WhatsApp", icon: MessageCircle, desc: "Business inbox and scheduling", keywords: "chat message inbox reply" },
   ]},
   { group: "Make", items: [
     { to: "/app/websites", label: "Pages", icon: Globe, client: true, desc: "Landing pages with lead forms", keywords: "website builder landing" },
@@ -22,12 +25,11 @@ export const NAV = [
     { to: "/app/ads/meta", match: "/app/ads", label: "Campaigns", icon: Megaphone, desc: "Meta, Google and LinkedIn ads", keywords: "ads facebook instagram" },
     { to: "/app/ads/google", label: "Google campaigns", icon: Search, rail: false, keywords: "ads google search" },
     { to: "/app/ads/linkedin", label: "LinkedIn campaigns", icon: Linkedin, rail: false, keywords: "ads linkedin b2b" },
-    { to: "/app/voice", label: "Calls", icon: AudioLines, desc: "Your AI call assistant", keywords: "voice agent phone" },
-    { to: "/app/whatsapp", label: "WhatsApp", icon: MessageCircle, desc: "Business inbox and scheduling", keywords: "chat message" },
+    { to: "/app/voice", label: "Calls", icon: AudioLines, rail: false, desc: "Your AI call assistant", keywords: "voice agent phone" },
   ]},
   { group: "See", items: [
     { to: "/app/command", label: "Results", icon: Compass, client: true, desc: "Spend, leads and sales per campaign", keywords: "command center roi" },
-    { to: "/app/analytics", label: "Analytics", icon: BarChart3, client: true, desc: "Charts and insights", keywords: "kpi charts" },
+    { to: "/app/analytics", label: "Analytics", icon: BarChart3, rail: false, client: true, desc: "Charts and insights", keywords: "kpi charts" },
   ]},
   { group: "Account", items: [
     { to: "/app/settings", label: "Settings", icon: Settings, desc: "Accounts, brand, team", keywords: "integrations connect" },

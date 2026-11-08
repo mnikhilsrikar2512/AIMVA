@@ -1,20 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, ChevronDown, Expand, Eye, ImageUp, MousePointerClick, Palette, Plus, Redo2, Search, SlidersHorizontal, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
-import { Button, Field, Modal, Tabs, cx } from "./ui";
+import { ArrowLeft, ArrowUp, ChevronDown, Expand, Eye, ImageUp, Palette, Plus, Redo2, Search, SlidersHorizontal, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
+import { Button, Field, Tabs, cx } from "./ui";
+import { Dialog, DialogContent, DialogTitle } from "./shadcn/dialog";
 import { post } from "../lib/api";
 import { useAction, useApi } from "../lib/hooks";
 
 const MAX_PINS = 8;
+const POP_W = "min(16rem, calc(var(--w) - 1rem))"; // comment box width, never wider than the image
 const SIZES = [["S", 0.06], ["M", 0.12], ["L", 0.2], ["XL", 0.32]];
-const QUICK = [["Remove", "Remove this completely and fill the area with the matching background, so nothing is left behind."],
-  ["Brighter", "Make this brighter and better lit, keep its colours natural."], ["Sharper", "Make this sharper and more detailed."],
-  ["Fix it", "Fix any distortion here: natural shapes, correct hands and faces, clean edges."]];
 // Mirrors the server's guess (app/image_edit.py intent): only-removing comments go to the eraser model.
 const REMOVE_RE = /\b(remove|delete|erase|get rid of|take (out|away)|eliminate|hide|lose|clear (away|out))\b/i;
 const ADD_RE = /\b(add|put|place|replace|swap|instead|insert|with a|with an|turn (it )?into)\b/i;
 const guess = (t) => (REMOVE_RE.test(t) && !ADD_RE.test(t) ? "remove" : "change");
-const WHOLE_IDEAS = ["Make it golden hour", "Make it night time", "Brighter and more vibrant"];
-const TRY_STYLES = ["portrait", "skeleton", "anime", "cinematic", "watercolor"];
 const PLACEMENTS = [["1:1", "Feed square"], ["4:5", "Feed portrait"], ["9:16", "Stories & Reels"], ["16:9", "YouTube & display"], ["1.91:1", "Link ads & Google"]];
 const SLASH = /(^|\s)\/([\w-]*)$/; // "/ske" at the end of what's typed opens the style menu
 const hasText = (p) => p.text.trim().length >= 2;
@@ -102,14 +99,22 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
     run(async () => saved(await post(`/api/content/image/${source.id}/edit`, body)), style && !queued.length ? `${style.name} style applied` : "Done. Saved as a new version");
   };
   const tool = (path, body, msg) => run(async () => saved(await post(`/api/content/image/${source.id}/${path}`, body)), msg);
-  const ideas = styles.length ? TRY_STYLES.map((id) => styles.find((s) => s.id === id)).filter(Boolean) : [];
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit image" wide="xl">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0">
-          <div ref={box} className={cx("relative select-none rounded-2xl bg-surface-2", !busy && "cursor-crosshair")} onClick={place}>
-            <img src={shownUrl} alt={shown.prompt || "Image"} className="block w-full rounded-2xl" draggable={false} />
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose?.(); }}>
+      <DialogContent hideClose aria-describedby={undefined}
+        className="inset-0 h-dvh max-h-none rounded-none bg-bg p-0 sm:inset-0 sm:left-0 sm:top-0 sm:max-w-none sm:translate-x-0 sm:translate-y-0 sm:rounded-none lg:overflow-hidden">
+      <div className="flex min-h-full flex-col lg:h-full lg:flex-row">
+        <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
+          <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ink/5 px-3">
+            <button type="button" onClick={onClose} aria-label="Back to pictures" title="Back (Esc)"
+              className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.06] hover:text-strong"><ArrowLeft className="size-4" /></button>
+            <DialogTitle className="truncate text-sm font-semibold text-strong">Edit image</DialogTitle>
+            {versions.length > 1 && <span className="rounded-md bg-ink/[0.05] px-1.5 py-0.5 text-xs text-muted">Version {at + 1} of {versions.length}</span>}
+          </div>
+          <div className="grid flex-1 place-items-center overflow-auto p-4 lg:min-h-0">
+          <div ref={box} className={cx("relative w-fit select-none", !busy && "cursor-crosshair")} onClick={place}>
+            <img src={shownUrl} alt={shown.prompt || "Image"} className="block max-h-[60dvh] w-auto max-w-full rounded-lg shadow-[0_8px_30px_-12px_rgb(40_20_10/0.35)] lg:max-h-[calc(100dvh-17rem)]" draggable={false} />
             {writing && layers.map((l) => (
               <TextMark key={l.id} layer={l} box={box} update={(patch) => setLayers((all) => all.map((x) => (x.id === l.id ? { ...x, ...patch } : x)))} />
             ))}
@@ -128,7 +133,9 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
             {peek && <span className="absolute left-3 top-3 rounded-full bg-strong/80 px-2.5 py-1 text-xs font-semibold text-white">Before</span>}
             <ShortSide target={box} />
           </div>
+          </div>
 
+          <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4">
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
             <span>{pins.length ? `${queued.length} spot${queued.length === 1 ? "" : "s"} ready · click again to add more` : "Tip: click anything in the image to change just that spot"}</span>
             <span className="flex items-center gap-1">
@@ -145,18 +152,10 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
 
           <Composer {...{ composer, text, setText, style, setStyle, styles, pins: queued, removePin: remove, ready, busy, send }} />
 
-          {!pins.length && !style && !text.trim() && (
-            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-xs text-muted">Try</span>
-              {ideas.map((s) => (
-                <Chip key={s.id} title={s.hint} onClick={() => { setStyle(s); composer.current?.focus(); }}>/{s.id}</Chip>
-              ))}
-              {WHOLE_IDEAS.map((t) => <Chip key={t} onClick={() => { setText(t); composer.current?.focus(); }}>{t}</Chip>)}
-            </div>
-          )}
+          </div>
         </div>
 
-        <div className="space-y-4">
+        <aside className="w-full shrink-0 space-y-4 border-t border-ink/5 bg-surface p-4 lg:w-80 lg:overflow-y-auto lg:border-l lg:border-t-0">
           <Tabs value={side} onChange={setSide} tabs={[{ value: "versions", label: "Versions" }, { value: "text", label: "Text" }, { value: "more", label: "More tools" }]} />
           {side === "text" && (
             <TextPanel layers={layers} setLayers={setLayers} busy={busy}
@@ -175,57 +174,54 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
             <summary className="flex cursor-pointer items-center gap-1.5 font-semibold text-strong"><SlidersHorizontal className="size-4" /> Settings</summary>
             <div className="mt-3 space-y-3"><EngineSelect engines={engines} engine={engine} setEngine={setEngine} chosen={chosen} /></div>
           </details>
-        </div>
+        </aside>
       </div>
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-/** A pin on the image. While open it shows a small comment box right there; Enter applies. */
+/** A comment on the image, drawn like comments in Claude: a small speech-bubble marker whose tip sits on the
+ *  clicked spot, and a compact one-line box beside it. Enter applies. Size/object options hide behind "⋯". */
 function PinMark({ pin: p, n, open, canSelect, busy, onOpen, onClose, update, onRemove, onSend, ready }) {
-  const right = p.x > 0.6;
-  const low = p.y > 0.62;
+  const [more, setMore] = useState(false);
+  const right = p.x > 0.62;
+  const low = p.y > 0.7;
   const does = (p.action || "auto") === "auto" ? guess(p.text) : p.action;
+  const grow = (el) => { if (el) { el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 120)}px`; } };
   return (
-    <div className="absolute" style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} onClick={(e) => e.stopPropagation()}>
-      {p.mode === "area" && (
-        <div className={cx("pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed",
-          open ? "border-violet-500 bg-violet-500/15" : "border-white/90 bg-white/10")}
-          style={{ width: `calc(${p.r * 2} * var(--short))`, height: `calc(${p.r * 2} * var(--short))` }} />
-      )}
-      <button type="button" title={p.text || "Comment"} onClick={open ? onClose : onOpen}
-        className={cx("absolute grid size-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-xs font-bold text-white shadow-lg ring-2 ring-white",
-          open ? "bg-violet-600" : hasText(p) ? "bg-strong/85" : "bg-strong/50")}>
-        {p.mode === "object" ? <MousePointerClick className="size-3.5" /> : n}
+    <div className="group absolute" style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} onClick={(e) => e.stopPropagation()}>
+      <button type="button" aria-label={p.text ? `Comment ${n}: ${p.text}` : `Comment ${n}`} onClick={open ? onClose : onOpen}
+        className={cx("absolute bottom-0 left-0 grid size-6 place-items-center rounded-[50%_50%_50%_2px] text-[11px] font-semibold text-white shadow-md ring-[1.5px] ring-white transition",
+          open ? "bg-violet-600" : hasText(p) ? "bg-strong" : "bg-strong/60")}>
+        {n}
       </button>
+      {!open && hasText(p) && (
+        <span className="pointer-events-none absolute bottom-7 left-0 hidden max-w-56 truncate rounded-md bg-strong px-2 py-1 text-xs text-white shadow-md group-hover:block">{p.text}</span>
+      )}
       {open && !busy && (
-        <div className={cx("absolute z-10 w-72 max-w-[80vw] cursor-default rounded-2xl bg-surface p-2.5 shadow-2xl ring-1 ring-ink/10",
-          right ? "right-5" : "left-5", low ? "bottom-1" : "top-1")}>
-          <textarea autoFocus rows={2} maxLength={300} value={p.text} placeholder="What should change here?"
-            className="w-full resize-none bg-transparent px-1 text-sm text-strong outline-none placeholder:text-faint"
-            onChange={(e) => update({ text: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (ready) onSend(); }
-              if (e.key === "Escape") { e.stopPropagation(); hasText(p) ? onClose() : onRemove(); }
-            }} />
-          <div className="flex flex-wrap gap-1">
-            {QUICK.map(([label, t]) => <Chip key={label} small onClick={() => update({ text: t, action: label === "Remove" ? "remove" : "auto" })}>{label}</Chip>)}
+        <div className={cx("absolute z-10 cursor-default rounded-xl bg-surface shadow-xl ring-1 ring-ink/10", low ? "bottom-8" : "top-2")}
+          style={{ width: POP_W, left: `max(calc(${-p.x} * var(--w) + 0.5rem), min(${right ? `calc(-1 * ${POP_W} - 0.25rem)` : "2rem"}, calc(${1 - p.x} * var(--w) - ${POP_W} - 0.5rem)))` }}>
+          <div className="flex items-end gap-1 p-1.5">
+            <textarea autoFocus rows={1} maxLength={300} value={p.text} placeholder="Add a comment…" ref={grow}
+              className="min-h-7 flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-5 text-strong outline-none placeholder:text-muted"
+              onChange={(e) => { update({ text: e.target.value }); grow(e.target); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (ready) onSend(); }
+                if (e.key === "Escape") { e.stopPropagation(); hasText(p) ? onClose() : onRemove(); }
+              }} />
+            <button type="button" aria-label="More options" title="More options" onClick={() => setMore((m) => !m)}
+              className={cx("grid size-7 shrink-0 place-items-center rounded-md text-muted hover:bg-ink/[0.06] hover:text-strong", more && "bg-ink/[0.06] text-strong")}>⋯</button>
+            <SendBtn disabled={!ready} onClick={onSend} />
           </div>
-          <div className="mt-2 flex items-center justify-between gap-2 border-t border-ink/5 pt-2">
-            <div className="flex flex-wrap items-center gap-1">
-              {canSelect && <Chip small on={p.mode === "object"} onClick={() => update({ mode: "object" })}>Object</Chip>}
+          {more && (
+            <div className="flex flex-wrap items-center gap-1 border-t border-ink/5 px-2 py-1.5">
+              {canSelect && <Chip small on={p.mode === "object"} onClick={() => update({ mode: "object" })}>Whole object</Chip>}
               {SIZES.map(([label, r]) => <Chip key={label} small on={p.mode === "area" && p.r === r} onClick={() => update({ r, mode: "area" })}>{label}</Chip>)}
-              <button type="button" className="ml-0.5 text-xs font-semibold text-muted hover:text-strong" title="Change what this comment does"
-                onClick={() => update({ action: { auto: "change", change: "remove", remove: "auto" }[p.action || "auto"] })}>
-                {p.text.trim() || p.action !== "auto" ? (does === "remove" ? "Removes" : "Changes") + ((p.action || "auto") === "auto" ? " (auto)" : "") : ""}
-              </button>
+              <Chip small on={does === "remove"} onClick={() => update({ action: does === "remove" ? "auto" : "remove" })}>Remove it</Chip>
+              <button type="button" className="ml-auto text-xs font-medium text-muted hover:text-strong" onClick={onRemove}>Delete</button>
             </div>
-            <div className="flex items-center gap-1">
-              <IconBtn label="Delete comment" onClick={onRemove}><X className="size-4" /></IconBtn>
-              <SendBtn disabled={!ready} onClick={onSend} />
-            </div>
-          </div>
-          <p className="mt-1 px-1 text-xs text-faint">Enter to apply · Shift+Enter new line · click elsewhere for another spot</p>
+          )}
         </div>
       )}
     </div>

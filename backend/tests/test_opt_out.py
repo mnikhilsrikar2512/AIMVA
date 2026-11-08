@@ -91,7 +91,7 @@ def test_stop_cancels_concierge_follow_ups_and_blocks_new_ones(auth_client, clie
     lead_form(client, s["slug"])  # Ravi, +919812345678: welcome drafted, day 2 + day 7 queued
     lead = auth_client.get("/api/leads").json()[0]
     _inbound(auth_client, "please stop", frm="919812345678")
-    notes = [f.note for f in db.scalars(select(FollowUp).where(FollowUp.lead_id == lead["id"]))]
+    notes = [f.note for f in db.scalars(select(FollowUp).where(FollowUp.lead_id == lead["id"], FollowUp.step != "welcome"))]
     assert notes == ["The lead opted out", "The lead opted out"]
     assert concierge.run_due(db, datetime.utcnow() + timedelta(days=8)) == 0
     # The same person fills the form again: a new lead row, but no welcome and no follow-ups.

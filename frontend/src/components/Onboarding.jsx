@@ -9,6 +9,7 @@ import { Button, Card, Field, IconButton, Modal, cx } from "./ui";
 import { api, get, post, put } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { signupHint } from "../lib/signupHint";
+import { needsInstall, pushSupported, turnOnPhoneAlerts } from "../lib/push";
 
 const INDUSTRY_ICONS = {
   real_estate: Building2, healthcare: HeartPulse, education: GraduationCap, saas: Briefcase,
@@ -144,6 +145,30 @@ function ShareStep({ sites }) {
   );
 }
 
+/** A lead answered in five minutes is far likelier to buy than one answered tomorrow, so the owner has to hear about it. */
+function AlertsStep({ onDone, onSkip }) {
+  const [busy, setBusy] = useState(false);
+  const iphone = needsInstall();
+  const on = async () => {
+    setBusy(true);
+    try { await turnOnPhoneAlerts(); toast.success("Alerts are on for this device."); await onDone(); }
+    catch (e) { toast.error(e.message || "Couldn't turn alerts on here."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="max-w-xl space-y-4">
+      <p className="text-sm text-muted">Leads go cold fast. Get a ping on your phone with a one-tap WhatsApp reply, and connect WhatsApp so every new lead gets a welcome within seconds, even when you're busy.</p>
+      {iphone && <p className="text-sm text-ink">On iPhone, first tap Share, then <b className="font-semibold">Add to Home Screen</b>, and open AIMVA from there.</p>}
+      <div className="flex flex-wrap gap-2">
+        {pushSupported() && !iphone && <Button onClick={on} disabled={busy}>{busy ? "Turning on…" : "Alert me on this device"}</Button>}
+        <Link to="/app/settings?tab=integrations" className={pushSupported() && !iphone ? "btn-ghost" : "btn-primary"}>Connect WhatsApp</Link>
+        <button type="button" className="btn-subtle" onClick={onSkip}>Skip for now</button>
+      </div>
+      <p className="text-xs text-muted">New-lead emails are already on. Change any of this in Settings.</p>
+    </div>
+  );
+}
+
 export function FirstLeadPath({ status, sites, onStatus, launch, website }) {
   const [skipped, setSkipped] = useState(readSkipped);
   const [chosen, setChosen] = useState(null);
@@ -153,7 +178,7 @@ export function FirstLeadPath({ status, sites, onStatus, launch, website }) {
   const steps = [
     { key: "profile", title: "Tell us about your business", done: d.profile, summary: status.template?.label },
     { key: "page", title: "Make your page and put it online", done: d.publish, summary: "Live" },
-    { key: "voice", title: "Try your call assistant", done: d.voice || skipped.includes("voice"), summary: d.voice ? "Tested" : "Skipped" },
+    { key: "alerts", title: "Hear about every lead the moment it arrives", done: d.alerts || skipped.includes("alerts"), summary: d.alerts ? "On" : "Skipped" },
     { key: "lead", title: "Get your first lead", done: d.lead },
   ];
   const current = steps.find((s) => !s.done)?.key;
@@ -183,15 +208,7 @@ export function FirstLeadPath({ status, sites, onStatus, launch, website }) {
                 </div>
               )
             )}
-            {s.key === "voice" && (
-              <div className="max-w-xl space-y-4">
-                <p className="text-sm text-muted">Your assistant calls every new lead back within a minute, in their language. Hear it once in your browser, no phone needed.</p>
-                <div className="flex flex-wrap gap-2">
-                  <Link to="/app/voice" className="btn-primary">Have a practice call</Link>
-                  <button type="button" className="btn-subtle" onClick={() => skip("voice")}>Skip for now</button>
-                </div>
-              </div>
-            )}
+            {s.key === "alerts" && <AlertsStep onDone={async () => { onStatus(await get("/api/onboarding")); setChosen(null); }} onSkip={() => skip("alerts")} />}
             {s.key === "lead" && <ShareStep sites={sites || []} />}
           </PathStep>
         ))}

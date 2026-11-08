@@ -2,8 +2,8 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Download, FileSpreadsheet, MessageCircle, Plus, RefreshCw, Search, Trash2, Users, Cloud } from "lucide-react";
-import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, TONES, cx, ListSkeleton, IconButton } from "../../components/ui";
+import { BadgeCheck, Download, FileSpreadsheet, MessageCircle, Phone, Plus, RefreshCw, Search, Users, Cloud } from "lucide-react";
+import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, cx, ListSkeleton, IconButton } from "../../components/ui";
 import { LoadError, LoadErrorBar } from "../../components/LoadError";
 import { AgentSwitch } from "../../components/Agents";
 import { del, patch, post } from "../../lib/api";
@@ -13,27 +13,26 @@ import LeadPanel from "../../components/LeadPanel";
 import { DownloadMenu } from "../../components/DownloadMenu";
 import { useLeadEvents } from "../../lib/live";
 import { useAuth, useIsClient } from "../../lib/auth";
+import { StoryLine } from "../../components/Story";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
-const STAGE_TONE = { new: "blue", contacted: "violet", qualified: "amber", won: "green", lost: "rose" };
+const STAGE_LABEL = { new: "New", contacted: "Contacted", qualified: "Qualified", won: "Won", lost: "Lost" };
 const SORT_KEY = "aimva:leads-sort";
 const readSort = () => { try { return localStorage.getItem(SORT_KEY) || "needs"; } catch { return "needs"; } };
+
+/** Whether the automatic WhatsApp welcome really reached them. Silent when there was none to send. */
+function WelcomeNote({ w }) {
+  if (!w) return null;
+  const ok = { sent: "Welcome sent", delivered: "Welcome delivered", read: "Welcome read" }[w.status];
+  if (ok) return <span title="Lead Concierge sent this on WhatsApp">· {ok}</span>;
+  return <span className="font-semibold text-warm" title={w.note || "Open the lead to send it yourself"}>· Welcome not sent{w.note ? `: ${w.note}` : ""}</span>;
+}
 
 /** "Waiting 14m": how long a lead has been waiting on the business. */
 export const waited = (iso) => {
   const t = timeAgo(iso);
   return t === "just now" ? "Waiting, just now" : `Waiting ${t.replace(" ago", "")}`;
 };
-
-function ScoreBar({ score }) {
-  const c = score >= 70 ? "bg-emerald-400" : score >= 40 ? "bg-amber-400" : "bg-slate-500";
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-14 overflow-hidden rounded-full bg-ink/[0.06]"><motion.div className={cx("h-full rounded-full", c)} initial={{ width: 0 }} animate={{ width: `${score}%` }} transition={{ type: "spring", stiffness: 200, damping: 26 }} /></div>
-      <span className="w-6 text-xs font-semibold text-strong">{score}</span>
-    </div>
-  );
-}
 
 function SyncPanel() {
   const { data: integrations, reload, error: integError } = useApi("/api/integrations", []);
@@ -91,7 +90,7 @@ export default function Leads() {
   const isClient = useIsClient();  // view-only clients don't manage sync destinations
   const business = user?.workspace?.name || user?.company || user?.name || "";
   const [q, setQ] = useState("");
-  const [source, setSource] = useState("");
+  const [source, setSource] = useState(() => new URLSearchParams(window.location.search).get("source") || "");  // other screens link to "their" leads
   const [stage, setStage] = useState("");
   const [sort, setSortState] = useState(readSort);
   const setSort = (v) => { setSortState(v); try { localStorage.setItem(SORT_KEY, v); } catch { /* private mode */ } };
@@ -128,7 +127,7 @@ export default function Leads() {
 
   return (
     <div>
-      <PageHeader icon={Users} tone="amber" title="Leads"
+      <PageHeader title="Leads"
         subtitle={waiting ? (isClient ? `${waiting} ${waiting === 1 ? "lead is" : "leads are"} waiting for a reply. They're at the top.` : `${waiting} ${waiting === 1 ? "lead is" : "leads are"} waiting on you. They're at the top.`) : "Everyone who asked, from every channel, scored and in one list."}
         actions={<>
           <DownloadMenu name="Leads" disabled={loading || !leads.length} reason={loading ? "Loading leads…" : q || source || stage ? "No leads match these filters" : undefined} csvHref="/api/leads/export.csv"
@@ -136,6 +135,7 @@ export default function Leads() {
             pdf={async (filename) => (await import("../../lib/reports/leads")).leadsReport({ leads, business, filters: { q, source, stage }, filename })} />
           {!isClient && <Button onClick={() => setAdding(true)}><Plus className="size-4" /> Add lead</Button>}
         </>} />
+      <StoryLine module="leads" className="sm:-mt-6" />
       {!isClient && <div className="mb-6">
         <AgentSwitch kind="concierge" title="Lead Concierge"
           text="Welcomes every new lead on WhatsApp within seconds, then follows up on day 2 and day 7 until they reply." />
@@ -173,64 +173,40 @@ export default function Leads() {
                 secondary={<Button variant="ghost" onClick={() => setAdding(true)}><Plus className="size-4" /> Add one yourself</Button>} />
             )
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm lg:min-w-[760px]">
-                <thead className="text-left text-xs uppercase tracking-wide text-faint">
-                  <tr className="border-b border-line">
-                    <th className="px-3 py-3 font-medium sm:px-4">Lead</th><th className="hidden px-4 py-3 font-medium lg:table-cell">Source</th><th className="hidden px-4 py-3 font-medium sm:table-cell">Score</th>
-                    <th className="px-3 py-3 font-medium sm:px-4">Stage</th><th className="hidden px-4 py-3 font-medium lg:table-cell">Value</th><th className="hidden px-4 py-3 font-medium lg:table-cell">Added</th><th><span className="sr-only">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leads.map((l) => (
-                    <motion.tr key={l.id} initial={fresh.has(l.id) ? { opacity: 0, x: -24 } : false} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 260, damping: 26 }} className={cx("border-b border-line align-top last:border-0 hover:bg-ink/[0.02]", openId === l.id && "bg-ink/[0.04]", fresh.has(l.id) && "animate-[flash_2s_ease-out]")}>
-                      <td className="max-w-[190px] px-3 py-3 sm:max-w-[260px] sm:px-4">
-                        <button className="text-left font-semibold text-strong hover:text-brand-2 hover:underline" onClick={() => openLead(l.id)}>{l.name || l.email || l.phone || "—"}</button>
-                        {fresh.has(l.id) && <span className="ml-2 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-xs font-bold uppercase text-emerald-600">New</span>}
-                        {(l.needs_reply || l.opted_out || (l.language && l.language !== "en")) && (
-                          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs">
-                            {l.opted_out && <span className="font-semibold text-rose-600" title="They replied STOP: no WhatsApp or calls">Opted out</span>}
-                            {l.needs_reply && <span className="font-semibold text-warm" title="Nobody has answered them yet">{waited(l.waiting_since)}</span>}
-                            {l.language && l.language !== "en" && <span className="text-muted" title="They write in this language; replies are drafted in it">{l.language_name}</span>}
-                          </p>
-                        )}
-                        <p className="truncate text-xs text-muted">{[l.email, l.phone].filter(Boolean).join(" · ")}</p>
-                        {l.message && <p className="mt-1 line-clamp-2 text-xs text-faint">{l.message}</p>}
-                        {/* Small screens: the hidden columns' facts, in one line under the name. */}
-                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted lg:hidden">
-                          <Chip tone={SOURCE_TONE[l.source] || "slate"}>{l.source}</Chip>
-                          <span className="sm:hidden">Score {l.score}</span>
-                          <span>· {timeAgo(l.created_at)}</span>
-                        </p>
-                      </td>
-                      <td className="hidden px-4 py-3 lg:table-cell"><Chip tone={SOURCE_TONE[l.source] || "slate"}>{l.source}</Chip></td>
-                      <td className="hidden px-4 py-3 sm:table-cell"><ScoreBar score={l.score} /></td>
-                      <td className="px-3 py-3 sm:px-4">
-                        {isClient ? <Chip tone={STAGE_TONE[l.stage]}>{l.stage}</Chip> : <select aria-label={`Stage for ${l.name || l.email || "lead"}`} className={cx("chip cursor-pointer", TONES[STAGE_TONE[l.stage]].chip)} value={l.stage} onChange={(e) => update(l.id, { stage: e.target.value })}>
-                          {STAGES.map((s) => <option key={s} value={s} className="bg-surface">{s}</option>)}
-                        </select>}
-                      </td>
-                      <td className="hidden px-4 py-3 lg:table-cell">
-                        {isClient ? <span className="text-xs text-ink">{l.value ? `₹${Number(l.value).toLocaleString("en-IN")}` : "—"}</span>
-                          : <input type="number" min="0" defaultValue={l.value || ""} placeholder="0" className="input h-8 w-24 text-xs"
-                          onBlur={(e) => Number(e.target.value) !== l.value && update(l.id, { value: Number(e.target.value) || 0 })} />}
-                      </td>
-                      <td className="hidden px-4 py-3 text-xs text-faint lg:table-cell">{timeAgo(l.created_at)}
-                        {Object.keys(l.synced).length > 0 && <p className="mt-1 text-emerald-600/80">synced</p>}
-                      </td>
-                      <td className="px-2 py-3 sm:px-4">
-                        <div className="flex items-center justify-end gap-1">
-                          {l.phone && !isClient && !l.opted_out && (l.needs_reply
-                            ? <Button size="sm" className="px-2 sm:px-3" aria-label="Reply" onClick={() => openLead(l.id, true)} title={`Reply on WhatsApp${l.language_name ? ` in ${l.language_name}` : ""}`}><MessageCircle className="size-3.5" /><span className="hidden sm:inline">Reply</span></Button>
-                            : <IconButton label="Message on WhatsApp" onClick={() => openLead(l.id, true)}><MessageCircle className="size-4" /></IconButton>)}
-                          {!isClient && <IconButton danger label="Delete lead" onClick={() => removeLead(l)}><Trash2 className="size-4" /></IconButton>}
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ul>
+              {leads.map((l) => (
+                <motion.li key={l.id} initial={fresh.has(l.id) ? { opacity: 0, x: -24 } : false} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 260, damping: 26 }}
+                  onClick={() => openLead(l.id)}
+                  className={cx("flex cursor-pointer items-start gap-3 border-b border-line px-3 py-3 last:border-0 hover:bg-ink/[0.02] sm:px-4", openId === l.id && "bg-ink/[0.04]", fresh.has(l.id) && "animate-[flash_2s_ease-out]")}>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-x-2">
+                      <button type="button" className="text-left font-semibold text-strong hover:underline" onClick={(e) => { e.stopPropagation(); openLead(l.id); }}>{l.name || l.email || l.phone || "—"}</button>
+                      {fresh.has(l.id) && <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-xs font-bold uppercase text-emerald-600">New</span>}
+                      {l.opted_out && <span className="text-xs font-semibold text-rose-600" title="They replied STOP: no WhatsApp or calls">Opted out</span>}
+                      {l.needs_reply && <span className="text-xs font-semibold text-warm" title="Nobody has answered them yet">{waited(l.waiting_since)}</span>}
+                      {l.language && l.language !== "en" && <span className="text-xs text-muted" title="They write in this language; replies are drafted in it">{l.language_name}</span>}
+                    </p>
+                    {l.message && <p className="mt-0.5 line-clamp-1 text-sm text-ink">{l.message}</p>}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                      <Chip tone={SOURCE_TONE[l.source] || "slate"}>{l.source}</Chip>
+                      <span className={cx(l.stage === "won" && "font-semibold text-emerald-700")}>{STAGE_LABEL[l.stage] || l.stage}{l.stage === "won" && l.value ? ` · ₹${Number(l.value).toLocaleString("en-IN")}` : ""}</span>
+                      <span>· {timeAgo(l.created_at)}</span>
+                      {l.score >= 70 && l.stage === "new" && <span className="font-semibold text-warm">· hot</span>}
+                      <WelcomeNote w={l.welcome} />
+                    </p>
+                  </div>
+                  {!isClient && (
+                    <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      {l.phone && !l.opted_out && (l.needs_reply
+                        ? <Button size="sm" className="px-2 sm:px-3" aria-label="Reply" onClick={() => openLead(l.id, true)} title={`Reply on WhatsApp${l.language_name ? ` in ${l.language_name}` : ""}`}><MessageCircle className="size-3.5" /><span className="hidden sm:inline">Reply</span></Button>
+                        : <IconButton label="Message on WhatsApp" onClick={() => openLead(l.id, true)}><MessageCircle className="size-4" /></IconButton>)}
+                      {l.phone && !l.opted_out && <a href={`tel:${l.phone}`} className="btn-subtle btn-sm px-2" aria-label={`Call ${l.name || "them"}`} title="Call"><Phone className="size-4" /></a>}
+                      {!["won", "lost"].includes(l.stage) && <IconButton label="They bought: mark as won" onClick={() => { update(l.id, { stage: "won" }); openLead(l.id); }}><BadgeCheck className="size-4" /></IconButton>}
+                    </div>
+                  )}
+                </motion.li>
+              ))}
+            </ul>
           )}
         </Card>
         <div>
@@ -238,7 +214,7 @@ export default function Leads() {
           <SyncPanel /></>}
         </div>
       </div>
-      {openId && <LeadPanel leadId={openId} startReply={replying} onClose={closeLead} onChanged={reload}
+      {openId && <LeadPanel leadId={openId} startReply={replying} onClose={closeLead} onChanged={reload} onDelete={(l) => { closeLead(); removeLead(l); }}
         ids={navIds.length ? navIds : leads.map((l) => l.id)} onNavigate={(id, reply) => openLead(id, reply, true)} />}
       <Modal open={adding} onClose={() => setAdding(false)} title="Add lead">
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); run(async () => { await post("/api/leads", form); setAdding(false); setForm({ name: "", email: "", phone: "", message: "" }); reload(); }, "Lead added"); }}>

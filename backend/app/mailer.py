@@ -10,13 +10,13 @@ log = logging.getLogger("aimva.mail")
 
 
 def _html(title: str, code: str, note: str) -> str:
-    return f"""<!doctype html><html><body style="margin:0;background:#0b1020;font-family:Arial,sans-serif">
+    return f"""<!doctype html><html><body style="margin:0;background:#f4f6f3;font-family:Arial,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
-<table width="480" cellpadding="0" cellspacing="0" style="background:#121a33;border-radius:16px;padding:32px;color:#e6e9f5">
-<tr><td style="font-size:20px;font-weight:bold;color:#fff">AIMVA</td></tr>
+<table width="480" cellpadding="0" cellspacing="0" style="background:#fcfdfb;border-radius:16px;padding:32px;color:#233a3b;border:1px solid #dfe6e3">
+<tr><td style="font-size:20px;font-weight:bold;color:#0b6b67">AIMVA</td></tr>
 <tr><td style="padding-top:20px;font-size:16px">{title}</td></tr>
-<tr><td style="padding:24px 0;font-size:36px;letter-spacing:10px;font-weight:bold;color:#7dd3fc">{code}</td></tr>
-<tr><td style="font-size:13px;color:#9aa3c0">{note}</td></tr>
+<tr><td style="padding:24px 0;font-size:36px;letter-spacing:10px;font-weight:bold;color:#0f2b2d">{code}</td></tr>
+<tr><td style="font-size:13px;color:#526563">{note}</td></tr>
 </table></td></tr></table></body></html>"""
 
 

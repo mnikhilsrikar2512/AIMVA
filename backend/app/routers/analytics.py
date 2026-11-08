@@ -66,27 +66,46 @@ def overview(days: int = Query(30, ge=1, le=365), user: User = Depends(current_u
     }
 
 
+def best_or_none(x) -> str:
+    return f"{x[1]} of {x[0]}" if x[1] else f"none of {x[0]}"
+
+
 @router.get("/insights")
 def insights(user: User = Depends(current_user), db: Session = Depends(get_db)):
     data = overview(30, user, db)  # direct call: pass days explicitly
     k, src = data["kpis"], data["by_source"]
     write = writer(db, user.id, agent="analyst")
     ai = write and write(f"You are a marketing analyst. Given these KPIs {k} and lead sources {src} and funnel {data['funnel']}, "
-             f"give 3 short, specific, actionable recommendations (one line each, no preamble) on where to focus budget.")
+             f"give 3 short, specific, actionable recommendations (one line each, no preamble) on where to focus budget. "
+             f"Only claim what these numbers support; treat any source with fewer than 5 leads as too small to judge.")
     if ai:
         return {"source": "ai", "items": [l.strip("-•* ").strip() for l in ai.splitlines() if l.strip()][:3]}
     items = []
-    if not src:
-        items.append("No leads yet — publish a landing page or start a voice agent test call to start collecting leads.")
+    leads = list(db.scalars(select(Lead).where(Lead.user_id == user.id)))
+    if not leads:
+        items.append("No leads yet. Publish a landing page or run a test call to start collecting them.")
     else:
-        best = src[0]["source"]
-        items.append(f"'{best}' is your top lead source ({src[0]['count']} leads) — shift more budget and follow-ups there.")
-    if k["hot_leads"]:
-        items.append(f"You have {k['hot_leads']} hot leads (score ≥ 70). Call them today with the voice agent or WhatsApp.")
-    if k["avg_sentiment"] is not None and k["avg_sentiment"] < 0:
-        items.append("Average call sentiment is negative — review voice agent scripts and enable human handoff.")
-    if k["site_visits"] and k["conversion"] < 3:
-        items.append(f"Landing page conversion is {k['conversion']}% — test a shorter form or stronger headline.")
-    if len(items) < 3:
-        items.append("Connect Meta or Google Ads to track spend and compute cost per lead and ROI automatically.")
+        # Rank channels by how often their leads buy, not by how many leads they send: a channel full of
+        # tyre-kickers looks great by count. Channels with under 5 leads are too few to compare.
+        per = {}
+        for l in leads:
+            n, w, v = per.get(l.source, (0, 0, 0.0))
+            per[l.source] = (n + 1, w + (l.stage == "won"), v + (l.value or 0 if l.stage == "won" else 0))
+        enough = {k: x for k, x in per.items() if x[0] >= 5}
+        if len(enough) >= 2 and any(x[1] for x in enough.values()):
+            rate = lambda x: x[1] / x[0]  # noqa: E731
+            best, worst = max(enough.items(), key=lambda kv: rate(kv[1])), min(enough.items(), key=lambda kv: rate(kv[1]))
+            if rate(best[1]) >= 1.5 * rate(worst[1]) + 0.02:
+                items.append(f"{best[1][1]} of {best[1][0]} '{best[0]}' leads bought ({rate(best[1]):.0%}) against "
+                             f"{best_or_none(worst[1])} for '{worst[0]}'. Put your follow-up time into '{best[0]}' first.")
+        if not items:
+            top = max(per.items(), key=lambda kv: kv[1][0])
+            items.append(f"'{top[0]}' sends the most leads ({top[1][0]}). Mark the ones who buy as won, so AIMVA can tell which "
+                         "channel brings buyers, not just enquiries.")
+    if k["avg_sentiment"] is not None and k["avg_sentiment"] < 0 and k["calls"] >= 5:
+        items.append("Callers sound unhappy on average over the last calls. Review the call script and turn on hand-over to you.")
+    if k["site_visits"] >= 200 and k["conversion"] < 2:
+        items.append(f"Only {k['conversion']}% of {k['site_visits']:,} page visits became leads. Try a shorter form or a clearer offer at the top.")
+    if not k["spend"]:
+        items.append("Connect Meta or Google Ads so AIMVA can see spend and work out what each lead and sale costs.")
     return {"source": "rules", "items": items[:3]}

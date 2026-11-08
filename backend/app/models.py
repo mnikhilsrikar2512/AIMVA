@@ -427,7 +427,7 @@ class FollowUp(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
-    step: Mapped[str] = mapped_column(String(20))  # day2 | day7
+    step: Mapped[str] = mapped_column(String(20))  # welcome (already done, status sent | drafted | failed) | day2 | day7
     due_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | sent | skipped
     note: Mapped[str] = mapped_column(String(300), default="")

@@ -4,14 +4,17 @@ import { motion } from "framer-motion";
 import { rise, stagger } from "../../components/Motion";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Clapperboard, KeyRound, Plus, Trash2, Video, Volume2, VolumeX, Wand2 } from "lucide-react";
+import { Clapperboard, KeyRound, MessageSquarePlus, Plus, Trash2, Video, Volume2, VolumeX, Wand2 } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, Notice, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
 import { del, get, post } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
 import BrandControls from "../../components/BrandControls";
+import { useAuth } from "../../lib/auth";
 import { Advanced, LibraryImagePicker, ProviderPicker, SeedField, STYLES } from "../../components/GenControls";
 import { EnhanceButton, Rate } from "../../components/Quality";
+import VideoStudio from "../../components/VideoStudio";
+import { StoryLine, UsedIn } from "../../components/Story";
 
 const DURATION_LABEL = (d) => `${String(d).replace(/s$/, "")} seconds`;
 
@@ -24,7 +27,7 @@ function Switch({ checked, onChange, label }) {
   );
 }
 
-function VideoCard({ a, rating, onChange, onDelete }) {
+function VideoCard({ a, rating, onChange, onDelete, onComment }) {
   const [soundBusy, setSoundBusy] = useState(false);
   const p = a.params || {};
   const addingSound = a.status === "queued" && p.stage === "audio";
@@ -62,6 +65,7 @@ function VideoCard({ a, rating, onChange, onDelete }) {
               ? <span className="inline-flex items-center gap-1 font-semibold text-emerald-600"><Volume2 className="size-3" /> With sound</span>
               : <span className="inline-flex items-center gap-1"><VolumeX className="size-3" /> Silent{p.audio_error ? " (sound failed)" : ""}</span>)}
           </p>
+          <UsedIn assetId={a.id} className="mt-1" />
           {a.status === "done" && !p.has_audio && (
             <button onClick={addSound} disabled={soundBusy} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1 text-xs font-semibold text-strong hover:bg-brand/15 disabled:opacity-50">
               {soundBusy ? <Spinner className="size-3" /> : <Wand2 className="size-3" />} Add sound
@@ -69,6 +73,7 @@ function VideoCard({ a, rating, onChange, onDelete }) {
           )}
         </div>
         <div className="flex items-center gap-1">
+          {a.status === "done" && <button className="btn-subtle btn-sm" title="Comment to change it" aria-label="Comment to change it" onClick={onComment}><MessageSquarePlus className="size-3.5" /></button>}
           {a.status === "done" && <Rate kind="video" id={a.id} initial={rating} />}
           <Chip tone={a.status === "done" ? "green" : a.status === "queued" ? "amber" : "rose"}>{addingSound ? "sound" : a.status}</Chip>
           <button className="btn-subtle btn-sm" aria-label="Delete video" onClick={onDelete}><Trash2 className="size-3.5" /></button>
@@ -89,6 +94,7 @@ export default function VideoGen() {
   const EMPTY = { prompt: "", aspect_ratio: "16:9", duration: "", resolution: "", negative_prompt: "", seed: null,
                   camera: "", style: "", start: "", generate_audio: false };
   const [form, setForm] = useState(EMPTY);
+  const admin = !!useAuth().user?.is_admin; // the platform owner sees engine and fine-tuning options; customers get the essentials
   const [tab, setTab] = useState("create");
   const [currentIds, setCurrentIds] = useState([]);  // renders started in this session, shown in Create
   const [q, setQ] = useState("");
@@ -143,16 +149,22 @@ export default function VideoGen() {
   const startNew = () => { setForm(EMPTY); setCurrentIds([]); setTab("create"); };
   const current = assets.filter((a) => currentIds.includes(a.id));
   const history = assets.filter((a) => a.prompt.toLowerCase().includes(q.toLowerCase()));
+  const [studio, setStudio] = useState(null);
+  const rootOf = (a) => { let x = a; const seen = new Set(); while (x?.params?.parent && !seen.has(x.id)) { seen.add(x.id); x = assets.find((y) => y.id === x.params.parent) || x; if (seen.has(x.id)) break; } return x?.id; };
+  const chain = studio ? assets.filter((x) => rootOf(x) === rootOf(studio)).sort((a, b) => a.id - b.id) : [];
   const card = (a) => (
-    <VideoCard key={a.id} a={a} rating={ratings[a.id]}
+    <VideoCard key={a.id} a={a} rating={ratings[a.id]} onComment={() => setStudio(a)}
       onChange={(n) => setAssets((all) => all.map((x) => (x.id === n.id ? n : x)))}
       onDelete={async () => { await del(`/api/content/assets/${a.id}`); setAssets((all) => all.filter((x) => x.id !== a.id)); }} />
   );
 
   return (
     <div>
-      <PageHeader icon={Video} tone="pink" title="Videos" subtitle="Turn a sentence or a picture into a short promo clip, with sound."
+      <VideoStudio video={studio} versions={chain} open={!!studio} onClose={() => setStudio(null)} onPick={setStudio}
+        onCreated={(n) => { setAssets((all) => [n, ...all]); setStudio(null); setTab("history"); }} />
+      <PageHeader title="Videos"
         actions={<Button variant="ghost" onClick={startNew}><Plus className="size-4" /> Start new</Button>} />
+      <StoryLine module="videos" />
       <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${assets.length ? ` (${assets.length})` : ""}` }]} /></div>
       {options.length > 0 && !anyAvailable && (
         <Notice tone="amber" icon={KeyRound}>
@@ -174,7 +186,7 @@ export default function VideoGen() {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
         <Card className="h-fit">
           <form onSubmit={submit} className="space-y-4">
-            <TemplateStrip module="video" onApply={(t) => { tpl.apply(t); setForm((f) => ({ ...f, prompt: t.payload.prompt, aspect_ratio: t.payload.aspect_ratio || f.aspect_ratio, camera: t.payload.camera || "", style: t.payload.style || "", negative_prompt: t.payload.negative_prompt || "" })); }} />
+            {admin && <TemplateStrip module="video" onApply={(t) => { tpl.apply(t); setForm((f) => ({ ...f, prompt: t.payload.prompt, aspect_ratio: t.payload.aspect_ratio || f.aspect_ratio, camera: t.payload.camera || "", style: t.payload.style || "", negative_prompt: t.payload.negative_prompt || "" })); }} />}
             <Field label="Prompt">
               <textarea className="input" rows={5} value={form.prompt} onChange={set("prompt")} required minLength={3} maxLength={2000}
                 placeholder="A slow cinematic drone shot over a beachfront villa at sunset, waves and soft music…" />
@@ -200,7 +212,7 @@ export default function VideoGen() {
               </Field>
             </div>
 
-            <Advanced>
+            {admin && <Advanced>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Camera">
                   <select className="input" value={form.camera} onChange={set("camera")}>{CAMERAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
@@ -218,12 +230,12 @@ export default function VideoGen() {
               <SeedField value={form.seed} onChange={(v) => setForm((f) => ({ ...f, seed: v }))} />
               {!known && (
                 <label className="flex items-center gap-2 text-sm text-ink">
-                  <input type="checkbox" className="size-4 accent-violet-500" checked={form.generate_audio}
+                  <input type="checkbox" className="size-4 accent-brand" checked={form.generate_audio}
                     onChange={(e) => setForm((f) => ({ ...f, generate_audio: e.target.checked }))} />
                   This engine renders its own sound
                 </label>
               )}
-            </Advanced>
+            </Advanced>}
 
             <LibraryImagePicker label="Start from an image (optional)" value={form.start} onChange={(v) => setForm((f) => ({ ...f, start: v }))}
               hint="Animates a product photo or one of your generated images." />
@@ -247,7 +259,7 @@ export default function VideoGen() {
 
             <BrandControls brand={brandKit} value={brandOpts} onChange={setBrandOpts} mode="video-plain" />
             <Button type="submit" busy={busy} disabled={!anyAvailable} className="h-11 w-full"><Clapperboard className="size-4" /> Render video</Button>
-            {form.prompt.trim().length >= 3 && <div className="flex justify-center"><SaveTemplateButton module="video" getPayload={tplPayload} /></div>}
+            {admin && form.prompt.trim().length >= 3 && <div className="flex justify-center"><SaveTemplateButton module="video" getPayload={tplPayload} /></div>}
           </form>
         </Card>
         <div>

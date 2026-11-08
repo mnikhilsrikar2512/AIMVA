@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 /*
- * AIMVA light design system: warm off-white canvas, white surfaces separated by soft shadow
- * (not borders), generous radius, one lavender → peach accent used sparingly.
+ * AIMVA light design system (2026-11-08 palette: deep teal and saffron). Pale teal-tinted canvas, near-white
+ * surfaces separated by hairlines, deep teal for the app and its actions, saffron only for what needs you now.
  */
 @theme {
   --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -16,28 +16,30 @@
   --radius-2xl: 0.75rem;
   --radius-xl: 0.625rem;
 
-  --color-bg: #f7f4ee;
-  --color-surface: #fffdf9;
-  --color-surface-2: #f0ebe3;
-  --color-line: rgb(70 50 30 / 0.09);
-  --color-line-strong: rgb(70 50 30 / 0.17);
-  --color-strong: #1e1913;
-  --color-ink: #38302a;
-  --color-muted: #675d52;
-  /* was #9a97a8 (2.85:1, failed WCAG AA); now 4.9:1 on the page background */
-  --color-faint: #6f655a;
-  /* Warm accent: only for what needs attention (urgent next step, hot lead, greeting). */
-  --color-warm: #a34d22;
-  --color-warm-soft: #fbeadf;
-  --color-brand: #6655f2;  /* 4.5:1 on the cream page background for small link text */
-  /* was #0e9fb8 (3.1:1 as link text, failed WCAG AA); now 4.6–5.4:1 on every warm surface */
-  --color-brand-2: #087485;
-  --color-peach: #ff9f7a;
-  --color-lavender: #ece8ff;
+  --color-bg: #f4f6f3;
+  --color-surface: #fcfdfb;
+  --color-surface-2: #e9eeeb;
+  --color-line: rgb(15 43 45 / 0.09);
+  --color-line-strong: rgb(15 43 45 / 0.17);
+  --color-strong: #0f2b2d;
+  --color-ink: #233a3b;
+  --color-muted: #526563;
+  /* 5.2:1 on the page background, 4.8:1 on surface-2 (WCAG AA for small text) */
+  --color-faint: #596b69;
+  /* Saffron: only for what needs attention (urgent next step, hot lead, greeting). Text-safe shade: 4.6-5.3:1. */
+  --color-warm: #a35700;
+  --color-warm-soft: #fdf0db;
+  /* Deep teal: links, focus, selected states. 5.4-6.2:1 as small text; white on it is 6.3:1. */
+  --color-brand: #0b6b67;
+  --color-brand-2: #134e5e;
+  /* Bright saffron for fills and glows (never text), and a teal mist for selected/hover surfaces.
+     Names kept from the old palette so every bg-peach / bg-lavender follows. */
+  --color-peach: #f4a21c;
+  --color-lavender: #dcefeb;
 
   /* Calm: hairlines instead of floating shadows; lift only for menus and dialogs. */
-  --shadow-soft: 0 0 0 1px rgb(70 50 30 / 0.09);
-  --shadow-lift: 0 0 0 1px rgb(70 50 30 / 0.09), 0 18px 40px -20px rgb(70 40 15 / 0.28);
+  --shadow-soft: 0 0 0 1px rgb(15 43 45 / 0.09);
+  --shadow-lift: 0 0 0 1px rgb(15 43 45 / 0.09), 0 18px 40px -20px rgb(10 40 42 / 0.3);
 }
 
 @layer base {
@@ -65,7 +67,7 @@
 }
 @utility btn-primary {
   @apply btn text-white bg-strong font-semibold;
-  &:hover:not(:disabled) { background: #3a3129; }
+  &:hover:not(:disabled) { background: #1d4346; }
 }
 @utility btn-ghost { @apply btn bg-surface text-strong ring-1 ring-line-strong hover:ring-strong/30 hover:bg-surface-2; }
 @utility btn-subtle { @apply btn text-muted hover:text-strong hover:bg-ink/[0.05]; }
@@ -83,17 +85,17 @@ select.input { @apply pr-9; }
 @utility label { @apply block text-xs font-semibold text-muted mb-1.5; }
 @utility chip { @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium; }
 @utility gradient-text {
-  background: linear-gradient(95deg, #6d5dfc 0%, #b05cf0 45%, #ff8a65 100%);
+  background: linear-gradient(95deg, #0b6b67 0%, #13827a 45%, #c56a00 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
-/* Soft lavender/peach glow used behind heroes instead of boxes. */
+/* Soft teal/saffron glow used behind heroes instead of boxes. */
 @utility aura {
   background:
-    radial-gradient(40% 50% at 20% 10%, rgb(196 181 253 / 0.55), transparent 70%),
-    radial-gradient(35% 45% at 85% 0%, rgb(255 190 160 / 0.5), transparent 70%),
-    radial-gradient(45% 40% at 60% 60%, rgb(165 243 252 / 0.25), transparent 70%);
+    radial-gradient(40% 50% at 20% 10%, rgb(94 184 172 / 0.32), transparent 70%),
+    radial-gradient(35% 45% at 85% 0%, rgb(244 162 28 / 0.26), transparent 70%),
+    radial-gradient(45% 40% at 60% 60%, rgb(160 220 210 / 0.22), transparent 70%);
 }
 
 /* Inside the app the window is locked to the screen; the content panel (#app-scroll) does the scrolling. */
@@ -102,7 +104,7 @@ html.app-locked, html.app-locked body { height: 100%; overflow: hidden; overscro
 html, body { overflow-x: clip; }
 
 /* Thin scrollbars */
-* { scrollbar-width: thin; scrollbar-color: rgb(20 18 31 / 0.18) transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgb(15 43 45 / 0.2) transparent; }
 
 @keyframes slidein { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }

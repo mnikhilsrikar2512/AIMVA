@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Call, Integration, Lead, Site, User, VoiceAgent
+from ..models import AgentSetting, Call, Integration, Lead, Site, User, VoiceAgent
 from ..security import current_user
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
@@ -84,6 +84,14 @@ def _count(db: Session, model, user_id: int, *where) -> int:
     return db.scalar(select(func.count()).select_from(model).where(model.user_id == user_id, *where)) or 0
 
 
+def _alerts_ready(db: Session, user_id: int) -> bool:
+    """A phone that gets lead alerts, or a WhatsApp number that welcomes leads by itself."""
+    alerts = db.scalar(select(AgentSetting).where(AgentSetting.user_id == user_id, AgentSetting.kind == "lead_alerts"))
+    if alerts and alerts.enabled and (alerts.config or {}).get("push"):
+        return True
+    return _count(db, Integration, user_id, Integration.provider == "whatsapp") > 0
+
+
 def status(db: Session, user: User) -> dict:
     sites = _count(db, Site, user.id)
     steps = [
@@ -96,6 +104,8 @@ def status(db: Session, user: User) -> dict:
          "done": _count(db, Site, user.id, Site.published.is_(True)) > 0, "to": "/app/websites"},
         {"key": "voice", "title": "Test your AI voice agent", "desc": "Have a 1-minute practice call in your browser.",
          "done": _count(db, Call, user.id) > 0, "to": "/app/voice"},
+        {"key": "alerts", "title": "Hear about every lead", "desc": "Alerts on your phone, or WhatsApp connected so welcomes go out.",
+         "done": _alerts_ready(db, user.id), "to": "/app/settings"},
         {"key": "lead", "title": "Capture your first lead", "desc": "From your page, a test call or WhatsApp.",
          "done": _count(db, Lead, user.id) > 0, "to": "/app/leads"},
         {"key": "connect", "title": "Connect an account", "desc": "Facebook, Google, WhatsApp or hosting.",
