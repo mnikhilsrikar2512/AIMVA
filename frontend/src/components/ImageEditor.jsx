@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, ChevronDown, Expand, Eye, ImageUp, Palette, Plus, Redo2, Search, SlidersHorizontal, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
-import { Button, Field, Modal, Tabs, cx } from "./ui";
+import { ArrowLeft, ArrowUp, ChevronDown, Expand, Eye, ImageUp, Palette, Plus, Redo2, Search, SlidersHorizontal, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
+import { Button, Field, Tabs, cx } from "./ui";
+import { Dialog, DialogContent, DialogTitle } from "./shadcn/dialog";
 import { post } from "../lib/api";
 import { useAction, useApi } from "../lib/hooks";
 
 const MAX_PINS = 8;
+const POP_W = "min(16rem, calc(var(--w) - 1rem))"; // comment box width, never wider than the image
 const SIZES = [["S", 0.06], ["M", 0.12], ["L", 0.2], ["XL", 0.32]];
 // Mirrors the server's guess (app/image_edit.py intent): only-removing comments go to the eraser model.
 const REMOVE_RE = /\b(remove|delete|erase|get rid of|take (out|away)|eliminate|hide|lose|clear (away|out))\b/i;
@@ -102,11 +104,20 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
   const ideas = styles.length ? TRY_STYLES.map((id) => styles.find((s) => s.id === id)).filter(Boolean) : [];
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit image" wide="xl">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0">
-          <div ref={box} className={cx("relative select-none rounded-2xl bg-surface-2", !busy && "cursor-crosshair")} onClick={place}>
-            <img src={shownUrl} alt={shown.prompt || "Image"} className="block w-full rounded-2xl" draggable={false} />
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose?.(); }}>
+      <DialogContent hideClose aria-describedby={undefined}
+        className="inset-0 h-dvh max-h-none rounded-none bg-bg p-0 sm:inset-0 sm:left-0 sm:top-0 sm:max-w-none sm:translate-x-0 sm:translate-y-0 sm:rounded-none lg:overflow-hidden">
+      <div className="flex min-h-full flex-col lg:h-full lg:flex-row">
+        <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
+          <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ink/5 px-3">
+            <button type="button" onClick={onClose} aria-label="Back to pictures" title="Back (Esc)"
+              className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.06] hover:text-strong"><ArrowLeft className="size-4" /></button>
+            <DialogTitle className="truncate text-sm font-semibold text-strong">Edit image</DialogTitle>
+            {versions.length > 1 && <span className="rounded-md bg-ink/[0.05] px-1.5 py-0.5 text-xs text-muted">Version {at + 1} of {versions.length}</span>}
+          </div>
+          <div className="grid flex-1 place-items-center overflow-auto bg-[repeating-conic-gradient(var(--color-surface-2)_0_25%,transparent_0_50%)] bg-[length:20px_20px] p-4 lg:min-h-0">
+          <div ref={box} className={cx("relative w-fit select-none", !busy && "cursor-crosshair")} onClick={place}>
+            <img src={shownUrl} alt={shown.prompt || "Image"} className="block max-h-[60dvh] w-auto max-w-full rounded-lg shadow-[0_8px_30px_-12px_rgb(40_20_10/0.35)] lg:max-h-[calc(100dvh-17rem)]" draggable={false} />
             {writing && layers.map((l) => (
               <TextMark key={l.id} layer={l} box={box} update={(patch) => setLayers((all) => all.map((x) => (x.id === l.id ? { ...x, ...patch } : x)))} />
             ))}
@@ -125,7 +136,9 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
             {peek && <span className="absolute left-3 top-3 rounded-full bg-strong/80 px-2.5 py-1 text-xs font-semibold text-white">Before</span>}
             <ShortSide target={box} />
           </div>
+          </div>
 
+          <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4">
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
             <span>{pins.length ? `${queued.length} spot${queued.length === 1 ? "" : "s"} ready · click again to add more` : "Tip: click anything in the image to change just that spot"}</span>
             <span className="flex items-center gap-1">
@@ -151,9 +164,10 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
               {WHOLE_IDEAS.map((t) => <Chip key={t} onClick={() => { setText(t); composer.current?.focus(); }}>{t}</Chip>)}
             </div>
           )}
+          </div>
         </div>
 
-        <div className="space-y-4">
+        <aside className="w-full shrink-0 space-y-4 border-t border-ink/5 bg-surface p-4 lg:w-80 lg:overflow-y-auto lg:border-l lg:border-t-0">
           <Tabs value={side} onChange={setSide} tabs={[{ value: "versions", label: "Versions" }, { value: "text", label: "Text" }, { value: "more", label: "More tools" }]} />
           {side === "text" && (
             <TextPanel layers={layers} setLayers={setLayers} busy={busy}
@@ -172,9 +186,10 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
             <summary className="flex cursor-pointer items-center gap-1.5 font-semibold text-strong"><SlidersHorizontal className="size-4" /> Settings</summary>
             <div className="mt-3 space-y-3"><EngineSelect engines={engines} engine={engine} setEngine={setEngine} chosen={chosen} /></div>
           </details>
-        </div>
+        </aside>
       </div>
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -197,8 +212,8 @@ function PinMark({ pin: p, n, open, canSelect, busy, onOpen, onClose, update, on
         <span className="pointer-events-none absolute bottom-7 left-0 hidden max-w-56 truncate rounded-md bg-strong px-2 py-1 text-xs text-white shadow-md group-hover:block">{p.text}</span>
       )}
       {open && !busy && (
-        <div className={cx("absolute z-10 w-64 max-w-[70vw] cursor-default rounded-xl bg-surface shadow-xl ring-1 ring-ink/10",
-          right ? "right-1" : "left-8", low ? "bottom-0" : "-top-6", right && "mb-8")}>
+        <div className={cx("absolute z-10 cursor-default rounded-xl bg-surface shadow-xl ring-1 ring-ink/10", low ? "bottom-8" : "top-2")}
+          style={{ width: POP_W, left: `max(calc(${-p.x} * var(--w) + 0.5rem), min(${right ? `calc(-1 * ${POP_W} - 0.25rem)` : "2rem"}, calc(${1 - p.x} * var(--w) - ${POP_W} - 0.5rem)))` }}>
           <div className="flex items-end gap-1 p-1.5">
             <textarea autoFocus rows={1} maxLength={300} value={p.text} placeholder="Add a comment…" ref={grow}
               className="min-h-7 flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-5 text-strong outline-none placeholder:text-muted"
