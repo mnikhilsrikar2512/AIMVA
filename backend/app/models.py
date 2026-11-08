@@ -568,3 +568,31 @@ class Approval(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # what was approved; edits after it need a new approval
+
+
+class StaffMember(Base):
+    """Someone on the AIMVA team who isn't a platform owner (owners are ADMIN_EMAILS, set on the server).
+    Keyed by email so a teammate can be added before they sign up; the role counts once that email is verified."""
+    __tablename__ = "staff_members"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    role: Mapped[str] = mapped_column(String(20), default="support")  # manager | developer | support (owners live in ADMIN_EMAILS)
+    added_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class StaffAction(Base):
+    """What the AIMVA team did, and why: plan changes, credits, unlocks, team changes, customer views.
+    Append-only. Not part of a customer's data export (no user_id column) and kept when a customer deletes their
+    account: target_label remembers who it was."""
+    __tablename__ = "staff_actions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    actor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_email: Mapped[str] = mapped_column(String(255))
+    actor_role: Mapped[str] = mapped_column(String(20))
+    action: Mapped[str] = mapped_column(String(40), index=True)
+    target_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # a customer's users.id, no FK on purpose
+    target_label: Mapped[str] = mapped_column(String(255), default="")
+    reason: Mapped[str] = mapped_column(String(500), default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)

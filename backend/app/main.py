@@ -43,6 +43,8 @@ from .workspaces import router as workspaces_router  # noqa: E402
 app.include_router(workspaces_router)
 from .account import router as account_router  # noqa: E402
 app.include_router(account_router)
+from .console import router as console_router  # noqa: E402
+app.include_router(console_router)
 
 
 @app.on_event("startup")

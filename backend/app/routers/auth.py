@@ -61,7 +61,8 @@ class ChangePasswordIn(BaseModel):
 
 
 def user_out(u: User) -> dict:
-    return {"id": u.id, "name": u.name, "email": u.email, "company": u.company, "industry": u.industry,
+    from ..staff import staff_role
+    return {"staff_role": staff_role(None, u), "id": u.id, "name": u.name, "email": u.email, "company": u.company, "industry": u.industry,
             "goal": u.goal, "created_at": u.created_at.isoformat(), "is_admin": u.email.lower() in settings.admin_emails,
             "can_simulate": not settings.is_production or u.email.lower() in settings.admin_emails}
 

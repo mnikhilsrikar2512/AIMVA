@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import staff
 from ..db import get_db
 from ..models import Template, TemplateUse, User
 from ..quality import match_playbook
@@ -239,5 +240,6 @@ def admin_decide(tid: int, action: Literal["publish", "dismiss"], user: User = D
         t.source, t.status = "platform", "active"
     else:
         t.status = "dismissed"
+    staff.record(db, user, f"template.{action}", None, "", {"template_id": t.id, "name": t.name}, role="owner")
     db.commit()
     return {"ok": True}
