@@ -65,7 +65,7 @@ def test_overview_rolls_up_and_scores_campaigns(auth_client):
     assert fix["alt"]["type"] == "move_budget" and "Good" in fix["alt"]["label"]  # cheaper option inside the same product
     assert sum(1 for r in o["recommendations"] if r["campaign_id"] == bad["id"]) == 1  # one card per campaign
     assert o["plan"]["leads_next_7"] == round(22 / 30 * 7, 1) and "22 leads" in o["summary"]
-    assert "lucky stretch" in fix["why"]  # the product has its own target, so the certainty is shown
+    assert "sure" not in fix["why"] and "lucky" not in fix["why"]  # how the judge decided stays behind the scenes
 
 
 def test_period_maths_uses_snapshots(auth_client):

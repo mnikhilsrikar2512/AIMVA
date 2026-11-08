@@ -7,6 +7,7 @@ Videos: fal.ai queue API (needs a key). The key never reaches the browser.
 import logging
 import random
 import uuid
+from types import SimpleNamespace
 from typing import List, Literal, Optional
 from urllib.parse import quote
 
@@ -138,6 +139,7 @@ class ImageIn(BaseModel):
     seed: Optional[int] = Field(None, ge=0, le=2**31 - 1)
     style: Optional[Style] = None
     reference: str = Field("", max_length=40)  # "brand:<id>", "asset:<id>" or "ref:<id>": image to guide the result
+    size_auto: bool = False  # the person never picked a shape: take it from the prompt ("story" -> 9:16) when it says one
     use_brand: bool = False  # fold the saved Brand Kit (style, colours, audience, avoid) into the prompt
     add_logo: bool = False  # composite the primary brand logo onto each result
     logo_position: LogoPosition = "bottom-right"
@@ -263,22 +265,18 @@ def _snap(v: int) -> int:
     return max(256, min(2048, int(round(v / 16) * 16)))  # most models want multiples of 16
 
 
-@router.get("/prompt-sense")
-def prompt_sense(text: str = Query("", max_length=2000), size: str = Query("", max_length=10), user: User = Depends(current_user)):
-    """What AIMVA reads in a prompt while it's typed: the shape it asks for (when not the one picked) and its words."""
-    r = read_prompt(text)
-    return {"format": r["format"] if r["format"] in SIZES and r["format"] != size else None, "words": r["words"]}
-
-
 @router.post("/image")
 def generate_image(body: ImageIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     rate_limit(f"img:{user.id}", 30, 300)
-    # Words meant for the picture ("poster saying 'Diwali Sale'") are kept off the image model, which misspells
-    # them, and offered afterwards as real text (app/prompt_sense.py, /image/{id}/text).
+    # Read quietly, never announced (owner rule 2026-11-08): words meant for the picture ("poster saying 'Diwali
+    # Sale'") are kept off the image model, which misspells them, and typeset on afterwards; a prompt that names a
+    # shape ("for my story") gets that shape unless the person picked one (app/prompt_sense.py).
     typed = body.prompt
     sense = read_prompt(typed)
     if sense["words"]:
         body = body.model_copy(update={"prompt": sense["scene"][:2000] if len(sense["scene"]) >= 3 else typed})
+    if body.size_auto and sense["format"] in SIZES and not (body.width and body.height):
+        body = body.model_copy(update={"size": sense["format"]})
     w, h = (_snap(body.width), _snap(body.height)) if body.width and body.height else SIZES.get(body.size, SIZES["1:1"])
     kit = get_kit(db, user.id) if body.use_brand else None
     logo = primary_logo(db, user.id) if body.add_logo else None
@@ -338,20 +336,38 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
         raise HTTPException(502, str(e))
     except P.ProviderError as e:
         raise http_error(e)
+    layers = [{"text": sense["words"][:160], "x": 0.5, "y": 0.86, "size": 0.07, "color": "#ffffff", "weight": "bold", "bg": "band"}] \
+        if sense["words"] else []
     assets = []
     batch = uuid.uuid4().hex[:12]
     for u in urls:
+        plain, u = u, _with_text(user, u, layers)
         a = Asset(user_id=user.id, kind="image", prompt=typed, model=model_label, url=u,
                   params={"size": body.size if not body.width else f"{w}x{h}", "width": w, "height": h, "brand": bool(kit),
                           "logo": bool(logo), "provider": ref, "style": body.style, "seed": seed,
                           "negative_prompt": body.negative_prompt, "reference": bool(reference), "batch": batch,
                           "kept_product": body.keep_product, "brief": brief, "prompt_sent": sent, "words": sense["words"],
+                          **({"text_layers": layers, "text_plain_url": plain} if u != plain else {}),
                           "provider_label": "Your product, new scene" if body.keep_product
                           else "Free FLUX" if ref == "builtin:pollinations" else model_label})
         db.add(a)
         assets.append(a)
     db.commit()
     return [asset_out(a) for a in assets]
+
+
+def _with_text(user: User, url: str, layers: list) -> str:
+    """The image with its words typeset on, or the plain image when there are none or drawing them fails."""
+    if not layers:
+        return url
+    from .. import image_edit as IE
+    from .. import text_layers as TL
+    try:
+        out = TL.render(IE.open_rgb(_asset_bytes(SimpleNamespace(url=url))), layers)
+        return "/api/files/" + save_media(user.id, IE.png_bytes(out), "image")
+    except Exception:  # noqa: BLE001 - the picture still counts; the words can be added in the editor
+        log.warning("typesetting words on a new picture failed", exc_info=True)
+        return url
 
 
 CAMERA_PRESETS = {
@@ -1022,8 +1038,9 @@ def set_text(asset_id: int, body: TextIn, user: User = Depends(current_user), db
     if not base or base.user_id != user.id or base.kind != "image" or not base.url:
         base = src
     layers = [l.model_dump() for l in body.layers if l.text.strip()]
+    plain = (base.params or {}).get("text_plain_url")  # a new picture made with its words already on
     try:
-        out = TL.render(IE.open_rgb(_asset_bytes(base)), layers)
+        out = TL.render(IE.open_rgb(_asset_bytes(SimpleNamespace(url=plain) if plain else base)), layers)
     except IE.EditFailed as e:
         raise _edit_error(e)
     label = f"Text · {layers[0]['text'][:24]}" if layers else "Text removed"

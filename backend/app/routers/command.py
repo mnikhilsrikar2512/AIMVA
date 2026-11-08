@@ -387,8 +387,6 @@ def recommendations(db: Session, user: User, ctx: dict) -> list:
         # Pause, fix and scale only when luck alone is unlikely to explain the numbers (app/judge.py).
         j = judge(spend, leads, clicks, t)
         verdict = j["verdict"]
-        sure_txt = (" Almost certainly not just a slow or lucky stretch." if (j["sure"] or 0) >= 0.99 else
-                    f" About {round((j['sure'] or 0) * 100)}% sure this isn't just a slow or lucky stretch.") if verdict and j["sure"] and c["target_own"] else ""  # only calibrated against a real target
         if c["platform"] == "other" and not clicks and not leads and spend > 0:
             found.append((rec(f"track:{cid}", "medium", f"Track the leads from “{name}”",
                               f"{money(spend)} spent and no leads linked to it yet. Put its tracking link or a QR code in the ad, "
@@ -396,7 +394,7 @@ def recommendations(db: Session, user: User, ctx: dict) -> list:
                               {"type": "ack", "label": "Got it"}, campaign_id=cid, product_id=pid, group="tidy"), None))
         elif verdict == "pause":
             found.append((rec(f"pause:{cid}", "high", f"Pause “{name}”: {money(spend)} spent, no leads",
-                              f"{clicks} clicks and {money(spend)} in {days} days without a single lead.{sure_txt}",
+                              f"{clicks} clicks and {money(spend)} in {days} days without a single lead.",
                               {"type": "pause_campaign", "label": "Pause campaign"}, impact=f"Save about {weekly}/week",
                               campaign_id=cid, product_id=pid), None))
         elif verdict == "fix":
@@ -404,7 +402,7 @@ def recommendations(db: Session, user: User, ctx: dict) -> list:
             alt = {k: v for k, v in mv.items() if k not in ("gain", "best")} if mv else None
             found.append((rec(f"fix:{cid}", "high", f"“{name}” costs {money(c['cpl'])} per lead",
                               f"That's {round(c['cpl'] / t, 1)}× the {money(t)} target."
-                              + (f" “{mv['best']['name']}” gets them for {money(mv['best']['cpl'])}." if mv else "") + sure_txt,
+                              + (f" “{mv['best']['name']}” gets them for {money(mv['best']['cpl'])}." if mv else ""),
                               {"type": "pause_campaign", "label": "Pause campaign"}, alt=alt,
                               impact=(f"≈ +{mv['gain']} leads/week by moving budget" if mv else f"Save about {weekly}/week"),
                               campaign_id=cid, product_id=pid), None))
@@ -412,7 +410,7 @@ def recommendations(db: Session, user: User, ctx: dict) -> list:
             new = round(c["daily_budget"] * 1.2)
             extra = (new - c["daily_budget"]) * 7 / c["cpl"]
             found.append((rec(f"scale:{cid}", "medium", f"Scale “{name}”: your cheapest leads",
-                              f"{money(c['cpl'])} per lead vs a {money(t)} target. Raise the daily budget {money(c['daily_budget'])} → {money(new)}.{sure_txt}",
+                              f"{money(c['cpl'])} per lead vs a {money(t)} target. Raise the daily budget {money(c['daily_budget'])} → {money(new)}.",
                               {"type": "scale_budget", "label": f"Raise to {money(new)}/day", "daily_budget": new},
                               impact=f"≈ +{max(1, round(extra))} leads/week", campaign_id=cid, product_id=pid, group="grow"), None))
         if c["period_impressions"] >= 2000 and c["ctr"] is not None and c["ctr"] < 0.8:
