@@ -7,6 +7,7 @@ import clsx from "clsx";
 import { Logo } from "../Logo";
 import { useAuth } from "../../lib/auth";
 import { USE_CASES } from "./useCases";
+import { LEGAL_PAGES } from "./legal";
 
 export const cx = clsx;
 
@@ -111,7 +112,12 @@ function Footer({ from }) {
         {col("Use cases", USE_CASES.map((u) => [`/use-cases/${u.slug}`, u.short]))}
         {col("Account", user ? [["/app", "Open app"]] : [["/login", "Log in"], [signupHref(from), "Start free"]])}
       </div>
-      <p className="mx-auto max-w-6xl px-4 text-xs text-faint sm:px-6" style={{ paddingBottom: "max(2.5rem, env(safe-area-inset-bottom))" }}>© {new Date().getFullYear()} AIMVA</p>
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 text-xs text-faint sm:px-6" style={{ paddingBottom: "max(2.5rem, env(safe-area-inset-bottom))" }}>
+        <span>© {new Date().getFullYear()} AIMVA</span>
+        <nav aria-label="Legal" className="flex flex-wrap gap-x-4">
+          {LEGAL_PAGES.map((p) => <Link key={p.to} to={p.to} className="py-1 hover:text-strong">{p.label}</Link>)}
+        </nav>
+      </div>
     </footer>
   );
 }
