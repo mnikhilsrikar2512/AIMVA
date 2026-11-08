@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 import httpx
 from PIL import Image
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from .. import discreet
 from ..config import settings
 from ..db import get_db
+from ..prompt_sense import read_prompt
 from .. import providers as P
 from ..brand import BadImage, brand_prompt, composite_logo, data_uri, fetch_image, get_kit, primary_logo, save_generated, save_media
 from ..models import Asset, BrandAsset, User
@@ -262,9 +263,22 @@ def _snap(v: int) -> int:
     return max(256, min(2048, int(round(v / 16) * 16)))  # most models want multiples of 16
 
 
+@router.get("/prompt-sense")
+def prompt_sense(text: str = Query("", max_length=2000), size: str = Query("", max_length=10), user: User = Depends(current_user)):
+    """What AIMVA reads in a prompt while it's typed: the shape it asks for (when not the one picked) and its words."""
+    r = read_prompt(text)
+    return {"format": r["format"] if r["format"] in SIZES and r["format"] != size else None, "words": r["words"]}
+
+
 @router.post("/image")
 def generate_image(body: ImageIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     rate_limit(f"img:{user.id}", 30, 300)
+    # Words meant for the picture ("poster saying 'Diwali Sale'") are kept off the image model, which misspells
+    # them, and offered afterwards as real text (app/prompt_sense.py, /image/{id}/text).
+    typed = body.prompt
+    sense = read_prompt(typed)
+    if sense["words"]:
+        body = body.model_copy(update={"prompt": sense["scene"][:2000] if len(sense["scene"]) >= 3 else typed})
     w, h = (_snap(body.width), _snap(body.height)) if body.width and body.height else SIZES.get(body.size, SIZES["1:1"])
     kit = get_kit(db, user.id) if body.use_brand else None
     logo = primary_logo(db, user.id) if body.add_logo else None
@@ -327,11 +341,11 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
     assets = []
     batch = uuid.uuid4().hex[:12]
     for u in urls:
-        a = Asset(user_id=user.id, kind="image", prompt=body.prompt, model=model_label, url=u,
+        a = Asset(user_id=user.id, kind="image", prompt=typed, model=model_label, url=u,
                   params={"size": body.size if not body.width else f"{w}x{h}", "width": w, "height": h, "brand": bool(kit),
                           "logo": bool(logo), "provider": ref, "style": body.style, "seed": seed,
                           "negative_prompt": body.negative_prompt, "reference": bool(reference), "batch": batch,
-                          "kept_product": body.keep_product, "brief": brief, "prompt_sent": sent,
+                          "kept_product": body.keep_product, "brief": brief, "prompt_sent": sent, "words": sense["words"],
                           "provider_label": "Your product, new scene" if body.keep_product
                           else "Free FLUX" if ref == "builtin:pollinations" else model_label})
         db.add(a)

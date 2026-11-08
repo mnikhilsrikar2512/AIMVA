@@ -51,14 +51,13 @@ def models() -> list:
 
 
 # A comment that only takes something away goes to the eraser; anything that also puts something there
-# (change, add, replace, "remove X and add Y") goes to fill.
-REMOVE_WORDS = re.compile(r"\b(remove|delete|erase|get rid of|take (out|away)|eliminate|hide|lose|clear (away|out))\b", re.I)
-ADD_WORDS = re.compile(r"\b(add|put|place|replace|swap|instead|insert|with a|with an|turn (it )?into)\b", re.I)
-
-
+# (change, add, replace, "remove X and add Y") goes to fill. The reading lives in app/prompt_sense.py, which
+# handles Hinglish, Hindi, Telugu, Tamil, typos and "don't remove X, make it Y" (scored by scripts/prompt_bench.py).
 def intent(text: str) -> str:
-    text = text or ""
-    return "remove" if REMOVE_WORDS.search(text) and not ADD_WORDS.search(text) else "change"
+    from .prompt_sense import comment_intent
+    return comment_intent(text)
+
+
 MAX_SIDE = 2048
 MAX_UPSCALED_SIDE = 4096
 

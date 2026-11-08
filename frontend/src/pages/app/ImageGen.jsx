@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { ease, rise, stagger } from "../../components/Motion";
 import { Download, Image as ImageIcon, LayoutGrid, MessageSquarePlus, Plus, RotateCcw, Sparkles, Trash2, Upload, Wand2 } from "lucide-react";
 import { Button, Card, Empty, Field, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
-import { api, del, post } from "../../lib/api";
+import { api, del, get, post } from "../../lib/api";
 import { useAction, useApi } from "../../lib/hooks";
 import BrandControls from "../../components/BrandControls";
 import { useAuth } from "../../lib/auth";
@@ -117,6 +118,7 @@ export default function ImageGen() {
               <textarea className="input" rows={5} value={form.prompt} onChange={set("prompt")} required minLength={3} maxLength={2000}
                 placeholder="Describe the image you want…" />
             </Field>
+            <PromptSense prompt={form.prompt} size={form.size} onFormat={(v) => setForm((f) => ({ ...f, size: v }))} />
             <div className="-mt-2 flex justify-end">
               <EnhanceButton prompt={form.prompt} kind="image" useBrand={!!brandKit?.is_set_up && brandOpts.use_brand}
                 onEnhanced={(r) => setForm((f) => ({ ...f, prompt: r.prompt, negative_prompt: f.negative_prompt || r.negative_prompt || "" }))} />
@@ -185,7 +187,7 @@ export default function ImageGen() {
                 <Button size="sm" variant="ghost" onClick={startNew}><Plus className="size-3.5" /> Start new</Button>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                {current.map((a) => <ImageTile key={a.id} a={a} rating={ratings[a.id]} onAdSet={() => setAdFor(a)} onEdit={() => setEditFor(a)} onDelete={() => remove(a)} onReuse={() => reuse(a)} />)}
+                {current.map((a) => <ImageTile key={a.id} a={a} rating={ratings[a.id]} onAdded={(out) => { setAssets((x) => [out, ...x]); setCurrent((c) => [out, ...c]); }} onAdSet={() => setAdFor(a)} onEdit={() => setEditFor(a)} onDelete={() => remove(a)} onReuse={() => reuse(a)} />)}
               </div>
               <p className="mt-3 text-xs text-muted">Happy with it? <b className="text-strong">Make an ad set</b> to get every placement size with your headline and button added cleanly.</p>
             </>
@@ -201,8 +203,43 @@ export default function ImageGen() {
   );
 }
 
-function ImageTile({ a, rating, onAdSet, onEdit, onDelete, onReuse }) {
+const FORMAT_NAME = { "9:16": "a story or reel (9:16)", "16:9": "a banner or thumbnail (16:9)", "1:1": "a square post (1:1)", "4:5": "a portrait post (4:5)" };
+
+/** What AIMVA reads in the prompt as it's typed: the shape it asks for, and words meant for the picture. */
+function PromptSense({ prompt, size, onFormat }) {
+  const [sense, setSense] = useState(null);
+  useEffect(() => {
+    if (prompt.trim().length < 6) { setSense(null); return undefined; }
+    const t = setTimeout(() => {
+      get(`/api/content/prompt-sense?text=${encodeURIComponent(prompt)}&size=${encodeURIComponent(size)}`).then(setSense).catch(() => setSense(null));
+    }, 450);
+    return () => clearTimeout(t);
+  }, [prompt, size]);
+  if (!sense?.format && !sense?.words) return null;
+  return (
+    <div className="-mt-2 space-y-1 text-xs text-muted">
+      {sense.format && (
+        <p>Sounds like {FORMAT_NAME[sense.format]}. <button type="button" className="font-medium text-brand hover:underline" onClick={() => onFormat(sense.format)}>Use {sense.format}</button></p>
+      )}
+      {sense.words && <p>“{sense.words}” will be added as real text after, so it's spelled right. The picture itself is made without words.</p>}
+    </div>
+  );
+}
+
+function ImageTile({ a, rating, onAdSet, onEdit, onDelete, onReuse, onAdded }) {
   const [loaded, setLoaded] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const words = a.params?.words && !a.params?.text_layers ? a.params.words : null;
+  const addWords = async () => {
+    setAdding(true);
+    try {
+      onAdded?.(await post(`/api/content/image/${a.id}/text`, { layers: [{ text: words, x: 0.5, y: 0.86, size: 0.07, weight: "bold", bg: "band", color: "#ffffff" }] }));
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setAdding(false);
+    }
+  };
   const [failed, setFailed] = useState(false);
   return (
     <motion.div variants={rise} initial="hidden" animate="show" className="group card mb-4 break-inside-avoid overflow-hidden">
@@ -227,6 +264,11 @@ function ImageTile({ a, rating, onAdSet, onEdit, onDelete, onReuse }) {
         <p className="line-clamp-2 text-xs text-muted">{a.params?.headline ? `“${a.params.headline}” · ` : ""}{a.prompt}</p>
         <p className="mt-1 truncate text-xs text-faint">{a.params?.placement ? `Ad set · ${a.params.placement}` : a.params?.edited_from ? (a.params.provider_label || "Edited") : a.model} · {a.params?.size}{a.params?.style ? ` · ${a.params.style}` : ""}{a.params?.seed != null ? ` · seed ${a.params.seed}` : ""}</p>
         <UsedIn assetId={a.id} className="mt-1" />
+        {words && onAdded && (
+          <button type="button" disabled={adding} onClick={addWords} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1 text-xs font-semibold text-strong hover:bg-brand/15 disabled:opacity-50">
+            {adding ? <Spinner className="size-3" /> : <Plus className="size-3" />} Add “{words}”
+          </button>
+        )}
         <div className="mt-2 flex items-center justify-between gap-2">
           <Rate kind="image" id={a.id} initial={rating} />
           {!a.params?.parent && (
