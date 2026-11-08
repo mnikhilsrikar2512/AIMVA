@@ -55,8 +55,8 @@ def _english(db: Session, user: User, lead: Lead, step: str, custom: Optional[st
     return text.replace("{name}", first).replace("{business}", user.company or "us").replace("{next}", nxt).strip()
 
 
-def _deliver(db: Session, user: User, lead: Lead, step: str) -> str:
-    """Send on WhatsApp if a number is connected; otherwise draft it on the lead. Returns what happened.
+def _deliver(db: Session, user: User, lead: Lead, step: str) -> tuple:
+    """Send on WhatsApp if a number is connected; otherwise draft it on the lead. Returns (what happened, why).
 
     WhatsApp only takes free text within 24 hours of the lead's last message. A form or ad lead has never messaged,
     so the first message goes out as the business's approved template, or is drafted when they have none yet."""
@@ -75,7 +75,7 @@ def _deliver(db: Session, user: User, lead: Lead, step: str) -> str:
                           text + "\n\nWhatsApp only lets a business start a chat with an approved template. Add yours in "
                                  "WhatsApp settings and AIMVA will send it within seconds.", agent="concierge", draft=True)
                 db.commit()
-                return "drafted"
+                return "drafted", "No approved WhatsApp template yet"
         try:
             if tpl:
                 send_whatsapp(db, user.id, lead.phone, "", lead.name, tpl["name"], tpl["lang"],
@@ -85,12 +85,12 @@ def _deliver(db: Session, user: User, lead: Lead, step: str) -> str:
         except HTTPException as e:
             add_event(db, lead, "note", f"{label} not sent", f"{e.detail}\n\n{text}", agent="concierge")
             db.commit()
-            return "failed"
-        return "sent"  # the message itself shows on the lead's timeline from the WhatsApp inbox
+            return "failed", str(e.detail)
+        return "sent", ""  # the message itself shows on the lead's timeline from the WhatsApp inbox
     add_event(db, lead, "note", f"{label} ready to send", text + "\n\nConnect WhatsApp in Settings and AIMVA will send these for you.",
               agent="concierge", draft=True)
     db.commit()
-    return "drafted"
+    return "drafted", "WhatsApp isn't connected"
 
 
 def on_new_lead(db: Session, lead_id: int) -> None:
@@ -103,8 +103,10 @@ def on_new_lead(db: Session, lead_id: int) -> None:
     db.commit()
     if not s.enabled:
         return
-    outcome = _deliver(db, user, lead, "welcome")
+    outcome, why = _deliver(db, user, lead, "welcome")
     now = utcnow()
+    # The welcome is kept as a finished step so the lead list can say whether it really went out.
+    db.add(FollowUp(user_id=user.id, lead_id=lead.id, step="welcome", due_at=now, status=outcome, note=why[:300]))
     for step, delay in SCHEDULE:
         db.add(FollowUp(user_id=user.id, lead_id=lead.id, step=step, due_at=now + delay))
     db.commit()
@@ -139,7 +141,7 @@ def run_due(db: Session, now=None) -> int:
         elif _replied(db, lead):
             f.status, f.note = "skipped", "The lead replied"
         else:
-            outcome = _deliver(db, user, lead, f.step)
+            outcome, _ = _deliver(db, user, lead, f.step)
             f.status, f.note = ("sent" if outcome == "sent" else "skipped"), outcome
             record(db, user.id, "concierge", f"{'Followed up with' if outcome == 'sent' else 'Drafted a follow-up for'} {lead.name or lead.phone}"
                    f" ({'day 2' if f.step == 'day2' else 'day 7'})", {"lead_id": lead.id, "outcome": outcome})

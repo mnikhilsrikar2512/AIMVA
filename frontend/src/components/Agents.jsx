@@ -192,7 +192,8 @@ export function FollowUps({ leadId }) {
   const { data, error, reload } = useApi(`/api/agents/leads/${leadId}/follow-ups`, []);
   if (error && !data.length) return <LoadErrorBar what="planned follow-ups" onRetry={reload} className="mb-0" />;
   if (!data.length) return null;
-  const label = { day2: "Day-2 follow-up", day7: "Day-7 follow-up" };
+  const label = { welcome: "Welcome", day2: "Day-2 follow-up", day7: "Day-7 follow-up" };
+  const done = { sent: "Sent", drafted: "Drafted, not sent", failed: "Not sent" };
   return (
     <div className="rounded-2xl bg-surface-2/60 px-3 py-2.5 text-xs">
       <p className="mb-1 flex items-center gap-1.5 font-semibold text-strong"><Bot className="size-3.5 text-brand" /> Lead Concierge</p>
@@ -200,9 +201,10 @@ export function FollowUps({ leadId }) {
         {data.map((f) => (
           <li key={f.step} className="flex justify-between gap-2">
             <span>{label[f.step]}</span>
-            <span className={cx(f.status === "sent" && "text-emerald-600", f.status === "skipped" && "text-faint")}>
+            <span title={f.step === "welcome" ? f.note || undefined : undefined}
+              className={cx(f.status === "sent" && "text-emerald-600", ["drafted", "failed"].includes(f.status) && "text-warm", f.status === "skipped" && "text-faint")}>
               {f.status === "pending" ? parseServerDate(f.due_at).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
-                : f.status === "sent" ? "Sent" : f.note || "Skipped"}
+                : done[f.status] ? done[f.status] + (f.status !== "sent" && f.note ? `: ${f.note}` : "") : f.note || "Skipped"}
             </span>
           </li>
         ))}

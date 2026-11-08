@@ -20,6 +20,14 @@ const STAGE_LABEL = { new: "New", contacted: "Contacted", qualified: "Qualified"
 const SORT_KEY = "aimva:leads-sort";
 const readSort = () => { try { return localStorage.getItem(SORT_KEY) || "needs"; } catch { return "needs"; } };
 
+/** Whether the automatic WhatsApp welcome really reached them. Silent when there was none to send. */
+function WelcomeNote({ w }) {
+  if (!w) return null;
+  const ok = { sent: "Welcome sent", delivered: "Welcome delivered", read: "Welcome read" }[w.status];
+  if (ok) return <span title="Lead Concierge sent this on WhatsApp">· {ok}</span>;
+  return <span className="font-semibold text-warm" title={w.note || "Open the lead to send it yourself"}>· Welcome not sent{w.note ? `: ${w.note}` : ""}</span>;
+}
+
 /** "Waiting 14m": how long a lead has been waiting on the business. */
 export const waited = (iso) => {
   const t = timeAgo(iso);
@@ -184,6 +192,7 @@ export default function Leads() {
                       <span className={cx(l.stage === "won" && "font-semibold text-emerald-700")}>{STAGE_LABEL[l.stage] || l.stage}{l.stage === "won" && l.value ? ` · ₹${Number(l.value).toLocaleString("en-IN")}` : ""}</span>
                       <span>· {timeAgo(l.created_at)}</span>
                       {l.score >= 70 && l.stage === "new" && <span className="font-semibold text-warm">· hot</span>}
+                      <WelcomeNote w={l.welcome} />
                     </p>
                   </div>
                   {!isClient && (

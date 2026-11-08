@@ -91,7 +91,9 @@ def test_new_lead_gets_a_drafted_welcome_and_follow_ups(auth_client, client):
     welcome = next(t for t in timeline if t["title"] == "Welcome message ready to send")
     assert "Hi Ravi, thanks for your enquiry with Skyline Homes" in welcome["body"] and "visit the site" in welcome["body"]
     fu = auth_client.get(f"/api/agents/leads/{lead['id']}/follow-ups").json()
-    assert [f["step"] for f in fu] == ["day2", "day7"] and all(f["status"] == "pending" for f in fu)
+    assert [f["step"] for f in fu] == ["welcome", "day2", "day7"]
+    assert fu[0]["status"] == "drafted" and all(f["status"] == "pending" for f in fu[1:])
+    assert lead["welcome"] == {"status": "drafted", "note": "WhatsApp isn't connected"}
     feed = auth_client.get("/api/agents/jobs?kind=concierge").json()
     assert feed[0]["title"] == "Drafted a welcome for Ravi Kumar"
 
@@ -109,6 +111,14 @@ def test_connected_whatsapp_sends_the_approved_template_to_a_form_lead(auth_clie
     assert body["template"]["name"] == "lead_welcome" and body["template"]["language"]["code"] == "en"
     assert body["template"]["components"][0]["parameters"] == [{"type": "text", "text": "Ravi"}]
     assert auth_client.get("/api/agents/jobs?kind=concierge").json()[0]["title"] == "Welcomed Ravi Kumar on WhatsApp"
+    lead = auth_client.get("/api/leads").json()[0]
+    assert lead["welcome"]["status"] == "sent"
+    # WhatsApp later reports it couldn't deliver: the lead list says so instead of "sent".
+    from app.models import WaMessage
+    m = db.query(WaMessage).filter_by(direction="out").one()
+    m.status = "failed"
+    db.commit()
+    assert auth_client.get("/api/leads").json()[0]["welcome"] == {"status": "failed", "note": "WhatsApp couldn't deliver it"}
 
 
 def test_connected_whatsapp_without_a_template_drafts_instead_of_failing(auth_client, client, db, mock_http):
