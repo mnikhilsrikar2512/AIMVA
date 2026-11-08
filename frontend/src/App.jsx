@@ -62,6 +62,7 @@ function Allowed({ path, children }) {
   const { user } = useAuth();
   if (path === "owner" && !canSeeQuality(user)) return <Away text="That page is only for the AIMVA team." />;
   if (path === "console" && !user?.staff_role) return <Away text="That page is only for the AIMVA team." />;
+  if (path === "console" || path === "owner") return children;  // AIMVA team pages, whatever workspace the person is in
   if (user?.workspace?.role === "client" && !CLIENT_PAGES.has(path.split("/")[0])) return <Away text="Your agency looks after that part for you." />;
   return children;
 }

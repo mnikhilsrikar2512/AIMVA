@@ -1,6 +1,6 @@
 # Team console: design
 
-The console is where the AIMVA team (Owner, Management, Development, Support) looks after customers. It sits inside the app at `/app/console`, uses the same design system as the customer app (`frontend/src/index.css`, `design.md`), and appears only for staff. The scope and rules are in the PRD (Claude Doc "AIMVA Team Console PRD"). This file covers how it looks and behaves.
+The console is where the AIMVA team (Owner, Management, Development, Support, Accounts) looks after customers. It sits inside the app at `/app/console`, uses the same design system as the customer app (`frontend/src/index.css`, `design.md`), and appears only for staff. The scope and rules are in the PRD (Claude Doc "AIMVA Team Console PRD"). This file covers how it looks and behaves.
 
 ## Principles
 
@@ -13,7 +13,8 @@ The console is where the AIMVA team (Owner, Management, Development, Support) lo
 ## Where it lives
 
 - Rail item **Team console** (icon `ShieldCheck`) in the Account group, shown when `user.staff_role` is set.
-- Tabs: Overview (Owner, Management), Tasks, Customers, Activity, Team (Owner). The first tab is Overview for owners and managers, Tasks for everyone else.
+- Tabs: Overview (Owner, Management), Tasks, Customers, Billing (Owner, Management, Accounts), Activity, Team (Owner). The first tab is Overview for owners and managers, Billing for Accounts, Tasks for everyone else.
+- A teammate who is also a client in some agency's workspace still sees the console; it ignores the workspace they're switched into.
 - **Quality and usage** (the existing Owner page) shows for roles with `quality.view` (Owner, Management, Development). Template review on that page stays Owner-only.
 - `Ctrl/Cmd+K` finds both pages and "Find customer…".
 - The page header shows the person's role as a quiet chip ("Support").
@@ -58,6 +59,16 @@ The first tab for owners and managers. It answers two questions: how is the plat
 - Each row: a checkbox to mark it done, the title, Urgent in warm, then "person · about customer · due 12 Nov · from Priya". Overdue dates are warm and bold. A status menu (To do, Doing, Done, Cancelled) and, for owners and managers, a reassign menu.
 - The assignee can change status and the details note. Only owners and managers change title, person, priority or due date.
 - Every assignment and status change goes in the Activity log.
+
+## Billing (Owner, Management, Accounts; read-only)
+
+The first tab for Accounts. Nothing on it changes data; plan changes and credits stay with Management and Owners.
+
+- While payments aren't live, an amber notice says the numbers are list prices from each plan, not money received, and that AIMVA has no GST invoices yet.
+- Stat strip: monthly revenue (active paid plans at list price), past due (₹ and accounts), on trial (and expired), invoiced by you (active plans with no card).
+- A table of every account with a plan: customer, plan, monthly ₹, status, billed by (Invoice, card processor, or none), period end. A status filter. Clicking a customer opens them in Customers.
+- Credits given away in the last 30 / 90 / 365 days, with the reason.
+- **Excel** downloads both lists as one workbook (sheets "Plans" and "Credits").
 
 ## Customers
 

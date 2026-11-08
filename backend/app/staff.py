@@ -1,12 +1,14 @@
 """Who is on the AIMVA team, what each role may do, and the log of what they did.
 
-Four roles:
+Five roles:
 - owner: everything. Owners are the emails in ADMIN_EMAILS, set on the server. Nobody can make someone an
   owner from the app, so a stolen teammate login can never promote itself.
 - manager (management team): runs the business side. Customers, plan changes, credits of any size, the
   quality and usage numbers, the whole staff log. Can't manage the team or touch AI engines and keys.
 - developer (development team): looks into problems. Customers (read-only), the quality and usage numbers,
   the whole staff log, and can sign a customer out everywhere (a leaked session). No money actions.
+- accountant (accounts team): read-only. The Billing tab (plans, monthly revenue, past due, goodwill credits,
+  Excel download) and the customer list. Can't change anything.
 - support: looks up customers, grants small goodwill credits, unlocks a locked sign-in, signs a customer out
   everywhere. Can't change plans, see AI engines or keys, or manage the team.
 
@@ -26,18 +28,20 @@ from .db import get_db
 from .models import StaffAction, StaffMember, User
 from .security import current_person
 
-ROLES = ("owner", "manager", "developer", "support")
+ROLES = ("owner", "manager", "developer", "support", "accountant")
 TEAM_ROLES = ROLES[1:]  # what an owner can give from the app
-ROLE_LABEL = {"owner": "Owner", "manager": "Management", "developer": "Development", "support": "Support"}
+ROLE_LABEL = {"owner": "Owner", "manager": "Management", "developer": "Development", "support": "Support", "accountant": "Accounts"}
 # What each role may do. The frontend reads this from /api/console/me to decide what to show;
 # the endpoints below check it again, so hiding a button is never the only guard.
 PERMISSIONS = {
     "owner": {"customers.view", "credits.grant", "credits.grant_any", "plan.change", "signin.unlock", "signin.revoke",
-              "activity.view_all", "team.manage", "quality.view", "overview.view", "tasks.assign"},
+              "activity.view_all", "team.manage", "quality.view", "overview.view", "tasks.assign", "billing.view"},
     "manager": {"customers.view", "credits.grant", "credits.grant_any", "plan.change", "signin.unlock", "signin.revoke",
-                "activity.view_all", "quality.view", "overview.view", "tasks.assign"},
+                "activity.view_all", "quality.view", "overview.view", "tasks.assign", "billing.view"},
     "developer": {"customers.view", "signin.revoke", "activity.view_all", "quality.view"},
     "support": {"customers.view", "credits.grant", "signin.unlock", "signin.revoke"},
+    # Read-only money view: plans, revenue, past due, credits given away. Changes go through Management.
+    "accountant": {"customers.view", "billing.view"},
 }
 SUPPORT_CREDIT_LIMIT = 50   # most units support can grant in one go
 SUPPORT_CREDIT_DAYS = 30    # and for how long

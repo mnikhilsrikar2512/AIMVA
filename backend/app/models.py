@@ -576,7 +576,7 @@ class StaffMember(Base):
     __tablename__ = "staff_members"
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    role: Mapped[str] = mapped_column(String(20), default="support")  # manager | developer | support (owners live in ADMIN_EMAILS)
+    role: Mapped[str] = mapped_column(String(20), default="support")  # manager | developer | support | accountant (owners live in ADMIN_EMAILS)
     added_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

@@ -293,3 +293,28 @@ def test_overview(owner, support, customer, db):
     assert support.get("/api/console/overview").status_code == 403
     dev = teammate(owner, "dev@example.com", "developer")
     assert dev.get("/api/console/overview").status_code == 403
+
+
+def test_accounts_sees_money_and_changes_nothing(owner, customer, db):
+    acc = teammate(owner, "books@example.com", "accountant")
+    owner.post(f"/api/console/customers/{customer.id}/plan", json={"plan": "growth", "reason": "Invoice #12 paid"})
+    owner.post(f"/api/console/customers/{customer.id}/credits", json={"meter": "images", "quantity": 5, "reason": "Goodwill credits"})
+    b = acc.get("/api/console/billing").json()
+    assert b["totals"]["mrr_inr"] == 4999 and b["totals"]["invoiced"] == 1 and b["live_payments"] is False
+    row = next(r for r in b["subscriptions"] if r["id"] == customer.id)
+    assert row["plan"] == "growth" and row["processor"] == "manual"
+    assert b["credits"][0]["quantity"] == 5
+    assert acc.get(f"/api/console/customers/{customer.id}").status_code == 200
+    for path, body in (("credits", {"meter": "images", "quantity": 1, "reason": "Testing it out"}),
+                       ("plan", {"plan": "starter", "reason": "Testing it out"}), ("unlock", {"reason": "Testing it out"}),
+                       ("sign-out", {"reason": "Testing it out"})):
+        assert acc.post(f"/api/console/customers/{customer.id}/{path}", json=body).status_code == 403
+    assert acc.get("/api/console/overview").status_code == 403
+    assert acc.get("/api/admin/metrics").status_code == 403
+
+
+def test_billing_is_hidden_from_support_and_development(owner, support):
+    assert support.get("/api/console/billing").status_code == 403
+    dev = teammate(owner, "dev@example.com", "developer")
+    assert dev.get("/api/console/billing").status_code == 403
+    assert owner.get("/api/console/billing").status_code == 200

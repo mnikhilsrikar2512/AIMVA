@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ListChecks, ListPlus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, ListChecks, ListPlus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Chip, Empty, Field, IconButton, ListSkeleton, Modal, Notice, PageHeader, Spinner, Stat, StatStrip, Tabs, cx } from "../../components/ui";
 import { api, get, post } from "../../lib/api";
 import { parseServerDate, useApi } from "../../lib/hooks";
+import { downloadBlob, stamp, toXlsx } from "../../lib/exporters";
 
 /* The AIMVA team console (docs/CONSOLE_DESIGN.md). What a role may do comes from /api/console/me;
    the server checks every action again, so a hidden button is never the only guard. */
@@ -25,7 +26,7 @@ const STATUS = {
   new: ["New", "text-muted"], trialing: ["Trial", "text-muted"], active: ["Active", "text-strong"],
   past_due: ["Past due", "text-warm"], expired: ["Expired", "text-warm"], cancelled: ["Cancelled", "text-muted"],
 };
-const ROLE_LABEL = { owner: "Owner", manager: "Management", developer: "Development", support: "Support" };
+const ROLE_LABEL = { owner: "Owner", manager: "Management", developer: "Development", support: "Support", accountant: "Accounts" };
 const METER_LABEL = { images: "pictures", videos: "videos", voice_minutes: "call minutes", ai_actions: "AI writing runs", sites: "pages" };
 
 const TASK_STATUS_WORD = { open: "to do", doing: "doing", done: "done", cancelled: "cancelled" };
@@ -392,7 +393,7 @@ function Activity({ me, onOpen }) {
 const PERM_ROWS = [
   ["Look up customers", "customers.view"], ["Grant credits", "credits.grant"], ["Grant any amount", "credits.grant_any"],
   ["Change a plan", "plan.change"], ["Unlock a sign-in", "signin.unlock"], ["Sign a customer out everywhere", "signin.revoke"],
-  ["Quality and usage numbers", "quality.view"], ["Whole action log", "activity.view_all"], ["Manage the team, AI keys, templates", "team.manage"],
+  ["Overview and assigning tasks", "tasks.assign"], ["Billing (read-only)", "billing.view"], ["Quality and usage numbers", "quality.view"], ["Whole action log", "activity.view_all"], ["Manage the team, AI keys, templates", "team.manage"],
 ];
 
 function Team() {
@@ -696,16 +697,116 @@ function Overview({ me, onTab }) {
   );
 }
 
+// ---- billing (read-only) --------------------------------------------------------------------------------------------
+function Billing({ onOpen }) {
+  const [days, setDays] = useState("30");
+  const [status, setStatus] = useState("");
+  const { data: b, loading, error, reload } = useApi(`/api/console/billing?days=${days}`);
+  if (error) return <Notice tone="rose" icon={AlertTriangle} action={<Button size="sm" variant="ghost" onClick={reload}>Retry</Button>}>{error.message}</Notice>;
+  if (loading || !b) return <ListSkeleton rows={6} />;
+  const t = b.totals, subs = b.subscriptions.filter((s) => !status || s.status === status);
+  const download = () => {
+    const subCols = [
+      { key: "name", label: "Customer" }, { key: "email", label: "Email" }, { key: "plan_name", label: "Plan" },
+      { key: "price_inr", label: "Monthly (INR)" }, { label: "Status", get: (r) => STATUS[r.status]?.[0] || r.status },
+      { label: "Billed by", get: (r) => (r.processor === "manual" ? "Invoice" : r.processor || "—") },
+      { label: "Period start", get: (r) => day(r.period_start) }, { label: "Period end", get: (r) => day(r.period_end) }, { key: "note", label: "Note" },
+    ];
+    const credCols = [
+      { label: "Given on", get: (r) => day(r.at) }, { key: "customer", label: "Customer" }, { label: "What", get: (r) => METER_LABEL[r.meter] || r.meter },
+      { key: "quantity", label: "Units" }, { label: "Expires", get: (r) => day(r.expires_at) }, { key: "note", label: "Reason" },
+    ];
+    downloadBlob(toXlsx([{ name: "Plans", columns: subCols, rows: b.subscriptions }, { name: `Credits ${b.days} days`, columns: credCols, rows: b.credits }]),
+      `aimva-billing-${stamp()}.xlsx`);
+  };
+  return (
+    <div className="max-w-5xl space-y-6">
+      {!b.live_payments && (
+        <Notice tone="amber" icon={AlertTriangle}>Payments aren't live yet. These are list prices from each account's plan, not money received. There are no GST invoices in AIMVA yet.</Notice>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[13px] font-semibold text-strong">Plans and revenue</h2>
+        <Button size="sm" variant="ghost" onClick={download} disabled={!b.subscriptions.length}><Download className="size-4" /> Excel</Button>
+      </div>
+      <StatStrip className="-mt-3">
+        <Stat label="Monthly revenue" value={inr(t.mrr_inr)} sub="active paid plans, list price" tone="green" />
+        <Stat label="Past due" value={inr(t.past_due_inr)} sub={`${t.by_status.past_due || 0} account${t.by_status.past_due === 1 ? "" : "s"}`} tone="amber" />
+        <Stat label="On trial" value={t.by_status.trialing || 0} sub={`${t.by_status.expired || 0} expired`} tone="violet" />
+        <Stat label="Invoiced by you" value={t.invoiced} sub="active plans with no card" tone="blue" />
+      </StatStrip>
+      <div>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <label><span className="sr-only">Status</span>
+            <select className="h-9 rounded-lg bg-surface px-2.5 text-sm ring-1 ring-line-strong" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="">Every status</option>
+              {Object.entries(STATUS).filter(([k]) => k !== "new").map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </label>
+          <span className="text-xs text-faint">{subs.length} account{subs.length === 1 ? "" : "s"}</span>
+        </div>
+        {subs.length === 0 ? <p className="text-sm text-faint">No accounts with that status.</p> : (
+          <div className="card overflow-x-auto px-4 sm:px-5">
+            <table className="w-full min-w-[640px] text-[13px]">
+              <thead><tr className="text-left text-xs text-muted">
+                <th className="py-2.5 pr-3 font-semibold">Customer</th><th className="px-2 font-semibold">Plan</th><th className="px-2 text-right font-semibold">Monthly</th>
+                <th className="px-2 font-semibold">Status</th><th className="px-2 font-semibold">Billed by</th><th className="px-2 font-semibold">Period ends</th>
+              </tr></thead>
+              <tbody className="divide-y divide-line">
+                {subs.map((s) => {
+                  const [label, tone] = STATUS[s.status] || [s.status, "text-muted"];
+                  return (
+                    <tr key={s.id}>
+                      <td className="py-2.5 pr-3"><button type="button" className="text-left font-medium text-strong hover:underline" onClick={() => onOpen(s.id)}>{s.name || s.email}</button>
+                        <span className="block text-xs text-faint">{s.email || "Client workspace"}</span></td>
+                      <td className="px-2">{s.plan_name}</td>
+                      <td className="px-2 text-right tabular-nums">{s.price_inr ? inr(s.price_inr) : "—"}</td>
+                      <td className={cx("px-2 font-semibold", tone)}>{label}</td>
+                      <td className="px-2 text-muted">{s.processor === "manual" ? "Invoice" : s.processor || "—"}</td>
+                      <td className="px-2 text-muted">{day(s.period_end)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <div>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-[13px] font-semibold text-strong">Credits given away <span className="font-normal text-faint">· last {b.days} days</span></h2>
+          <Tabs value={days} onChange={setDays} tabs={[{ value: "30", label: "30 days" }, { value: "90", label: "90 days" }, { value: "365", label: "Year" }]} />
+        </div>
+        {b.credits.length === 0 ? <p className="text-sm text-faint">No goodwill credits in this period.</p> : (
+          <ul className="card divide-y divide-line px-4 sm:px-5">
+            {b.credits.map((g, i) => (
+              <li key={i} className="flex flex-wrap gap-x-3 py-2.5 text-[13px]">
+                <span className="w-16 shrink-0 text-faint">{ago(g.at)}</span>
+                <span className="min-w-0 flex-1"><b className="font-semibold text-strong">{g.quantity} {METER_LABEL[g.meter] || g.meter}</b> to{" "}
+                  <button type="button" className="text-brand hover:underline" onClick={() => onOpen(g.customer_id)}>{g.customer}</button>
+                  {g.note && <span className="block text-xs text-muted">{g.note}</span>}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---- page -----------------------------------------------------------------------------------------------------------
 export default function Console() {
   const { data: me, error } = useApi("/api/console/me");
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const lead = me?.permissions.includes("overview.view");
-  const tab = params.get("tab") || (lead ? "overview" : "tasks");
+  const money = me?.permissions.includes("billing.view");
+  const tab = params.get("tab") || (lead ? "overview" : me?.role === "accountant" ? "billing" : "tasks");
   const tabs = useMemo(() => [
     ...(me?.permissions.includes("overview.view") ? [{ value: "overview", label: "Overview" }] : []),
-    { value: "tasks", label: "Tasks" }, { value: "customers", label: "Customers" }, { value: "activity", label: "Activity" },
+    ...(me?.role === "accountant" ? [{ value: "billing", label: "Billing" }] : []),
+    { value: "tasks", label: "Tasks" }, { value: "customers", label: "Customers" },
+    ...(me?.permissions.includes("billing.view") && me?.role !== "accountant" ? [{ value: "billing", label: "Billing" }] : []),
+    { value: "activity", label: "Activity" },
     ...(me?.permissions.includes("team.manage") ? [{ value: "team", label: "Team" }] : []),
   ], [me]);
   const setTab = (t, scope) => setParams((p) => {
@@ -715,6 +816,7 @@ export default function Console() {
     return n;
   });
   const page = tab === "overview" && lead ? <Overview me={me} onTab={setTab} />
+    : tab === "billing" && money ? <Billing onOpen={(id) => openCustomer(id)} />
     : tab === "tasks" ? <Tasks key="tasks" me={me} onOpen={(id) => openCustomer(id)} />
     : tab === "activity" ? <Activity me={me} onOpen={(id) => openCustomer(id)} />
     : tab === "team" && me?.permissions.includes("team.manage") ? <Team />

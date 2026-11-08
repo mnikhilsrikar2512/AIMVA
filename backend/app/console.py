@@ -43,11 +43,11 @@ class PlanIn(ReasonIn):
 
 class TeamIn(BaseModel):
     email: EmailStr
-    role: Literal["manager", "developer", "support"] = "support"
+    role: Literal["manager", "developer", "support", "accountant"] = "support"
 
 
 class RoleIn(BaseModel):
-    role: Literal["manager", "developer", "support"]
+    role: Literal["manager", "developer", "support", "accountant"]
 
 
 def _iso(d):
@@ -508,3 +508,36 @@ def overview(days: int = Query(7, ge=1, le=90), person: User = Depends(require_s
                   "top": sorted(acts[e]["kinds"].items(), key=lambda kv: -kv[1])[:3],
                   "tasks": tasks_by[e]} for e, role in people]
     return {"days": days, "platform": platform, "team": team_rows}
+
+
+# ---- billing (read-only) ----------------------------------------------------------------------------------------
+@router.get("/api/console/billing")
+def billing_view(days: int = Query(30, ge=1, le=365), person: User = Depends(require_staff), db: Session = Depends(get_db)):
+    """Every account's plan and what it's worth a month, plus the credits the team gave away. Nothing here changes data.
+    Prices are the list prices in app/billing.py; payments aren't live yet, so this is what plans say, not cash received."""
+    need(person, "billing.view")
+    now = utcnow()
+    since = now - timedelta(days=days)
+    rows = db.execute(select(User, Subscription).join(Subscription, Subscription.user_id == User.id)
+                      .order_by(Subscription.status, Subscription.period_end)).all()
+    out, mrr, by_status = [], 0, defaultdict(int)
+    for u, s in rows:
+        price = billing.PLANS.get(s.plan, {}).get("price_inr", 0)
+        paying = s.status in ("active", "past_due") and price > 0
+        mrr += price if s.status == "active" else 0
+        by_status[s.status] += 1
+        out.append({"id": u.id, "name": u.name, "email": u.email if u.kind == "person" else None, "kind": u.kind,
+                    "plan": s.plan, "plan_name": billing.PLANS.get(s.plan, {}).get("name", s.plan), "price_inr": price if paying else 0,
+                    "status": s.status, "processor": s.processor or "", "period_start": _iso(s.period_start), "period_end": _iso(s.period_end),
+                    "note": s.note})
+    grants = db.execute(select(CreditGrant, User).join(User, User.id == CreditGrant.user_id)
+                        .where(CreditGrant.created_at >= since).order_by(CreditGrant.created_at.desc())).all()
+    return {
+        "days": days, "live_payments": billing.razorpay_ready(), "enforced": billing.enforce(),
+        "totals": {"mrr_inr": mrr, "past_due_inr": sum(r["price_inr"] for r in out if r["status"] == "past_due"),
+                   "by_status": dict(by_status), "invoiced": sum(1 for r in out if r["processor"] == "manual" and r["status"] == "active")},
+        "plans": [{"id": k, "name": v["name"], "price_inr": v["price_inr"]} for k, v in billing.PLANS.items() if v["public"]],
+        "subscriptions": out,
+        "credits": [{"at": _iso(g.created_at), "customer": u.email if u.kind == "person" else u.name, "customer_id": u.id,
+                     "meter": g.meter, "quantity": g.quantity, "expires_at": _iso(g.expires_at), "note": g.note} for g, u in grants],
+    }

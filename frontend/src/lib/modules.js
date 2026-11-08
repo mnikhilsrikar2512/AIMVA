@@ -44,7 +44,7 @@ export const canSeeQuality = (user) => QUALITY_ROLES.includes(user?.staff_role);
 export function visibleNav(user) {
   const isClient = user?.workspace?.role === "client";
   const allowed = (it) => (!it.owner || user?.is_admin) && (!it.staff || user?.staff_role) && (!it.quality || canSeeQuality(user));
-  return NAV.map((g) => ({ ...g, items: g.items.filter((it) => allowed(it) && (!isClient || it.client)) }))
+  return NAV.map((g) => ({ ...g, items: g.items.filter((it) => allowed(it) && (!isClient || it.client || it.staff || it.quality)) }))
     .filter((g) => g.items.length);
 }
 
