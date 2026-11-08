@@ -68,7 +68,7 @@ def tick(now=None) -> dict:
     from . import autopilot, concierge, report
     now = now or utcnow()
     db = SessionLocal()
-    out = {"follow_ups": 0, "autopilot": 0, "reports": 0, "whatsapp": 0}
+    out = {"follow_ups": 0, "autopilot": 0, "reports": 0, "whatsapp": 0, "calls": 0}
     try:
         out["follow_ups"] = concierge.run_due(db, now)
         from ..routers.whatsapp import send_due
@@ -77,6 +77,12 @@ def tick(now=None) -> dict:
         except Exception:
             db.rollback()
             log.exception("Scheduled WhatsApp messages failed")
+        from ..routers.voice import place_due_calls
+        try:
+            out["calls"] = place_due_calls(db, now)  # calls held back until the lead's 9 am
+        except Exception:
+            db.rollback()
+            log.exception("Scheduled calls failed")
         for s in list(db.scalars(select(AgentSetting).where(AgentSetting.enabled.is_(True),
                                                              AgentSetting.kind.in_(("autopilot", "weekly_report"))))):
             user = db.get(User, s.user_id)

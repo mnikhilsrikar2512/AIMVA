@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from .. import lead_reply, live, opt_out
+from .. import call_hours, lead_reply, live, opt_out
 from ..db import SessionLocal, get_db
 from ..models import Lead, LeadEvent, User, WaMessage, utcnow
 from ..security import current_user
@@ -318,7 +318,8 @@ def timeline(db: Session, lead: Lead) -> list:
     for c in db.scalars(select(Call).where(Call.user_id == lead.user_id, or_(*conds))):
         answers = "\n".join(f"{q} {a}" for q, a in (c.answers or {}).items())
         items.append({"id": f"c{c.id}", "kind": "call", "at": c.created_at.isoformat(),
-                      "title": f"{'Phone' if c.channel == 'phone' else 'Voice agent'} call · {c.status}",
+                      "title": f"{'Phone' if c.channel == 'phone' else 'Voice agent'} call · "
+                               + (f"set for {call_hours.label(c.to_number, call_hours.next_open(c.to_number, c.created_at))}" if c.status == "scheduled" else c.status),
                       "body": answers, "meta": {"call_id": c.id, "status": c.status, "sentiment": c.sentiment,
                                                 "turns": len(c.transcript or []), "transcript": c.transcript or []}})
     return sorted(items, key=lambda i: i["at"], reverse=True)
@@ -428,8 +429,12 @@ def call_lead(lead_id: int, body: CallLeadIn, user: User = Depends(current_user)
         db.scalar(select(VoiceAgent).where(VoiceAgent.user_id == user.id).order_by(VoiceAgent.id))
     if not agent or agent.user_id != user.id:
         raise HTTPException(400, "Create a voice agent first.")
-    place_phone_call(db, user, agent, lead.phone, lead_id=lead.id)
-    return lead_view(db, lead)
+    from .voice import scheduled_for
+    c = place_phone_call(db, user, agent, lead.phone, lead_id=lead.id)
+    when = scheduled_for(c)
+    return {**lead_view(db, lead), "call_scheduled_for": when.isoformat() if when else None,
+            "call_note": f"Outside calling hours ({call_hours.window_text()}). AI call set for "
+                         f"{call_hours.label(c.to_number, when)}." if when else ""}
 
 
 class OptOutIn(BaseModel):

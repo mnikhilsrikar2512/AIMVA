@@ -582,13 +582,21 @@ def execute(db: Session, user: User, r: dict) -> str:
                                      .order_by(Lead.score.desc())) if l.phone and now - l.created_at > timedelta(minutes=30)][:5]
         if not hot:
             raise HTTPException(400, "None of the hot leads has a phone number. Open them in Leads to reach them another way.")
-        placed = 0
+        placed = later = 0
         for l in hot:
-            place_phone_call(db, user, agent, l.phone, lead_id=l.id)  # raises a clear error if Twilio isn't connected
-            l.stage = "contacted"
-            placed += 1
+            c = place_phone_call(db, user, agent, l.phone, lead_id=l.id)  # raises a clear error if Twilio isn't connected
+            if c.status == "scheduled":  # outside 9 am to 9 pm their time: placed when their hours open
+                later += 1
+            else:
+                l.stage = "contacted"
+                placed += 1
         db.commit()
-        return f"{agent.name} is calling {placed} hot lead{'s' if placed != 1 else ''}."
+        s = lambda n: "s" if n != 1 else ""
+        if not later:
+            return f"{agent.name} is calling {placed} hot lead{s(placed)}."
+        from .. import call_hours
+        held = f"{later} hot lead{s(later)} will be called from 9 am their time (calls only go out {call_hours.window_text()})."
+        return f"{agent.name} is calling {placed} hot lead{s(placed)}. {held}" if placed else f"{agent.name}: {held}"
     return "Noted." if t == "ack" else "Opened."
 
 

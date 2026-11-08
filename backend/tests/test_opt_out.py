@@ -151,3 +151,31 @@ def test_stop_from_the_real_webhook_and_a_template_button(auth_client, client, d
     assert wa_post(client, payload({"from": CONTACT, "id": "w3", "type": "interactive",
                                     "interactive": {"button_reply": {"id": "b", "title": "Start"}}})).status_code == 200
     assert not auth_client.get("/api/leads").json()[0]["opted_out"]
+
+
+def test_call_waiting_for_9am_is_not_placed_after_stop(auth_client, mock_http, db, monkeypatch):
+    from app import call_hours
+    from app.models import Call
+    from app.routers.voice import place_due_calls
+    state = {"now": datetime(2026, 11, 8, 17, 0)}  # 22:30 IST: calls wait for 9 am
+    monkeypatch.setattr(call_hours, "now", lambda: state["now"])
+    monkeypatch.setattr(call_hours, "START_HOUR", 9)  # conftest opens calling hours all day; use the real window
+    monkeypatch.setattr(call_hours, "END_HOUR", 21)
+    auth_client.post("/api/integrations/twilio/key", json={"values": {"account_sid": "AC1", "auth_token": "t", "from_number": "+15550001"}})
+    auth_client.post("/api/voice/agents", json={"name": "Sales"})
+    route = mock_http.post("https://api.twilio.com/2010-04-01/Accounts/AC1/Calls.json").respond(201, json={"sid": "CA1"})
+    a = auth_client.post("/api/leads", json={"name": "Ravi", "phone": PHONE}).json()
+    b = auth_client.post("/api/leads", json={"name": "Asha", "phone": "+919800000002"}).json()
+    assert auth_client.post(f"/api/leads/{a['id']}/call", json={}).json()["call_scheduled_for"]
+    assert auth_client.post(f"/api/leads/{b['id']}/call", json={}).json()["call_scheduled_for"]
+    _inbound(auth_client, "STOP")  # Ravi texts STOP overnight
+    assert db.scalar(select(Call).where(Call.lead_id == a["id"])).status == "cancelled"
+    # Even a waiting call the opt-out didn't catch (number stored another way) is checked when it's due.
+    other = db.scalar(select(Call).where(Call.lead_id == b["id"]))
+    opt_out.opt_out(db, other.user_id, "919800000002", "manual")
+    other.status = "scheduled"
+    db.commit()
+    state["now"] = datetime(2026, 11, 9, 3, 30)  # 9:00 am IST
+    assert place_due_calls(db) == 0 and not route.called
+    db.refresh(other)
+    assert other.status == "cancelled"

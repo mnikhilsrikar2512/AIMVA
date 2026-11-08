@@ -184,6 +184,10 @@ export function SignupPage() {
           <StrengthBar pw={form.password} />
         </Field>
         <Button type="submit" busy={busy} className="h-11 w-full">Create account</Button>
+        <p className="text-center text-xs leading-relaxed text-muted">
+          By creating an account you agree to the <Link to="/terms" target="_blank" className="underline underline-offset-2 hover:text-strong">Terms</Link> and
+          confirm you've read the <Link to="/privacy" target="_blank" className="underline underline-offset-2 hover:text-strong">Privacy policy</Link>.
+        </p>
       </form>
     </Shell>
   );

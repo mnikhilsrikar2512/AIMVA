@@ -16,7 +16,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .lead_reply import _contacts, wa_number
-from .models import FollowUp, Lead, OptOut, WaScheduled, utcnow
+from .models import Call, FollowUp, Lead, OptOut, WaScheduled, utcnow
 
 BLOCKED = ("This person asked not to be contacted (they replied STOP). AIMVA won't message or call them "
            "unless they reply START, or you resume them on the lead after they asked you to.")
@@ -127,6 +127,9 @@ def opt_out(db: Session, user_id: int, phone: str, source: str, note: str = "") 
     db.execute(update(WaScheduled).where(WaScheduled.user_id == user_id, WaScheduled.contact.in_(_contacts(phone)),
                                          WaScheduled.status == "scheduled")
                .values(status="cancelled", error="Cancelled: they asked not to be contacted."))
+    for c in db.scalars(select(Call).where(Call.user_id == user_id, Call.status == "scheduled")):
+        if _contacts(c.to_number) & _contacts(phone):  # an AI call waiting for 9 am is called off too
+            c.status = "cancelled"
     for lead in _leads(db, user_id, phone):
         lead.opted_out_at = now
         db.execute(update(FollowUp).where(FollowUp.lead_id == lead.id, FollowUp.status == "pending")

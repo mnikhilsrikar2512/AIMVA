@@ -270,9 +270,10 @@ export default function VoiceAgent() {
                 onDelete={() => run(async () => { await del(`/api/voice/agents/${agent.id}`); setAgents((x) => x.filter((y) => y.id !== agent.id)); setSelId(null); })} />}
               {tab === "phone" && (
                 <div className="max-w-md space-y-4">
-                  <p className="text-sm text-muted">Place a real outbound call from your Twilio number. Connect it in Settings → Accounts first.</p>
+                  <p className="text-sm text-muted">Place a real outbound call from your Twilio number. Connect it in Settings → Accounts first. Calls only go out 9 am to 9 pm in the lead's time; outside that they wait and go out at 9 am.</p>
                   <Field label="Phone number (E.164)"><input className="input" value={dialTo} onChange={(e) => setDialTo(e.target.value)} placeholder="+919876543210" /></Field>
-                  <Button busy={busy} onClick={() => run(async () => { await post(`/api/voice/agents/${agent.id}/dial`, { to: dialTo }); reloadCalls(); }, "Calling…")}><Phone className="size-4" /> Call now</Button>
+                  <Button busy={busy} onClick={() => run(async () => { const c = await post(`/api/voice/agents/${agent.id}/dial`, { to: dialTo }); reloadCalls(); return c; },
+                    (c) => c?.scheduled_for ? `Outside calling hours. It goes out at ${new Date(c.scheduled_for + "Z").toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} your time.` : "Calling…")}><Phone className="size-4" /> Call now</Button>
                 </div>
               )}
             </Card>
@@ -286,7 +287,9 @@ export default function VoiceAgent() {
                         {c.channel === "phone" ? <Phone className="size-4 text-faint" /> : <AudioLines className="size-4 text-faint" />}
                         <span className="flex-1 text-ink">{c.to_number || "Browser test"} · {c.transcript.length} turns</span>
                         <Chip tone={sentimentTone(c.sentiment)}>{c.sentiment > 0 ? "+" : ""}{c.sentiment}</Chip>
-                        <Chip tone={c.status === "completed" ? "green" : c.status === "handoff" ? "amber" : "slate"}>{c.status}</Chip>
+                        <span title={c.scheduled_for ? `Goes out ${new Date(c.scheduled_for + "Z").toLocaleString()} (calls only 9 am to 9 pm their time)` : undefined}>
+                          <Chip tone={c.status === "completed" ? "green" : c.status === "handoff" || c.status === "scheduled" ? "amber" : "slate"}>{c.status === "scheduled" ? "waiting for 9 am" : c.status}</Chip>
+                        </span>
                         <span className="hidden w-16 text-right text-xs text-faint sm:block">{timeAgo(c.created_at)}</span>
                       </button>
                     </li>

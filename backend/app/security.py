@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -21,7 +21,6 @@ from .models import User
 
 COOKIE_NAME = "aimva_session"
 _ph = PasswordHasher()  # argon2id with library-recommended parameters
-_fernet = Fernet(base64.urlsafe_b64encode(hashlib.sha256(settings.secret_key.encode()).digest()))
 
 
 # ---- passwords -------------------------------------------------------------
@@ -60,12 +59,58 @@ def code_matches(code: str, code_hash: str) -> bool:
 
 
 # ---- encryption for stored third-party tokens -----------------------------
+# Tokens are encrypted with the first key in TOKEN_ENCRYPTION_KEYS. Older keys in the list, and the key derived from
+# SECRET_KEY (what AIMVA used before TOKEN_ENCRYPTION_KEYS existed), still decrypt, so a rotation never cuts anyone
+# off. `scripts/db.py tokens rotate` re-encrypts everything with the first key; after that the old keys (and
+# SECRET_KEY) can change without touching connected accounts.
+def legacy_token_key(secret_key: str = "") -> Fernet:
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256((secret_key or settings.secret_key).encode()).digest()))
+
+
+def _build_token_keys(keys: list) -> tuple:
+    try:
+        configured = [Fernet(k.encode()) for k in keys]
+    except (ValueError, TypeError):
+        raise RuntimeError("TOKEN_ENCRYPTION_KEYS must be Fernet keys (44 characters each, comma-separated). "
+                           "Generate one: python scripts/db.py tokens new-key") from None
+    legacy = legacy_token_key()
+    return MultiFernet(configured + [legacy]), (configured or [legacy])[0]
+
+
+def reload_token_keys() -> None:
+    """Re-read settings.token_encryption_keys (tests and the db script change them at runtime)."""
+    global _tokens, _primary
+    _tokens, _primary = _build_token_keys(settings.token_encryption_keys)
+
+
+reload_token_keys()
+
+
 def encrypt_json(data: dict) -> str:
-    return _fernet.encrypt(json.dumps(data).encode()).decode() if data else ""
+    return _tokens.encrypt(json.dumps(data).encode()).decode() if data else ""
 
 
 def decrypt_json(token: str) -> dict:
-    return json.loads(_fernet.decrypt(token.encode())) if token else {}
+    return json.loads(_tokens.decrypt(token.encode())) if token else {}
+
+
+def token_key_status(token: str) -> str:
+    """Which key opens this secret: current (the first key), old (an older key or SECRET_KEY), or unreadable."""
+    try:
+        _primary.decrypt(token.encode())
+        return "current"
+    except InvalidToken:
+        pass
+    try:
+        _tokens.decrypt(token.encode())
+        return "old"
+    except InvalidToken:
+        return "unreadable"
+
+
+def rotate_token(token: str) -> str:
+    """The same secret, re-encrypted with the first key. Raises InvalidToken if no known key opens it."""
+    return _tokens.rotate(token.encode()).decode()
 
 
 # ---- sessions --------------------------------------------------------------

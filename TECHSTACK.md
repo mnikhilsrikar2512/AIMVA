@@ -37,7 +37,7 @@ Rule: no framework changes before the pilot. The suite passes on this stack (464
 
 0. **A fal.ai key is written in plain text** in `legacy/image-generation.html` and `legacy/video-generation.html`. Rotate that key now, and remove `legacy/` before launch.
 1. **No git, no CI.** This is the biggest gap. You have no history, no rollback and no automatic test run. Backups are tarballs.
-2. **`FREE_AI` defaults to true.** In production that sends customer prompts to a free public service that allows about 1 reply every 30 s for the whole server. Set `FREE_AI=false` and use a paid Gemini key.
+2. **`FREE_AI` is development only.** It's off by default in production and production refuses to start with it on. Use a paid Gemini key.
 3. **The tests run on SQLite.** Production runs on Postgres. Run the suite once with `TEST_DATABASE_URL=postgresql+psycopg://...` before launch.
 4. **Uploads sit on the server's disk.** That's fine for one server. Move them to S3-compatible storage before you run two servers.
 5. **Indian-language voice is Twilio `<Say>`.** Sarvam is the plan, but it isn't built.

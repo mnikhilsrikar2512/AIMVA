@@ -30,10 +30,11 @@ def test_postgres_urls_from_hosts_use_psycopg(monkeypatch):
 
 def test_production_refuses_unsafe_settings():
     env = {"PATH": "/usr/bin:/bin", "ENVIRONMENT": "production", "SECRET_KEY": "", "DATABASE_URL": "sqlite:////tmp/x.db",
-           "PUBLIC_URL": "http://example.com", "AGENTS_SCHEDULER": "false"}
+           "PUBLIC_URL": "http://example.com", "AGENTS_SCHEDULER": "false", "FREE_AI": "true"}
     out = subprocess.run([sys.executable, "-c", "import app.main"], cwd=BACKEND, env=env, capture_output=True, text=True)
     assert out.returncode != 0
-    for word in ("SECRET_KEY", "SQLite", "https://", "COOKIE_SECURE", "META_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "SMTP"):
+    for word in ("SECRET_KEY", "SQLite", "https://", "COOKIE_SECURE", "META_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "SMTP",
+                 "FREE_AI", "TOKEN_ENCRYPTION_KEYS"):
         assert word in out.stderr
 
 
@@ -41,10 +42,18 @@ def test_safe_production_settings_start():
     env = {"PATH": "/usr/bin:/bin", "ENVIRONMENT": "production", "SECRET_KEY": "s" * 40,
            "DATABASE_URL": "postgresql://u:p@db.invalid/aimva", "PUBLIC_URL": "https://app.example.com",
            "COOKIE_SECURE": "true", "ALLOW_PRIVATE_PROVIDERS": "false", "META_APP_SECRET": "m",
-           "WHATSAPP_VERIFY_TOKEN": "random-token", "SMTP_USER": "a@b.com", "SMTP_PASSWORD": "x"}
-    out = subprocess.run([sys.executable, "-c", "from app.config import settings; print(settings.problems())"],
+           "WHATSAPP_VERIFY_TOKEN": "random-token", "SMTP_USER": "a@b.com", "SMTP_PASSWORD": "x",
+           "TOKEN_ENCRYPTION_KEYS": "Zm9yLXRlc3RzLW9ubHktMzItYnl0ZXMta2V5LTAxMjM="}
+    out = subprocess.run([sys.executable, "-c", "from app.config import settings; print(settings.problems(), settings.free_ai)"],
                          cwd=BACKEND, env=env, capture_output=True, text=True)
-    assert out.returncode == 0 and out.stdout.strip() == "[]", out.stderr
+    assert out.returncode == 0 and out.stdout.strip() == "[] False", out.stderr  # FREE_AI is off unless set
+
+
+def test_development_keeps_free_ai_on_by_default():
+    env = {"PATH": "/usr/bin:/bin", "SECRET_KEY": "s" * 40, "DATABASE_URL": "sqlite:////tmp/x.db"}
+    out = subprocess.run([sys.executable, "-c", "from app.config import settings; print(settings.free_ai)"],
+                         cwd=BACKEND, env=env, capture_output=True, text=True)
+    assert out.stdout.strip() == "True", out.stderr
 
 
 def test_no_dev_code_in_production(client, monkeypatch):

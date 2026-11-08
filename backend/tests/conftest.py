@@ -12,7 +12,7 @@ os.environ.update({
     "DATABASE_URL": os.getenv("TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db",
     "UPLOADS_DIR": f"{_tmp}/uploads",
     "ALLOW_PRIVATE_PROVIDERS": "true",
-    "SECRET_KEY": "test-secret-key-that-is-long-enough-123",
+    "SECRET_KEY": "test-secret-key-that-is-long-enough-123", "TOKEN_ENCRYPTION_KEYS": "",
     "SMTP_USER": "", "SMTP_PASSWORD": "",
     "GEMINI_API_KEY": "", "FAL_KEY": "", "FREE_AI": "false", "AGENTS_SCHEDULER": "false", "POLLINATIONS_TOKEN": "",
     "META_APP_ID": "", "META_APP_SECRET": "test-meta-app-secret", "GOOGLE_CLIENT_ID": "", "LINKEDIN_CLIENT_ID": "", "MICROSOFT_CLIENT_ID": "",
@@ -58,6 +58,16 @@ def fresh_state():
     Base.metadata.create_all(engine)
     security._last_prune = 0.0
     yield
+
+
+@pytest.fixture(autouse=True)
+def calls_any_hour(monkeypatch, request):
+    """Calling hours (9 am to 9 pm) depend on the wall clock, so the suite opens them all day.
+    test_call_hours.py pins the clock and the real window itself."""
+    if request.module.__name__.rsplit(".", 1)[-1] != "test_call_hours":
+        from app import call_hours
+        monkeypatch.setattr(call_hours, "START_HOUR", 0)
+        monkeypatch.setattr(call_hours, "END_HOUR", 24)
 
 
 @pytest.fixture(autouse=True)

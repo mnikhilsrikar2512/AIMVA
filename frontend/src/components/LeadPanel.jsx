@@ -208,7 +208,7 @@ export default function LeadPanel({ leadId, onClose, onChanged, startReply = fal
       if (out?.timeline) setLead(out);
       else await load();
       onChanged?.();
-      if (success) toast.success(success);
+      if (success) toast.success(typeof success === "function" ? success(out) : success);
       return true;
     } catch (e) {
       toast.error(e.message);
@@ -329,8 +329,8 @@ export default function LeadPanel({ leadId, onClose, onChanged, startReply = fal
               )}
               <div className="mt-4 grid grid-cols-3 gap-2">
                 <Button variant="ghost" size="sm" className="h-10" disabled={!lead.phone || lead.opted_out} busy={busy === "call"}
-                  title={lead.phone ? "Have your AI voice agent call this lead" : "No phone number"}
-                  onClick={() => act("call", () => post(`/api/leads/${lead.id}/call`, {}), "AI agent is calling…")}>
+                  title={lead.phone ? "Have your AI voice agent call this lead (calls go out 9 am to 9 pm their time)" : "No phone number"}
+                  onClick={() => act("call", () => post(`/api/leads/${lead.id}/call`, {}), (out) => out?.call_note || "AI agent is calling…")}>
                   <PhoneCall className="size-4" /> AI call
                 </Button>
                 <Button variant={composer === "whatsapp" ? "primary" : "ghost"} size="sm" className="h-10" disabled={!lead.phone || lead.opted_out}
