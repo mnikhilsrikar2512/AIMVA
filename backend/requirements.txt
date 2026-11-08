@@ -36,7 +36,7 @@ python-docx==1.2.0
 python-dotenv==1.2.2
 python-multipart==0.0.31
 PyYAML==6.0.3
-requests==2.33.0
+requests==2.34.2
 sentry-sdk==2.74.0
 SQLAlchemy==2.1.8
 starlette==1.10.0
