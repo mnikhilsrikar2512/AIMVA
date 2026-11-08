@@ -13,6 +13,7 @@ import LeadPanel from "../../components/LeadPanel";
 import { DownloadMenu } from "../../components/DownloadMenu";
 import { useLeadEvents } from "../../lib/live";
 import { useAuth, useIsClient } from "../../lib/auth";
+import { StoryLine } from "../../components/Story";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
 const STAGE_TONE = { new: "blue", contacted: "violet", qualified: "amber", won: "green", lost: "rose" };
@@ -91,7 +92,7 @@ export default function Leads() {
   const isClient = useIsClient();  // view-only clients don't manage sync destinations
   const business = user?.workspace?.name || user?.company || user?.name || "";
   const [q, setQ] = useState("");
-  const [source, setSource] = useState("");
+  const [source, setSource] = useState(() => new URLSearchParams(window.location.search).get("source") || "");  // other screens link to "their" leads
   const [stage, setStage] = useState("");
   const [sort, setSortState] = useState(readSort);
   const setSort = (v) => { setSortState(v); try { localStorage.setItem(SORT_KEY, v); } catch { /* private mode */ } };
@@ -128,7 +129,7 @@ export default function Leads() {
 
   return (
     <div>
-      <PageHeader icon={Users} tone="amber" title="Leads"
+      <PageHeader title="Leads"
         subtitle={waiting ? (isClient ? `${waiting} ${waiting === 1 ? "lead is" : "leads are"} waiting for a reply. They're at the top.` : `${waiting} ${waiting === 1 ? "lead is" : "leads are"} waiting on you. They're at the top.`) : "Everyone who asked, from every channel, scored and in one list."}
         actions={<>
           <DownloadMenu name="Leads" disabled={loading || !leads.length} reason={loading ? "Loading leads…" : q || source || stage ? "No leads match these filters" : undefined} csvHref="/api/leads/export.csv"
@@ -136,6 +137,7 @@ export default function Leads() {
             pdf={async (filename) => (await import("../../lib/reports/leads")).leadsReport({ leads, business, filters: { q, source, stage }, filename })} />
           {!isClient && <Button onClick={() => setAdding(true)}><Plus className="size-4" /> Add lead</Button>}
         </>} />
+      <StoryLine module="leads" className="sm:-mt-6" />
       {!isClient && <div className="mb-6">
         <AgentSwitch kind="concierge" title="Lead Concierge"
           text="Welcomes every new lead on WhatsApp within seconds, then follows up on day 2 and day 7 until they reply." />

@@ -13,6 +13,7 @@ import { Advanced, LibraryImagePicker, ProviderPicker, SeedField, STYLES } from 
 import AdSetDialog from "../../components/AdSet";
 import ImageEditor from "../../components/ImageEditor";
 import { EnhanceButton, Rate } from "../../components/Quality";
+import { StoryLine, UsedIn } from "../../components/Story";
 
 
 const SIZE_OPTIONS = [["1:1", "Square 1:1"], ["4:5", "Portrait 4:5"], ["9:16", "Story 9:16"], ["16:9", "Wide 16:9"], ["1.91:1", "Link ad 1.91:1"], ["custom", "Custom size…"]];
@@ -84,7 +85,7 @@ export default function ImageGen() {
 
   return (
     <div>
-      <PageHeader icon={ImageIcon} tone="violet" title="Pictures" subtitle="Ad-ready pictures from one sentence, on-brand."
+      <PageHeader title="Pictures"
         actions={<div className="flex gap-2">
           <label className={cx("btn-ghost cursor-pointer", uploading && "pointer-events-none opacity-60")} title="Edit any photo: product shots, rooms, people…">
             {uploading ? <Spinner className="size-4" /> : <Upload className="size-4" />} Upload a photo to edit
@@ -92,6 +93,7 @@ export default function ImageGen() {
           </label>
           <Button variant="ghost" onClick={startNew}><Plus className="size-4" /> Start new</Button>
         </div>} />
+      <StoryLine module="pictures" />
       <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${assets.length ? ` (${assets.length})` : ""}` }]} /></div>
       {tab === "history" ? (
         loading ? <ListSkeleton /> : assetsError && assets.length === 0 ? (
@@ -224,6 +226,7 @@ function ImageTile({ a, rating, onAdSet, onEdit, onDelete, onReuse }) {
       <div className="p-3">
         <p className="line-clamp-2 text-xs text-muted">{a.params?.headline ? `“${a.params.headline}” · ` : ""}{a.prompt}</p>
         <p className="mt-1 truncate text-xs text-faint">{a.params?.placement ? `Ad set · ${a.params.placement}` : a.params?.edited_from ? (a.params.provider_label || "Edited") : a.model} · {a.params?.size}{a.params?.style ? ` · ${a.params.style}` : ""}{a.params?.seed != null ? ` · seed ${a.params.seed}` : ""}</p>
+        <UsedIn assetId={a.id} className="mt-1" />
         <div className="mt-2 flex items-center justify-between gap-2">
           <Rate kind="image" id={a.id} initial={rating} />
           {!a.params?.parent && (

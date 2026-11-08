@@ -14,6 +14,7 @@ import { useAuth } from "../../lib/auth";
 import { Advanced, LibraryImagePicker, ProviderPicker, SeedField, STYLES } from "../../components/GenControls";
 import { EnhanceButton, Rate } from "../../components/Quality";
 import VideoStudio from "../../components/VideoStudio";
+import { StoryLine, UsedIn } from "../../components/Story";
 
 const DURATION_LABEL = (d) => `${String(d).replace(/s$/, "")} seconds`;
 
@@ -64,6 +65,7 @@ function VideoCard({ a, rating, onChange, onDelete, onComment }) {
               ? <span className="inline-flex items-center gap-1 font-semibold text-emerald-600"><Volume2 className="size-3" /> With sound</span>
               : <span className="inline-flex items-center gap-1"><VolumeX className="size-3" /> Silent{p.audio_error ? " (sound failed)" : ""}</span>)}
           </p>
+          <UsedIn assetId={a.id} className="mt-1" />
           {a.status === "done" && !p.has_audio && (
             <button onClick={addSound} disabled={soundBusy} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1 text-xs font-semibold text-strong hover:bg-brand/15 disabled:opacity-50">
               {soundBusy ? <Spinner className="size-3" /> : <Wand2 className="size-3" />} Add sound
@@ -160,8 +162,9 @@ export default function VideoGen() {
     <div>
       <VideoStudio video={studio} versions={chain} open={!!studio} onClose={() => setStudio(null)} onPick={setStudio}
         onCreated={(n) => { setAssets((all) => [n, ...all]); setStudio(null); setTab("history"); }} />
-      <PageHeader icon={Video} tone="pink" title="Videos" subtitle="Turn a sentence or a picture into a short promo clip, with sound."
+      <PageHeader title="Videos"
         actions={<Button variant="ghost" onClick={startNew}><Plus className="size-4" /> Start new</Button>} />
+      <StoryLine module="videos" />
       <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${assets.length ? ` (${assets.length})` : ""}` }]} /></div>
       {options.length > 0 && !anyAvailable && (
         <Notice tone="amber" icon={KeyRound}>

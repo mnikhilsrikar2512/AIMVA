@@ -19,6 +19,7 @@ const OnboardingContext = createContext(null);
 export const useOnboarding = () => useContext(OnboardingContext);
 
 import { Logo } from "./Logo";
+import { StoryProvider } from "./Story";
 export { Logo };  // moved to its own file so public pages can use it without the app shell
 
 /**
@@ -327,11 +328,13 @@ export default function AppLayout() {
         <div className={cx("absolute right-4 top-3 z-30 hidden rounded-lg bg-bg/85 backdrop-blur lg:right-5", focus ? "md:hidden" : "md:block")}><ForYou /></div>
         <div id="app-scroll" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]">
           <main className={cx("relative mx-auto px-4 pt-5 pb-8 sm:px-6 sm:py-6 lg:px-10 lg:py-10", focus ? "max-w-[96rem]" : "max-w-6xl 2xl:max-w-7xl")}>
-            <ModuleBoundary path={location.pathname}>
-              <motion.div key={location.pathname} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease }}>
-                <Outlet />
-              </motion.div>
-            </ModuleBoundary>
+            <StoryProvider>
+              <ModuleBoundary path={location.pathname}>
+                <motion.div key={location.pathname} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease }}>
+                  <Outlet />
+                </motion.div>
+              </ModuleBoundary>
+            </StoryProvider>
           </main>
         </div>
         <MobileTabBar onMore={() => setOpen(true)} />

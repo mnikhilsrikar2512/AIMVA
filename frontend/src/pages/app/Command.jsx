@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  ArrowDownRight, ArrowUpRight, BadgeIndianRupee, Check, ChevronDown, Clock, Compass, Copy, ExternalLink, Facebook, Globe,
+  ArrowDownRight, ArrowUpRight, BadgeIndianRupee, Check, ChevronDown, Clock, Copy, ExternalLink, Facebook, Globe,
   Linkedin, Megaphone, MoreHorizontal, Package, Pause, Pencil, PhoneCall, Play, Plus, Search, Sparkles, Target, Trash2,
   TrendingUp, X,
 } from "lucide-react";
@@ -15,6 +15,7 @@ import { useAuth } from "../../lib/auth";
 import { del, get, patch, post, put } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
 import { CountUp, Meter, Reveal, Sparkline, ease, rise, stagger } from "../../components/Motion";
+import { StoryLine } from "../../components/Story";
 
 /* ---- formatting & vocabulary --------------------------------------------------------------------------- */
 const inr = (v, d = 0) => (v === null || v === undefined ? "—" : `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: d })}`);
@@ -574,7 +575,7 @@ export default function Command() {
 
   return (
     <div>
-      <PageHeader icon={Compass} tone="violet" title="Results" subtitle="What you spent, the leads and sales it brought, per product and campaign."
+      <PageHeader title="Results"
         actions={<div className="flex flex-wrap gap-2">
           <DownloadMenu name="Results" disabled={!data || empty}
             excel={() => [{ name: "Campaigns", columns: CAMP_COLS, rows: campaigns }, { name: "Products", columns: PROD_COLS, rows: products }]}
@@ -582,6 +583,7 @@ export default function Command() {
           <Tabs value={days} onChange={setDays} tabs={[{ value: "7", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }]} />
           <Button onClick={() => setProductModal({ open: true, product: null })}><Plus className="size-4" /> Add product</Button>
         </div>} />
+      <StoryLine module="results" />
       <div className="mb-6">
         <AgentSwitch kind="autopilot" title="Campaign Autopilot" modes={{ suggest: "Suggest", auto: "Fix safely" }}
           text="Checks every campaign each morning. Suggest puts fixes in For you (the bell); Fix safely pauses money-wasters and trims overspend itself, never raising budgets." />

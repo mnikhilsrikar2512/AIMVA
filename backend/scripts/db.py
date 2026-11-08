@@ -249,13 +249,16 @@ CALL_LINES = {
 }
 
 
-def site_html(company: str, slug: str, ws: dict) -> str:
-    """The real builder's no-AI template, so seeded pages look and behave like generated ones (working lead form)."""
+def site_html(company: str, slug: str, ws: dict, db=None, owner_id=None, hero: str = "") -> str:
+    """The real builder's no-AI template, so seeded pages look and behave like generated ones (working lead form).
+    `hero` is a library picture ("asset:<id>"), embedded the way the builder embeds it."""
     try:
-        from app.routers.sites import Brief, template_html
+        from app.routers.sites import Brief, _embed, template_html
         b = Brief(business=company, headline=ws["offer"], industry=ws["industry"], audience=ws["audience"][:160],
                   offer=ws["offer"], cta=ws["cta"], features=ws["features"], contact_mode="own_phone",
                   phone="+91 98765 43210", primary=ws["colors"][0], accent=ws["colors"][1], use_ai=False)
+        if hero and db is not None:
+            return template_html(b, slug, media={"hero": _embed(db, owner_id, hero), "gallery": [], "logo": ""})
         return template_html(b, slug)
     except Exception:  # noqa: BLE001  (the builder changed shape: a plain page is still a valid test page)
         return f"<!doctype html><html><body><h1>{company}</h1><p>{ws['offer']}</p></body></html>"
@@ -419,6 +422,12 @@ def seed_business(db, rng, owner_id: int, ws: dict, now: datetime, person_ids: d
                            status="done", params={"size": "1:1", "width": 768, "height": 768, "style": style, "brand": True,
                                                   "provider": "builtin:pollinations", "batch": f"demo{j}"},
                            created_at=now - timedelta(days=rng.randint(1, 50))))
+    db.flush()
+    pics = list(db.scalars(select(M.Asset).where(M.Asset.user_id == owner_id, M.Asset.kind == "image").order_by(M.Asset.id)))
+    if pics:  # the Meta ad and the live page use the first pictures, so the demo shows work leading somewhere
+        campaigns[0].creative = {**campaigns[0].creative, "image_url": pics[0].url}
+        sites[0].brief = {**sites[0].brief, "hero_image": f"asset:{pics[-1].id}"}
+        sites[0].html = site_html(company, sites[0].slug, ws, db=db, owner_id=owner_id, hero=f"asset:{pics[-1].id}")
     meta = campaigns[0]
     db.add(M.Decision(user_id=owner_id, key=f"call_hot:{(now - timedelta(days=6)).date()}", title="Call your 3 hottest leads now",
                       decision="accepted", result="Voice agent called 3 leads", created_at=now - timedelta(days=6)))

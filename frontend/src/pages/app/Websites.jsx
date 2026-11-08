@@ -18,6 +18,7 @@ import { BriefCoach, ImportBar, Rate, ReadinessPanel, useBriefReview } from "../
 import { DECORS, DirectionsButton, LayoutPicker } from "../../components/Designs";
 import VisualEditor from "../../components/VisualEditor";
 import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
+import { StoryLine, Outcome } from "../../components/Story";
 
 const TEMPLATE_KEYS = ["page_type", "layout", "decor", "look", "theme", "font", "sections", "form_fields", "contact_mode", "cta", "form_title",
   "offer", "headline", "subheadline", "features"];
@@ -714,7 +715,7 @@ function SiteCard({ s, onOpen, onDelete, viewOnly }) {
           <p className="truncate font-semibold text-strong">{s.name}</p>
           {s.published ? <Chip tone="green">Live</Chip> : <Chip>Draft</Chip>}
         </div>
-        <p className="mt-1 text-xs text-faint">Updated {timeAgo(s.updated_at)} · {s.visits} visits</p>
+        <p className="mt-1 text-xs text-faint">Updated {timeAgo(s.updated_at)} · {s.visits} visits{s.published ? " · " : ""}{s.published && <Outcome kind="page" id={s.id} />}</p>
         <div className="mt-auto flex gap-2 pt-4">
           {viewOnly ? <Button variant="ghost" size="sm" onClick={onOpen}><Eye className="size-3.5" /> Preview</Button>
             : <Button variant="ghost" size="sm" onClick={onOpen}><Code2 className="size-3.5" /> Edit</Button>}
@@ -751,8 +752,9 @@ export default function Websites() {
 
   return (
     <div>
-      <PageHeader icon={Globe} tone="pink" title="Pages" subtitle={isClient ? "The landing pages your agency made for you." : "Landing pages with a lead form built in."}
+      <PageHeader title="Pages" subtitle={isClient ? "The landing pages your agency made for you." : undefined}
         actions={!isClient && <Button onClick={startNew}><Plus className="size-4" /> New page</Button>} />
+      <StoryLine module="pages" />
       {!isClient && <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${sites.length ? ` (${sites.length})` : ""}` }]} /></div>}
 
       {current && !isClient && <Editor key={current.id} site={current} feedback={feedback} onChange={(s) => { setCurrent(s); reload(); }}
