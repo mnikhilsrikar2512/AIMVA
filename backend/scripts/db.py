@@ -7,6 +7,9 @@ Run from the backend folder, with the same .env the app uses (DATABASE_URL picks
     .venv/bin/python scripts/db.py seed                  # demo agency, client workspaces, people in every role, data
     .venv/bin/python scripts/db.py unseed                # remove only the demo data
     .venv/bin/python scripts/db.py reset --confirm NAME  # drop EVERY table, migrate, (and --seed)
+    .venv/bin/python scripts/db.py tokens new-key        # a new key for TOKEN_ENCRYPTION_KEYS
+    .venv/bin/python scripts/db.py tokens check          # which stored tokens are on the current key (read-only)
+    .venv/bin/python scripts/db.py tokens rotate         # re-encrypt every stored token with the current key
 
 Full guide: docs/DATABASE.md. Nothing here touches app/ or migrations/: the schema comes from the Alembic migrations.
 """
@@ -27,6 +30,7 @@ from sqlalchemy.engine import make_url  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.db import IS_SQLITE, Base, SessionLocal, engine, migrate  # noqa: E402
 from app import models as M  # noqa: E402
+from app import security  # noqa: E402
 from app.security import hash_password  # noqa: E402
 
 DEMO_DOMAIN = "aimva-demo.example.com"  # example.com is reserved (RFC 2606): no real inbox, but sign-in accepts it
@@ -593,6 +597,59 @@ def cmd_reset(args) -> int:
     return 0
 
 
+# ---- tokens -------------------------------------------------------------------------------------------------
+# Every column that holds an encrypted secret (security.encrypt_json). Add new ones here.
+SECRET_COLUMNS = ((M.Integration, "integrations"), (M.ProviderConnection, "provider_connections"))
+
+
+def _token_rows(db):
+    for model, label in SECRET_COLUMNS:
+        for row in db.scalars(select(model).where(model.secret != "").order_by(model.id)):
+            yield label, row
+
+
+def token_report(db) -> dict:
+    counts = {"current": 0, "old": 0, "unreadable": 0}
+    for _, row in _token_rows(db):
+        counts[security.token_key_status(row.secret)] += 1
+    return counts
+
+
+def cmd_tokens(args) -> int:
+    if args.action == "new-key":
+        from cryptography.fernet import Fernet
+        print(Fernet.generate_key().decode())
+        print("\nPut it FIRST in TOKEN_ENCRYPTION_KEYS (keep any older keys after it, comma-separated), restart the app, "
+              "then run: scripts/db.py tokens rotate", file=sys.stderr)
+        return 0
+    if not settings.token_encryption_keys:
+        warn("TOKEN_ENCRYPTION_KEYS is empty: tokens are encrypted with a key derived from SECRET_KEY")
+    print(f"Database: {describe_url()}")
+    with SessionLocal() as db:
+        if args.action == "check":
+            c = token_report(db)
+            ok(f"{c['current']} on the current key")
+            (warn if c["old"] else ok)(f"{c['old']} on an older key or SECRET_KEY" + (" (run: tokens rotate)" if c["old"] else ""))
+            (bad if c["unreadable"] else ok)(f"{c['unreadable']} no configured key can open"
+                                             + (" (that key was lost; those accounts must reconnect)" if c["unreadable"] else ""))
+            return 1 if c["unreadable"] else 0
+        moved, unreadable = 0, []
+        for label, row in _token_rows(db):
+            status = security.token_key_status(row.secret)
+            if status == "old":
+                row.secret = security.rotate_token(row.secret)
+                moved += 1
+            elif status == "unreadable":
+                unreadable.append(f"{label}#{row.id}")
+        db.commit()
+    ok(f"re-encrypted {moved} token(s) with the current key")
+    if unreadable:
+        bad(f"{len(unreadable)} token(s) no configured key can open, left as they are: " + ", ".join(unreadable[:20]))
+        return 1
+    print("\nOlder keys can now be removed from TOKEN_ENCRYPTION_KEYS, and SECRET_KEY can change without touching tokens.")
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="scripts/db.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -611,10 +668,13 @@ def main(argv=None) -> int:
             s.add_argument("--seed", action="store_true", help="load demo data afterwards")
     u = sub.add_parser("unseed", help="remove only the demo data")
     u.add_argument("--allow-production", action="store_true")
+    t = sub.add_parser("tokens", help="encryption key for stored tokens: new-key, check, rotate")
+    t.add_argument("action", choices=("new-key", "check", "rotate"))
     args = p.parse_args(argv)
     if args.cmd == "seed" and len(args.password) < 8:
         sys.exit("--password must be at least 8 characters.")
-    return {"check": cmd_check, "migrate": cmd_migrate, "seed": cmd_seed, "unseed": cmd_unseed, "reset": cmd_reset}[args.cmd](args)
+    return {"check": cmd_check, "migrate": cmd_migrate, "seed": cmd_seed, "unseed": cmd_unseed, "reset": cmd_reset,
+            "tokens": cmd_tokens}[args.cmd](args)
 
 
 if __name__ == "__main__":

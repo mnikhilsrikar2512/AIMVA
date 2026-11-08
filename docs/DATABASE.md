@@ -10,6 +10,7 @@ only from the Alembic migrations in `backend/migrations` (currently up to `0010`
 | `scripts/db.py migrate` | Applies migrations (`alembic upgrade head`) the same way the app does on startup. | Yes |
 | `scripts/db.py seed` | Loads the demo agency, client workspaces and people in every role (below). Runs once; `--fresh` reloads it. | Adds demo rows only |
 | `scripts/db.py unseed` | Removes only the demo accounts and everything they own. Real accounts are untouched. | Yes |
+| `scripts/db.py tokens new-key` / `check` / `rotate` | The key for stored tokens (`TOKEN_ENCRYPTION_KEYS`): make one, count tokens still on an older key, re-encrypt them with the current key. Unreadable tokens are reported and left alone. See docs/DEPLOY.md. | Yes |
 | `scripts/db.py reset --confirm <dbname>` | **Drops every table in that database**, migrates from scratch. Add `--seed` to load demo data after. | **No** |
 
 On the Mac, prefix each with `.venv/bin/python`, for example `.venv/bin/python scripts/db.py check`.
