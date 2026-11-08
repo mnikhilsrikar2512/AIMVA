@@ -14,6 +14,7 @@ import { LaunchCard } from "../../components/Agents";
 import { RecentWork } from "../../components/RecentWork";
 import { nextLeadMilestone } from "../../components/Celebrate";
 import { answersFrom } from "../../lib/onboardingAnswers";
+import { LoadErrorBar } from "../../components/LoadError";
 
 export const SOURCE_TONE = { website: "pink", meta: "blue", google: "green", linkedin: "cyan", whatsapp: "green", voice: "violet", manual: "slate" };
 
@@ -79,7 +80,7 @@ export default function Dashboard() {
   // Getting started until the first lead exists or the person skips the guide. Data decides, not a setting.
   const starting = !!ob && !ob.dismissed && !steps.lead;
   const isClient = user?.workspace?.role === "client";
-  const { data, reload } = useApi(starting || !ob ? null : "/api/analytics/overview?days=30");
+  const { data, reload, error } = useApi(starting || !ob ? null : "/api/analytics/overview?days=30");
   const sites = useApi(starting ? "/api/sites" : null, []);
   useLeadEvents(() => { reload(); });
   const [launch, setLaunch] = useState(false);
@@ -103,7 +104,9 @@ export default function Dashboard() {
         )}
       </div>
 
-      {!ob ? (
+      {!ob && onboarding?.error ? (
+        <LoadErrorBar what="your home page" onRetry={onboarding.reload} className="max-w-3xl" />
+      ) : !ob ? (
         <div className="space-y-3" aria-label="Loading">{[0, 1, 2].map((i) => <div key={i} className="h-10 max-w-3xl animate-pulse rounded-lg bg-surface-2" style={{ opacity: 1 - i * 0.25 }} />)}</div>
       ) : starting ? (
         <>
@@ -117,14 +120,14 @@ export default function Dashboard() {
         </>
       ) : (
         <>
-          <NumbersLine k={k} />
+          {error && !data ? <LoadErrorBar what="your numbers" onRetry={reload} className="max-w-3xl" /> : <NumbersLine k={k} />}
           {next && <p className="mt-1 text-xs text-muted">{next.left} more to {next.target} leads.</p>}
 
           <div className="mt-8 grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="min-w-0"><RecentWork limit={12} /></div>
             <aside className="min-w-0">
               <h2 className="mb-3 text-sm font-semibold text-strong">Pipeline</h2>
-              {data ? <Pipeline funnel={data.funnel} /> : <div className="h-32 animate-pulse rounded-lg bg-surface-2" />}
+              {data ? <Pipeline funnel={data.funnel} /> : error ? <p className="text-sm text-muted">Didn't load.</p> : <div className="h-32 animate-pulse rounded-lg bg-surface-2" />}
               <h2 className="mb-3 mt-8 text-sm font-semibold text-strong">Top leads</h2>
               {data?.top_leads?.length ? (
                 <ul className="space-y-2.5">

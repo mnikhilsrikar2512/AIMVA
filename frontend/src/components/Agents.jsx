@@ -5,6 +5,7 @@ import { ArrowRight, Bot, Check, CircleDashed, Clock, Globe, Minus, Rocket, X } 
 import { toast } from "sonner";
 import { Button, Card, cx } from "./ui";
 import { get, post, put } from "../lib/api";
+import { LoadErrorBar } from "./LoadError";
 import { parseServerDate, timeAgo, useApi } from "../lib/hooks";
 import { useAgentEvents } from "../lib/live";
 import { ease } from "./Motion";
@@ -150,9 +151,10 @@ const KIND_TONE = { launch: "bg-violet-500", concierge: "bg-emerald-500", autopi
 
 /** On/off (and suggest/auto) for one agent, shown on the page whose work it does. */
 export function AgentSwitch({ kind, title, text, modes }) {
-  const { data: agents, setData } = useApi("/api/agents", []);
+  const { data: agents, setData, error, reload } = useApi("/api/agents", []);
   const a = agents.find((x) => x.kind === kind);
   const [saving, setSaving] = useState(false);
+  if (!a && error) return <LoadErrorBar what={`the ${title} switch`} onRetry={reload} />;
   if (!a) return null;
   const save = async (patch) => {
     setSaving(true);
@@ -187,7 +189,8 @@ export function AgentSwitch({ kind, title, text, modes }) {
 
 /** The concierge's planned follow-ups for one lead. */
 export function FollowUps({ leadId }) {
-  const { data } = useApi(`/api/agents/leads/${leadId}/follow-ups`, []);
+  const { data, error, reload } = useApi(`/api/agents/leads/${leadId}/follow-ups`, []);
+  if (error && !data.length) return <LoadErrorBar what="planned follow-ups" onRetry={reload} className="mb-0" />;
   if (!data.length) return null;
   const label = { day2: "Day-2 follow-up", day7: "Day-7 follow-up" };
   return (

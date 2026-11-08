@@ -3,6 +3,7 @@ import { CheckCircle2, ExternalLink, FileJson, Image as ImageIcon, PenLine, Plus
 import { toast } from "sonner";
 import { Button, Card, Chip, Empty, Field, Modal, Spinner, Tabs, cx, ListSkeleton } from "./ui";
 import { del, patch, post } from "../lib/api";
+import { LoadError } from "./LoadError";
 import { useAction, useApi } from "../lib/hooks";
 
 const KINDS = [
@@ -138,12 +139,13 @@ function ConnectionRow({ c, onChange, onRemove }) {
 
 export default function ProvidersPanel() {
   const { data: presets } = useApi("/api/providers/presets", []);
-  const { data: conns, setData, loading } = useApi("/api/providers", []);
+  const { data: conns, setData, loading, error, reload } = useApi("/api/providers", []);
   const [adding, setAdding] = useState(false);
   const grouped = useMemo(() => KINDS.map((k) => ({ ...k, items: conns.filter((c) => c.kind === k.value) })), [conns]);
   const replace = (c) => setData((all) => all.map((x) => (x.id === c.id ? c : c.is_default && x.kind === c.kind ? { ...x, is_default: false } : x)));
 
   if (loading) return <ListSkeleton />;
+  if (error && !conns.length) return <LoadError error={error} what="your AI providers" onRetry={reload} />;
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-3 rounded-2xl bg-lavender/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
