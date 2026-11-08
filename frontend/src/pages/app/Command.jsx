@@ -86,7 +86,7 @@ function Pulse({ k, summary, brief, onBrief, briefBusy }) {
       <div className="aura pointer-events-none absolute inset-0 opacity-80" aria-hidden="true" />
       <motion.div variants={stagger} initial="hidden" animate="show"
         className="relative grid grid-cols-3 gap-2 sm:grid-cols-[1fr_minmax(70px,0.5fr)_1fr_minmax(70px,0.5fr)_1fr] sm:gap-1">
-        <FlowNode label="Ad spend" tone="text-violet-600" value={<CountUp value={k.spend} format={compact} />} sub={<Delta value={k.spend_change} invert />} />
+        <FlowNode label="Ad spend" tone="text-brand" value={<CountUp value={k.spend} format={compact} />} sub={<Delta value={k.spend_change} invert />} />
         <FlowLink active={k.leads > 0} label={k.cpl ? `${inr(k.cpl)} / lead` : k.leads > 0 ? "no spend tracked" : "no leads yet"} />
         <FlowNode label="Leads" tone="text-sky-600" value={<CountUp value={k.leads} />}
           sub={<span className="inline-flex items-center gap-1.5"><Delta value={k.leads_change} />{k.hot > 0 && <span className="font-semibold text-rose-600">{k.hot} hot</span>}</span>} />

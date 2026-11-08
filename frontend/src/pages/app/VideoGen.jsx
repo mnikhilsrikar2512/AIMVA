@@ -230,7 +230,7 @@ export default function VideoGen() {
               <SeedField value={form.seed} onChange={(v) => setForm((f) => ({ ...f, seed: v }))} />
               {!known && (
                 <label className="flex items-center gap-2 text-sm text-ink">
-                  <input type="checkbox" className="size-4 accent-violet-500" checked={form.generate_audio}
+                  <input type="checkbox" className="size-4 accent-brand" checked={form.generate_audio}
                     onChange={(e) => setForm((f) => ({ ...f, generate_audio: e.target.checked }))} />
                   This engine renders its own sound
                 </label>

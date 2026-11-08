@@ -86,7 +86,7 @@ function AddProvider({ open, onClose, presets, onAdded }) {
           )}
           {kind === "text" && (
             <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" className="size-4 accent-violet-500" checked={!!f.is_default} onChange={set("is_default")} />
+              <input type="checkbox" className="size-4 accent-brand" checked={!!f.is_default} onChange={set("is_default")} />
               Use as my default AI writer
             </label>
           )}

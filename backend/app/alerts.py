@@ -89,11 +89,11 @@ def on_new_lead(db: Session, lead_id: int) -> bool:
               "Turn these emails off in AIMVA under Settings, Lead alerts."]
     btn = "display:inline-block;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;margin-right:8px"
     html = (f"<p style='font-size:16px'><b>{escape(who)}</b> just asked through {escape(src)}.</p>"
-            + (f"<blockquote style='margin:0 0 12px;padding:8px 12px;border-left:3px solid #a34d22;color:#333'>{escape(lead.message[:400])}</blockquote>" if lead.message else "")
+            + (f"<blockquote style='margin:0 0 12px;padding:8px 12px;border-left:3px solid #f4a21c;color:#333'>{escape(lead.message[:400])}</blockquote>" if lead.message else "")
             + (f"<p style='color:#555'>{escape(lead.phone)}{' · ' + escape(lead.email) if lead.email else ''}</p>" if lead.phone else
                f"<p style='color:#555'>{escape(lead.email)}</p>" if lead.email else "")
             + (f"<a href='{escape(wa)}' style='{btn};background:#1f7a4d;color:#fff'>Reply on WhatsApp</a>" if wa else "")
-            + f"<a href='{escape(open_url)}' style='{btn};background:#1c1917;color:#fff'>Open in AIMVA</a>"
+            + f"<a href='{escape(open_url)}' style='{btn};background:#0f2b2d;color:#fff'>Open in AIMVA</a>"
             + "<p style='color:#777;font-size:12px;margin-top:16px'>Leads answered in the first 5 minutes are far more likely to buy. "
               "Turn these emails off in AIMVA under Settings, Lead alerts.</p>")
     sent = send_email(owner.email, f"New lead: {who}" + (f" ({src})" if src else ""), "\n".join(l for l in lines if l is not None), html)

@@ -23,7 +23,7 @@ function Skyline({ className }) {
       <circle cx="122" cy="30" r="12" fill="#fff7ed" opacity=".85" />
       {[[10, 48, 26], [40, 30, 30], [74, 40, 22], [100, 22, 28], [132, 52, 22]].map(([x, y, w], i) => (
         <g key={i}>
-          <rect x={x} y={y} width={w} height={100 - y} fill={i % 2 ? "#4c3fb8" : "#6d5dfc"} opacity={0.85 - i * 0.05} />
+          <rect x={x} y={y} width={w} height={100 - y} fill={i % 2 ? "#134e5e" : "#0b6b67"} opacity={0.85 - i * 0.05} />
           {Array.from({ length: Math.floor((100 - y) / 12) }).map((_, r) => (
             <rect key={r} x={x + 5} y={y + 6 + r * 12} width={w - 10} height="4" fill="#fde68a" opacity={(r + i) % 3 ? 0.55 : 0.2} />
           ))}

@@ -116,7 +116,7 @@ export function LaunchCard({ initialWhat = "" } = {}) {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" className="size-4 accent-violet-500" checked={f.publish} onChange={(e) => setF({ ...f, publish: e.target.checked })} />
+              <input type="checkbox" className="size-4 accent-brand" checked={f.publish} onChange={(e) => setF({ ...f, publish: e.target.checked })} />
               Put the page live straight away <span className="text-faint">(ads always wait for you)</span>
             </label>
             <Button type="submit" busy={busy}><Bot className="size-4" /> Do it for me</Button>

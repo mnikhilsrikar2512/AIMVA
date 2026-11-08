@@ -91,10 +91,10 @@ export default function VideoStudio({ video, versions = [], open, onClose, onCre
                   className="grid size-9 shrink-0 place-items-center rounded-full bg-strong text-white">{playing ? <Pause className="size-4" /> : <Play className="size-4" />}</button>
                 <div className="relative h-8 flex-1">
                   <input type="range" min={0} max={dur || 1} step={0.05} value={t} onChange={(e) => seek(Number(e.target.value))}
-                    aria-label="Position in the video" className="absolute inset-x-0 top-1/2 w-full -translate-y-1/2 accent-violet-600" />
+                    aria-label="Position in the video" className="absolute inset-x-0 top-1/2 w-full -translate-y-1/2 accent-brand" />
                   {dur > 0 && notes.map((n, i) => (
                     <button key={n.id} type="button" title={`${clock(n.t)} · ${n.text || "comment"}`} onClick={() => { seek(n.t); setActive(n.id); }}
-                      className="absolute top-0 grid size-4 -translate-x-1/2 place-items-center rounded-[50%_50%_50%_2px] bg-violet-600 text-[9px] font-semibold text-white"
+                      className="absolute top-0 grid size-4 -translate-x-1/2 place-items-center rounded-[50%_50%_50%_2px] bg-brand text-[9px] font-semibold text-white"
                       style={{ left: `${(n.t / dur) * 100}%` }}>{i + 1}</button>
                   ))}
                 </div>
@@ -111,7 +111,7 @@ export default function VideoStudio({ video, versions = [], open, onClose, onCre
                 <ul className="divide-y divide-line text-sm">
                   {notes.map((n, i) => (
                     <li key={n.id} className="flex items-start gap-2 py-2">
-                      <button type="button" onClick={() => { seek(n.t); setActive(n.id); }} className="shrink-0 font-mono text-xs text-violet-700 hover:underline">{i + 1} · {clock(n.t)}</button>
+                      <button type="button" onClick={() => { seek(n.t); setActive(n.id); }} className="shrink-0 font-mono text-xs text-brand hover:underline">{i + 1} · {clock(n.t)}</button>
                       <span className={cx("min-w-0 flex-1", !n.text && "text-muted")}>{n.text || "Empty"}</span>
                       <button type="button" aria-label="Delete comment" onClick={() => setNotes((all) => all.filter((x) => x.id !== n.id))} className="text-muted hover:text-strong"><X className="size-3.5" /></button>
                     </li>
@@ -148,7 +148,7 @@ function Pin({ n, num, open, onOpen, onClose, onText, onRemove, onSend, canSend 
     <div className="group absolute" style={{ left: `${n.x * 100}%`, top: `${n.y * 100}%` }} onClick={(e) => e.stopPropagation()}>
       <button type="button" onClick={open ? onClose : onOpen} aria-label={`Comment ${num}${n.text ? `: ${n.text}` : ""}`}
         className={cx("absolute bottom-0 left-0 grid size-6 place-items-center rounded-[50%_50%_50%_2px] text-[11px] font-semibold text-white shadow-md ring-[1.5px] ring-white",
-          open ? "bg-violet-600" : n.text ? "bg-strong" : "bg-strong/60")}>{num}</button>
+          open ? "bg-brand" : n.text ? "bg-strong" : "bg-strong/60")}>{num}</button>
       {!open && n.text && <span className="pointer-events-none absolute bottom-7 left-0 hidden max-w-56 truncate rounded-md bg-strong px-2 py-1 text-xs text-white shadow-md group-hover:block">{n.text}</span>}
       {open && (
         <div className={cx("absolute z-10 w-64 max-w-[70vw] rounded-xl bg-surface shadow-xl ring-1 ring-ink/10", low ? "bottom-8" : "top-2", right ? "right-0" : "left-0")}>
@@ -161,7 +161,7 @@ function Pin({ n, num, open, onOpen, onClose, onText, onRemove, onSend, canSend 
                 if (e.key === "Escape") { e.stopPropagation(); n.text ? onClose() : onRemove(); }
               }} />
             <button type="button" aria-label="Make new version" title="Make new version with all comments" disabled={!canSend} onClick={onSend}
-              className="grid size-7 shrink-0 place-items-center rounded-full bg-violet-600 text-white disabled:bg-ink/15"><ArrowUp className="size-3.5" /></button>
+              className="grid size-7 shrink-0 place-items-center rounded-full bg-brand text-white disabled:bg-ink/15"><ArrowUp className="size-3.5" /></button>
           </div>
         </div>
       )}

@@ -296,8 +296,8 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
             hint="Pick from your library (embedded into the page) or paste an https:// link below." />
           <input className="input" value={libraryHero ? "" : b.hero_image} onChange={set("hero_image")} placeholder="https://… (optional)" maxLength={1000} />
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink">
-            <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-violet-500" checked={b.include_logo} onChange={set("include_logo")} /> Show my Brand Kit logo</label>
-            <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-violet-500" checked={b.whatsapp_button} onChange={set("whatsapp_button")} /> Floating WhatsApp button</label>
+            <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-brand" checked={b.include_logo} onChange={set("include_logo")} /> Show my Brand Kit logo</label>
+            <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-brand" checked={b.whatsapp_button} onChange={set("whatsapp_button")} /> Floating WhatsApp button</label>
           </div>
         </div>
       )}
@@ -370,7 +370,7 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
         <div className="space-y-4">
           <div className="rounded-2xl bg-surface-2/60 px-4 py-3 text-sm">
             <label className="flex cursor-pointer items-center gap-2 font-medium text-strong">
-              <input type="checkbox" className="size-4 accent-violet-500" checked={b.use_ai} onChange={set("use_ai")} />
+              <input type="checkbox" className="size-4 accent-brand" checked={b.use_ai} onChange={set("use_ai")} />
               Write the page with AI
             </label>
             {b.use_ai && <p className="mt-1 pl-6 text-xs text-muted"><AiStatus ai={ai} writer={b.writer} writers={writers} /></p>}
