@@ -1,28 +1,4 @@
-/*
- * Public site only. The deep teal and saffron palette, scoped to .mk so the signed-in app is untouched here.
- * These match the app palette tokens exactly; once that palette is in index.css this block can be deleted.
- */
-.mk {
-  --color-bg: #f4f6f3;
-  --color-surface: #fcfdfb;
-  --color-surface-2: #e9eeeb;
-  --color-line: rgb(15 43 45 / 0.09);
-  --color-line-strong: rgb(15 43 45 / 0.17);
-  --color-strong: #0f2b2d;
-  --color-ink: #233a3b;
-  --color-muted: #526563;
-  --color-faint: #596b69;
-  --color-warm: #a35700;
-  --color-warm-soft: #fdf0db;
-  --color-brand: #0b6b67;
-  --color-brand-2: #134e5e;
-  --color-peach: #f4a21c;
-  --color-lavender: #dcefeb;
-  --shadow-soft: 0 0 0 1px rgb(15 43 45 / 0.09);
-  --shadow-lift: 0 0 0 1px rgb(15 43 45 / 0.09), 0 18px 40px -20px rgb(10 40 42 / 0.3);
-}
-.mk .btn-primary:hover:not(:disabled) { background: #1d4346; }
-.mk ::selection { background: #fdf0db; color: #0f2b2d; }
+/* Public site only: depth, motion and small interactions for the marketing pages. Colours come from index.css. */
 
 /* Hero glow: teal and saffron light behind the stage instead of a box. */
 .mk-aura {
@@ -35,7 +11,6 @@
 /* 3D stage: depth comes from transforms the GPU composites, not from WebGL. */
 .mk-stage { perspective: 1600px; perspective-origin: 50% 40%; }
 .mk-3d { transform-style: preserve-3d; }
-.mk-flat .mk-3d, .mk-flat .mk-3d * { transform-style: flat; }
 
 /* Phone frame around real page screenshots. */
 .mk-phone {
