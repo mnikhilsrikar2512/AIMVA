@@ -10,6 +10,9 @@ Four roles:
 - support: looks up customers, grants small goodwill credits, unlocks a locked sign-in, signs a customer out
   everywhere. Can't change plans, see AI engines or keys, or manage the team.
 
+Owners and managers also see the Overview (platform health and what each teammate is doing) and assign tasks;
+everyone sees and works through the tasks assigned to them.
+
 Every change a staff member makes is written to staff_actions with the reason they typed.
 """
 from typing import Optional
@@ -30,9 +33,9 @@ ROLE_LABEL = {"owner": "Owner", "manager": "Management", "developer": "Developme
 # the endpoints below check it again, so hiding a button is never the only guard.
 PERMISSIONS = {
     "owner": {"customers.view", "credits.grant", "credits.grant_any", "plan.change", "signin.unlock", "signin.revoke",
-              "activity.view_all", "team.manage", "quality.view"},
+              "activity.view_all", "team.manage", "quality.view", "overview.view", "tasks.assign"},
     "manager": {"customers.view", "credits.grant", "credits.grant_any", "plan.change", "signin.unlock", "signin.revoke",
-                "activity.view_all", "quality.view"},
+                "activity.view_all", "quality.view", "overview.view", "tasks.assign"},
     "developer": {"customers.view", "signin.revoke", "activity.view_all", "quality.view"},
     "support": {"customers.view", "credits.grant", "signin.unlock", "signin.revoke"},
 }

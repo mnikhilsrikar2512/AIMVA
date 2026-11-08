@@ -5,7 +5,7 @@ Support sees a customer's account (plan, usage, members, how much they use each 
 contents of their leads, messages or calls, and never a stored token or key.
 """
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,7 +17,7 @@ from . import billing, staff
 from .config import settings
 from .db import get_db
 from .models import (Asset, Call, Campaign, CreditGrant, Integration, Invite, Lead, Membership, Site, StaffAction,
-                     StaffMember, Subscription, User, WaMessage, utcnow)
+                     StaffMember, StaffTask, Subscription, User, WaMessage, utcnow)
 from .routers.integrations import PLATFORM
 from .security import rate_limit
 from .staff import need, require_staff
@@ -65,9 +65,14 @@ def _target(db: Session, person: User, cid: int, acting: bool = False) -> User:
 
 
 @router.get("/api/console/me")
-def console_me(person: User = Depends(require_staff)):
+def console_me(person: User = Depends(require_staff), db: Session = Depends(get_db)):
     role = person.staff_role
-    return {"role": role, "role_label": staff.ROLE_LABEL[role], "permissions": sorted(staff.PERMISSIONS[role]),
+    team = []
+    if staff.can(role, "tasks.assign"):  # who a task can go to
+        roles = {e: "owner" for e in settings.admin_emails} | {m.email: m.role for m in db.scalars(select(StaffMember))}
+        names = _names(db, roles)
+        team = sorted(({"email": e, "name": names.get(e, ""), "role": r} for e, r in roles.items()), key=lambda x: (x["name"] or x["email"]).lower())
+    return {"email": person.email.lower(), "team": team, "role": role, "role_label": staff.ROLE_LABEL[role], "permissions": sorted(staff.PERMISSIONS[role]),
             "support_credit_limit": staff.SUPPORT_CREDIT_LIMIT, "support_credit_days": staff.SUPPORT_CREDIT_DAYS,
             "plans": [{"id": k, "name": v["name"], "price_inr": v["price_inr"]} for k, v in billing.PLANS.items() if k != "expired"],
             "meters": [{"id": k, "label": v} for k, v in billing.METERS.items() if k != "sites"]}
@@ -317,3 +322,189 @@ def remove_member(mid: int, person: User = Depends(require_staff), db: Session =
     db.delete(m)
     db.commit()
     return _team(db)
+
+
+# ---- tasks ------------------------------------------------------------------------------------------------------
+TASK_STATUSES = ("open", "doing", "done", "cancelled")
+
+
+class TaskIn(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    note: str = Field("", max_length=4000)
+    assignee: EmailStr
+    customer_id: Optional[int] = None
+    priority: Literal["normal", "high"] = "normal"
+    due_on: Optional[date] = None
+
+
+class TaskPatch(BaseModel):
+    status: Optional[Literal["open", "doing", "done", "cancelled"]] = None
+    title: Optional[str] = Field(None, min_length=3, max_length=200)
+    note: Optional[str] = Field(None, max_length=4000)
+    assignee: Optional[EmailStr] = None
+    priority: Optional[Literal["normal", "high"]] = None
+    due_on: Optional[date] = None
+    clear_due: bool = False
+
+
+def _staff_emails(db: Session) -> set:
+    return set(settings.admin_emails) | {e.lower() for e in db.scalars(select(StaffMember.email))}
+
+
+def _names(db: Session, emails) -> dict:
+    emails = {e for e in emails if e}
+    if not emails:
+        return {}
+    return {e.lower(): n for e, n in db.execute(select(User.email, User.name).where(func.lower(User.email).in_(emails)))}
+
+
+def _task_out(t: StaffTask, names: dict, today: date) -> dict:
+    return {"id": t.id, "title": t.title, "note": t.note, "assignee": t.assignee_email, "assignee_name": names.get(t.assignee_email, ""),
+            "created_by": t.created_by_email, "created_by_name": names.get(t.created_by_email.lower(), ""),
+            "customer_id": t.customer_id, "customer": t.customer_label, "priority": t.priority, "status": t.status,
+            "due_on": t.due_on.isoformat() if t.due_on else None,
+            "overdue": bool(t.due_on and t.due_on < today and t.status in ("open", "doing")),
+            "done_at": _iso(t.done_at), "created_at": _iso(t.created_at), "updated_at": _iso(t.updated_at)}
+
+
+def _assignee(db: Session, email: str) -> str:
+    email = email.lower()
+    if email not in _staff_emails(db):
+        raise HTTPException(400, "Tasks go to people on the AIMVA team. Add them on the Team tab first.")
+    return email
+
+
+@router.get("/api/console/tasks")
+def tasks(scope: Literal["mine", "all"] = "mine", status: Literal["active", "done", "all"] = "active",
+          assignee: str = "", customer_id: Optional[int] = None,
+          person: User = Depends(require_staff), db: Session = Depends(get_db)):
+    """Mine = assigned to me. All = everyone's (owners and managers)."""
+    stmt = select(StaffTask)
+    if scope == "all":
+        need(person, "tasks.assign")
+        if assignee:
+            stmt = stmt.where(StaffTask.assignee_email == assignee.strip().lower())
+    else:
+        stmt = stmt.where(StaffTask.assignee_email == person.email.lower())
+    if status == "active":
+        stmt = stmt.where(StaffTask.status.in_(("open", "doing")))
+    elif status == "done":
+        stmt = stmt.where(StaffTask.status.in_(("done", "cancelled")))
+    if customer_id is not None:
+        stmt = stmt.where(StaffTask.customer_id == customer_id)
+    # Active: high priority first, then the soonest due date (no date last), then oldest. Done: most recent first.
+    if status == "active":
+        stmt = stmt.order_by((StaffTask.priority == "high").desc(), StaffTask.due_on.is_(None), StaffTask.due_on, StaffTask.id)
+    else:
+        stmt = stmt.order_by(StaffTask.updated_at.desc(), StaffTask.id.desc())
+    rows = list(db.scalars(stmt.limit(300)))
+    names = _names(db, {t.assignee_email for t in rows} | {t.created_by_email.lower() for t in rows})
+    today = utcnow().date()
+    return {"items": [_task_out(t, names, today) for t in rows],
+            "assignees": sorted(_staff_emails(db)) if staff.can(person.staff_role, "tasks.assign") else []}
+
+
+@router.post("/api/console/tasks")
+def create_task(body: TaskIn, person: User = Depends(require_staff), db: Session = Depends(get_db)):
+    need(person, "tasks.assign")
+    target = None
+    if body.customer_id is not None:
+        target = db.get(User, body.customer_id)
+        if not target:
+            raise HTTPException(404, "No customer with that id.")
+    t = StaffTask(title=body.title.strip(), note=body.note.strip(), assignee_email=_assignee(db, body.assignee),
+                  created_by=person.id, created_by_email=person.email, customer_id=target.id if target else None,
+                  customer_label=(target.email if target and target.kind == "person" else target.name if target else "")[:255],
+                  priority=body.priority, due_on=body.due_on)
+    db.add(t)
+    db.flush()
+    staff.record(db, person, "task.assign", target, "", {"task_id": t.id, "title": t.title, "to": t.assignee_email})
+    db.commit()
+    return _task_out(t, _names(db, {t.assignee_email, person.email.lower()}), utcnow().date())
+
+
+@router.patch("/api/console/tasks/{tid}")
+def update_task(tid: int, body: TaskPatch, person: User = Depends(require_staff), db: Session = Depends(get_db)):
+    t = db.get(StaffTask, tid)
+    manager = staff.can(person.staff_role, "tasks.assign")
+    mine = t is not None and t.assignee_email == person.email.lower()
+    if not t or not (manager or mine):
+        raise HTTPException(404, "Task not found.")
+    edits = body.model_dump(exclude_unset=True)
+    if not manager and set(edits) - {"status", "note"}:
+        raise HTTPException(403, "Only an owner or a manager can change who does a task, or its title, priority or due date.")
+    target = db.get(User, t.customer_id) if t.customer_id else None
+    if body.status and body.status != t.status:
+        staff.record(db, person, "task.status", target, "", {"task_id": t.id, "title": t.title, "from": t.status, "to": body.status})
+        t.status = body.status
+        t.done_at = utcnow() if body.status in ("done", "cancelled") else None
+    if body.assignee and body.assignee.lower() != t.assignee_email:
+        new = _assignee(db, body.assignee)
+        staff.record(db, person, "task.assign", target, "", {"task_id": t.id, "title": t.title, "to": new, "from": t.assignee_email})
+        t.assignee_email = new
+    for f in ("title", "note", "priority", "due_on"):
+        if f in edits and edits[f] is not None:
+            setattr(t, f, edits[f].strip() if isinstance(edits[f], str) else edits[f])
+    if body.clear_due and manager:
+        t.due_on = None
+    db.commit()
+    return _task_out(t, _names(db, {t.assignee_email, t.created_by_email.lower()}), utcnow().date())
+
+
+# ---- overview ---------------------------------------------------------------------------------------------------
+@router.get("/api/console/overview")
+def overview(days: int = Query(7, ge=1, le=90), person: User = Depends(require_staff), db: Session = Depends(get_db)):
+    """How the platform is doing and what each teammate has been doing, for the owner and managers."""
+    need(person, "overview.view")
+    now = utcnow()
+    since = now - timedelta(days=days)
+    today = now.date()
+
+    def count(M, *where):
+        return db.scalar(select(func.count()).select_from(M).where(*where)) or 0
+
+    active = set()
+    for M in (Lead, Asset, Site, Campaign):
+        active |= set(db.scalars(select(M.user_id).where(M.created_at >= since).distinct()))
+    platform = {
+        "customers": count(User, User.kind == "person"), "workspaces": count(User, User.kind == "workspace"),
+        "new_customers": count(User, User.kind == "person", User.created_at >= since),
+        "active_accounts": len(active),
+        "leads": count(Lead, Lead.created_at >= since),
+        "trials_ending": count(Subscription, Subscription.status == "trialing", Subscription.period_end <= now + timedelta(days=7)),
+        "past_due": count(Subscription, Subscription.status == "past_due"),
+        "paying": count(Subscription, Subscription.status == "active", Subscription.plan != "trial"),
+        "failed": {"calls": count(Call, Call.created_at >= since, Call.status == "failed"),
+                   "whatsapp": count(WaMessage, WaMessage.created_at >= since, WaMessage.status == "failed"),
+                   "pictures_videos": count(Asset, Asset.created_at >= since, Asset.status == "failed")},
+        "locked_signins": count(User, User.locked_until > now),
+    }
+
+    people = [(e, "owner") for e in sorted(settings.admin_emails)] + \
+             [(m.email, m.role) for m in db.scalars(select(StaffMember).order_by(StaffMember.created_at))]
+    emails = [e for e, _ in people]
+    names = _names(db, emails)
+    acts = defaultdict(lambda: {"actions": 0, "views": 0, "last": None, "kinds": defaultdict(int)})
+    for a in db.scalars(select(StaffAction).where(StaffAction.created_at >= since, func.lower(StaffAction.actor_email).in_(emails))):
+        r = acts[a.actor_email.lower()]
+        if a.action == "customer.view":
+            r["views"] += 1
+        else:
+            r["actions"] += 1
+            r["kinds"][a.action] += 1
+        if r["last"] is None or a.created_at > r["last"]:
+            r["last"] = a.created_at
+    tasks_by = defaultdict(lambda: {"open": 0, "doing": 0, "overdue": 0, "done": 0})
+    for t in db.scalars(select(StaffTask).where(StaffTask.assignee_email.in_(emails), or_(
+            StaffTask.status.in_(("open", "doing")), StaffTask.done_at >= since))):
+        r = tasks_by[t.assignee_email]
+        if t.status in ("open", "doing"):
+            r[t.status] += 1
+            r["overdue"] += bool(t.due_on and t.due_on < today)
+        elif t.status == "done":
+            r["done"] += 1
+    team_rows = [{"email": e, "name": names.get(e, ""), "role": role, "role_label": staff.ROLE_LABEL[role],
+                  "actions": acts[e]["actions"], "customers_opened": acts[e]["views"], "last_active": _iso(acts[e]["last"]),
+                  "top": sorted(acts[e]["kinds"].items(), key=lambda kv: -kv[1])[:3],
+                  "tasks": tasks_by[e]} for e, role in people]
+    return {"days": days, "platform": platform, "team": team_rows}

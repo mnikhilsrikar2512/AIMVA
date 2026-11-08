@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -596,3 +596,23 @@ class StaffAction(Base):
     reason: Mapped[str] = mapped_column(String(500), default="")
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class StaffTask(Base):
+    """Work an owner or manager hands to someone on the AIMVA team, optionally about one customer.
+    Assignee is an email (like StaffMember) so owners from ADMIN_EMAILS can get tasks too."""
+    __tablename__ = "staff_tasks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    note: Mapped[str] = mapped_column(Text, default="")
+    assignee_email: Mapped[str] = mapped_column(String(255), index=True)
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by_email: Mapped[str] = mapped_column(String(255))
+    customer_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # users.id, no FK (like staff_actions)
+    customer_label: Mapped[str] = mapped_column(String(255), default="")
+    priority: Mapped[str] = mapped_column(String(10), default="normal")  # normal | high
+    status: Mapped[str] = mapped_column(String(12), default="open", index=True)  # open | doing | done | cancelled
+    due_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    done_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
