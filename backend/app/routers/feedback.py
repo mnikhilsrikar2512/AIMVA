@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .. import staff
 from ..config import settings
 from ..db import get_db
 from ..models import Asset, Feedback, Site, SiteVersion, User, utcnow
@@ -77,7 +78,7 @@ def _pct(a: int, b: int):
 
 
 @router.get("/api/admin/metrics")
-def metrics(days: int = 30, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+def metrics(days: int = 30, user: User = Depends(staff.require("quality.view")), db: Session = Depends(get_db)):
     days = max(1, min(days, 365))
     since = utcnow() - timedelta(days=days)
 

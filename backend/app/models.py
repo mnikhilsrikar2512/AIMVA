@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -568,3 +568,72 @@ class Approval(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # what was approved; edits after it need a new approval
+
+
+class StaffMember(Base):
+    """Someone on the AIMVA team who isn't a platform owner (owners are ADMIN_EMAILS, set on the server).
+    Keyed by email so a teammate can be added before they sign up; the role counts once that email is verified."""
+    __tablename__ = "staff_members"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    role: Mapped[str] = mapped_column(String(20), default="support")  # manager | developer | support | accountant (owners live in ADMIN_EMAILS)
+    added_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class StaffAction(Base):
+    """What the AIMVA team did, and why: plan changes, credits, unlocks, team changes, customer views.
+    Append-only. Not part of a customer's data export (no user_id column) and kept when a customer deletes their
+    account: target_label remembers who it was."""
+    __tablename__ = "staff_actions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    actor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_email: Mapped[str] = mapped_column(String(255))
+    actor_role: Mapped[str] = mapped_column(String(20))
+    action: Mapped[str] = mapped_column(String(40), index=True)
+    target_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # a customer's users.id, no FK on purpose
+    target_label: Mapped[str] = mapped_column(String(255), default="")
+    reason: Mapped[str] = mapped_column(String(500), default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class StaffTask(Base):
+    """Work an owner or manager hands to people on the AIMVA team, optionally about one customer.
+    Any number of people can work on it at once (staff_task_people). `version` goes up on every change, so two
+    people saving at the same moment get a "someone changed this" answer instead of overwriting each other."""
+    __tablename__ = "staff_tasks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    note: Mapped[str] = mapped_column(Text, default="")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by_email: Mapped[str] = mapped_column(String(255))
+    customer_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # users.id, no FK (like staff_actions)
+    customer_label: Mapped[str] = mapped_column(String(255), default="")
+    priority: Mapped[str] = mapped_column(String(10), default="normal")  # normal | high
+    status: Mapped[str] = mapped_column(String(12), default="open", index=True)  # open | doing | done | cancelled
+    due_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    done_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class StaffTaskPerson(Base):
+    """One person working on a task. Keyed by email (like StaffMember) so owners from ADMIN_EMAILS can be on tasks."""
+    __tablename__ = "staff_task_people"
+    __table_args__ = (UniqueConstraint("task_id", "email"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("staff_tasks.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class StaffTaskUpdate(Base):
+    """A progress note on a task. Append-only, so several people can post at once without clashing."""
+    __tablename__ = "staff_task_updates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("staff_tasks.id", ondelete="CASCADE"), index=True)
+    author_email: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

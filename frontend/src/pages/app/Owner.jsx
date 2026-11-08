@@ -5,6 +5,7 @@ import { Button, Card, Chip, Empty, PageHeader, Spinner, Stat, StatStrip, Tabs, 
 import { post } from "../../lib/api";
 import { timeAgo, useApi } from "../../lib/hooks";
 import { summary } from "../../components/Templates";
+import { useAuth } from "../../lib/auth";
 
 const MODULE = { image: "Images", video: "Videos", website: "Websites", ads: "Ads", voice: "Voice", whatsapp: "WhatsApp" };
 
@@ -97,6 +98,7 @@ function Bar({ label, value, max, tone = "bg-brand" }) {
 
 /** Platform owner view: are people getting work they can use first time, and where does it go wrong? */
 export default function Owner() {
+  const { user } = useAuth();
   const [days, setDays] = useState("30");
   const { data: m, loading, error } = useApi(`/api/admin/metrics?days=${days}`);
 
@@ -171,7 +173,7 @@ export default function Owner() {
               )}
             </Card>
           </div>
-          <TemplateReview />
+          {user?.is_admin && <TemplateReview />}  {/* publishing templates to everyone stays with owners */}
           <p className="flex items-center gap-2 text-xs text-faint"><ThumbsUp className="size-3.5" /> First-time-right counts published pages with no HTML edit, regenerate or restore. Raise it by improving playbooks for the reasons above.</p>
         </div>
       )}

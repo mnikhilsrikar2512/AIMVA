@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from . import staff
 from .db import get_db
 from .models import CreditGrant, Subscription, UsageEvent, User, utcnow
 from .routers.feedback import require_admin
@@ -252,31 +253,44 @@ class GrantIn(BaseModel):
     note: str = Field("", max_length=300)
 
 
-@router.post("/api/admin/billing/{user_id}/plan")
-def admin_set_plan(user_id: int, body: AdminPlanIn, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    """Put a customer on a plan you invoice yourself (no card needed)."""
-    if body.plan not in PLANS or body.plan in ("expired",):
+def set_plan(db: Session, admin: User, user_id: int, plan: str, note: str = "") -> dict:
+    """Put a customer on a plan you invoice yourself (no card needed). Logged in the staff log."""
+    if plan not in PLANS or plan in ("expired",):
         raise HTTPException(400, "Unknown plan.")
-    if not db.get(User, user_id):
+    target = db.get(User, user_id)
+    if not target:
         raise HTTPException(404, "User not found.")
     s = subscription(db, user_id)
+    before = s.plan
     now = utcnow()
-    if body.plan == "trial":
+    if plan == "trial":
         s.plan, s.status, s.period_start, s.period_end = "trial", "trialing", now, now + timedelta(days=TRIAL_DAYS)
     else:
-        s.plan, s.status, s.processor, s.period_start, s.period_end = body.plan, "active", "manual", now, now + PERIOD
-    s.note = body.note or f"Set by {admin.email}"
+        s.plan, s.status, s.processor, s.period_start, s.period_end = plan, "active", "manual", now, now + PERIOD
+    s.note = note or f"Set by {admin.email}"
+    staff.record(db, admin, "plan.change", target, note, {"from": before, "to": plan})
     db.commit()
-    return billing_out(db, db.get(User, user_id))
+    return billing_out(db, target)
+
+
+def grant_credits(db: Session, admin: User, user_id: int, meter: str, quantity: int, days: int, note: str = "") -> dict:
+    if meter not in METERS or meter == "sites":
+        raise HTTPException(400, "Unknown meter.")
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(404, "User not found.")
+    db.add(CreditGrant(user_id=user_id, meter=meter, quantity=quantity,
+                       expires_at=utcnow() + timedelta(days=days), note=note or f"Granted by {admin.email}"))
+    staff.record(db, admin, "credits.grant", target, note, {"meter": meter, "quantity": quantity, "days": days})
+    db.commit()
+    return billing_out(db, target)
+
+
+@router.post("/api/admin/billing/{user_id}/plan")
+def admin_set_plan(user_id: int, body: AdminPlanIn, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return set_plan(db, admin, user_id, body.plan, body.note)
 
 
 @router.post("/api/admin/billing/{user_id}/credits")
 def admin_grant(user_id: int, body: GrantIn, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    if body.meter not in METERS or body.meter == "sites":
-        raise HTTPException(400, "Unknown meter.")
-    if not db.get(User, user_id):
-        raise HTTPException(404, "User not found.")
-    db.add(CreditGrant(user_id=user_id, meter=body.meter, quantity=body.quantity,
-                       expires_at=utcnow() + timedelta(days=body.days), note=body.note or f"Granted by {admin.email}"))
-    db.commit()
-    return billing_out(db, db.get(User, user_id))
+    return grant_credits(db, admin, user_id, body.meter, body.quantity, body.days, body.note)

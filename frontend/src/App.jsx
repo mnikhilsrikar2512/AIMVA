@@ -26,7 +26,6 @@ const Leads = lazy(() => import("./pages/app/Leads"));
 const Analytics = lazy(() => import("./pages/app/Analytics"));
 const Settings = lazy(() => import("./pages/app/Settings"));
 const Brand = lazy(() => import("./pages/app/Brand"));
-const Owner = lazy(() => import("./pages/app/Owner"));
 const Command = lazy(() => import("./pages/app/Command"));
 const Welcome = lazy(() => import("./pages/Welcome"));
 
@@ -58,7 +57,6 @@ function Away({ text }) {
 
 function Allowed({ path, children }) {
   const { user } = useAuth();
-  if (path === "owner" && !user?.is_admin) return <Away text="That page is only for the AIMVA team." />;
   if (user?.workspace?.role === "client" && !CLIENT_PAGES.has(path.split("/")[0])) return <Away text="Your agency looks after that part for you." />;
   return children;
 }
@@ -90,7 +88,7 @@ export default function App() {
         {[
           ["brand", Brand], ["images", ImageGen], ["videos", VideoGen], ["websites", Websites], ["hosting", Hosting],
           ["ads/:platform", Ads], ["voice", VoiceAgent], ["whatsapp", WhatsApp], ["leads", Leads],
-          ["analytics", Analytics], ["settings", Settings], ["owner", Owner], ["command", Command],
+          ["analytics", Analytics], ["settings", Settings], ["command", Command],
         ].map(([path, C]) => <Route key={path} path={path} element={<Allowed path={path}>{page(<C />)}</Allowed>} />)}
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Route>
