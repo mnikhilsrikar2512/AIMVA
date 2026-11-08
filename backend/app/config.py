@@ -42,6 +42,10 @@ class Settings:
     # development (default) or production. Production refuses to start with unsafe settings (see problems()).
     environment = _env("ENVIRONMENT", "development").lower()
     secret_key = _secret_key()
+    # Keys that encrypt stored third-party tokens (OAuth, WhatsApp, user AI keys), separate from SECRET_KEY.
+    # Comma-separated Fernet keys: the first encrypts, the rest only decrypt (for rotation). Empty = derive one from
+    # SECRET_KEY (the old behaviour, fine on a laptop). See docs/DEPLOY.md "Rotating keys".
+    token_encryption_keys = [k.strip() for k in _env("TOKEN_ENCRYPTION_KEYS").split(",") if k.strip()]
     database_url = _database_url()
     db_pool_size = int(_env("DB_POOL_SIZE", "10"))
     db_max_overflow = int(_env("DB_MAX_OVERFLOW", "10"))
@@ -78,7 +82,8 @@ class Settings:
     pollinations_token = _env("POLLINATIONS_TOKEN")
     # AIMVA free AI: keyless text generation (Pollinations, open source) used when no key is set up. Shared by the
     # whole server (about 1 reply / 30 s without POLLINATIONS_TOKEN), so agents also remember answers and fall back to rules.
-    free_ai = _env("FREE_AI", "true").lower() == "true"
+    # Off by default in production; a production server refuses to start with it on (see problems()).
+    free_ai = _env("FREE_AI", "false" if environment == "production" else "true").lower() == "true"
     # Work agents (app/agents): the background scheduler for follow-ups, Autopilot and weekly reports
     agents_scheduler = _env("AGENTS_SCHEDULER", "true").lower() == "true"
     tz_offset_minutes = int(_env("TZ_OFFSET_MINUTES", "330") or 0)  # business time zone for "9 am" / "Monday" (default IST)
@@ -131,6 +136,12 @@ class Settings:
             out.append("WHATSAPP_VERIFY_TOKEN is the public default: set your own random value")
         if not self.smtp_configured:
             out.append("SMTP_USER / SMTP_PASSWORD are empty: verification codes would only be printed in the log")
+        if self.free_ai:
+            out.append("FREE_AI must be false: the free fallback is shared by the whole server, rate-limited and "
+                       "sends customer prompts to a public service")
+        if not self.token_encryption_keys:
+            out.append("TOKEN_ENCRYPTION_KEYS is empty: stored tokens would be encrypted with a key derived from SECRET_KEY "
+                       "(generate one: python scripts/db.py tokens new-key)")
         return out
 
 

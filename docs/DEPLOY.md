@@ -42,6 +42,33 @@ and live updates reach every worker through Postgres `LISTEN/NOTIFY`.
 - Restore (replaces all data, asks you to type RESTORE): `./restore.sh backups/aimva-<stamp>.dump backups/uploads-<stamp>.tgz`
 - Test a restore once a month on a spare server.
 
+## Keys and rotating them
+
+Two secrets, with different jobs. Keep an offline copy of both (a password manager is fine).
+
+| Setting | Protects | If you change or lose it |
+| --- | --- | --- |
+| `SECRET_KEY` | Sign-in sessions, email codes, OAuth sign-in links | Everyone is signed out once. Nothing else is lost. |
+| `TOKEN_ENCRYPTION_KEYS` | Stored tokens: Meta, Google, LinkedIn, WhatsApp, users' own AI keys | Rotate as below and nothing is lost. **Lose it** and every connected account must reconnect. |
+
+Production won't start without `TOKEN_ENCRYPTION_KEYS`. It's a comma-separated list: the first key encrypts, the
+others only decrypt, so you can rotate without anyone being cut off.
+
+```sh
+docker compose exec app python scripts/db.py tokens new-key   # prints a new key
+# in deploy/.env: TOKEN_ENCRYPTION_KEYS=<new key>,<old key>   (first deploy: just <new key>)
+docker compose up -d app                                      # restart with the new list
+docker compose exec app python scripts/db.py tokens rotate    # re-encrypt every stored token with the new key
+docker compose exec app python scripts/db.py tokens check     # 0 on an older key = done
+# then remove the old key from the list and restart again
+```
+
+Servers set up before this key existed encrypted tokens with a key derived from `SECRET_KEY`. Those still open, so
+the first deploy with `TOKEN_ENCRYPTION_KEYS` breaks nothing; run `tokens rotate` once, and from then on `SECRET_KEY`
+can change without touching connected accounts. A database backup holds encrypted tokens only: restoring one needs
+the keys that were in use when it was taken, so keep old keys until backups older than the rotation have expired
+(`BACKUP_KEEP_DAYS`).
+
 ## Upgrades
 
 ```sh
