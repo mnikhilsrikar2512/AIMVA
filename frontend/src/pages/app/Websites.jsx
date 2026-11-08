@@ -3,14 +3,16 @@ import { motion } from "framer-motion";
 import { rise, stagger } from "../../components/Motion";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Code2, ExternalLink, FileText, Globe, History, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Code2, ExternalLink, Eye, FileText, Globe, History, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
+import { LoadError } from "../../components/LoadError";
 import { del, get, patch, post } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
 import { useAuth, useIsClient } from "../../lib/auth";
 import { useOnboarding } from "../../components/AppLayout";
 import { LibraryImagePicker } from "../../components/GenControls";
 import PublishDialog from "../../components/PublishDialog";
+import { ApprovalGate } from "../../components/Approval";
 import { ACCEPT_IMAGES, DocumentPicker, ReferenceDropzone, UploadTile } from "../../components/References";
 import { BriefCoach, ImportBar, Rate, ReadinessPanel, useBriefReview } from "../../components/Quality";
 import { DECORS, DirectionsButton, LayoutPicker } from "../../components/Designs";
@@ -607,7 +609,9 @@ function Editor({ site, onClose, onChange, feedback }) {
           </div>
         )}
       </div>
-      <Button size="sm" onClick={() => setPublishing(true)}><Rocket className="size-4" /> {site.published ? "Republish" : "Publish"}</Button>
+      <ApprovalGate kind="site" refId={site.id} beforeSend={flush}>
+        <Button size="sm" onClick={() => setPublishing(true)}><Rocket className="size-4" /> {site.published ? "Republish" : "Publish"}</Button>
+      </ApprovalGate>
     </>
   );
 
@@ -680,7 +684,9 @@ function Thumb({ s }) {
   );
 }
 
-function SiteCard({ s, onOpen, onDelete }) {
+function SiteCard({ s, onOpen, onDelete, viewOnly }) {
+  // A client's view: open the page to look at it (a draft opens as a preview), nothing to edit or delete.
+  if (viewOnly) onOpen = () => window.open(`/api/sites/${s.id}/preview`, "_blank", "noopener");
   return (
     <motion.div variants={rise} whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 300, damping: 24 }} className="card flex flex-col overflow-hidden hover:shadow-[var(--shadow-lift)]">
       <button className="relative block h-44 overflow-hidden bg-white text-left" onClick={onOpen} aria-label={`Open ${s.name}`}>
@@ -693,9 +699,10 @@ function SiteCard({ s, onOpen, onDelete }) {
         </div>
         <p className="mt-1 text-xs text-faint">Updated {timeAgo(s.updated_at)} · {s.visits} visits</p>
         <div className="mt-auto flex gap-2 pt-4">
-          <Button variant="ghost" size="sm" onClick={onOpen}><Code2 className="size-3.5" /> Edit</Button>
+          {viewOnly ? <Button variant="ghost" size="sm" onClick={onOpen}><Eye className="size-3.5" /> Preview</Button>
+            : <Button variant="ghost" size="sm" onClick={onOpen}><Code2 className="size-3.5" /> Edit</Button>}
           {s.published && <a className="btn-ghost btn-sm" href={s.deploy_url || s.url} target="_blank" rel="noreferrer"><ExternalLink className="size-3.5" /> Live</a>}
-          <Button variant="danger" size="sm" className="ml-auto" aria-label={`Delete ${s.name}`} onClick={onDelete}><Trash2 className="size-3.5" /></Button>
+          {!viewOnly && <Button variant="danger" size="sm" className="ml-auto" aria-label={`Delete ${s.name}`} onClick={onDelete}><Trash2 className="size-3.5" /></Button>}
         </div>
       </div>
     </motion.div>
@@ -703,9 +710,10 @@ function SiteCard({ s, onOpen, onDelete }) {
 }
 
 export default function Websites() {
-  const { data: sites, reload, loading } = useApi("/api/sites", []);
+  const { data: sites, reload, loading, error: sitesError } = useApi("/api/sites", []);
   const { data: feedback } = useApi("/api/feedback?kind=site", {});
-  const [tab, setTab] = useState("create");
+  const isClient = useIsClient();  // view-only: the client sees their pages, never the builder
+  const [tab, setTab] = useState(isClient ? "history" : "create");
   const [current, setCurrent] = useState(null);  // the page being worked on in Create
   const [formKey, setFormKey] = useState(0);
   const [q, setQ] = useState("");
@@ -726,13 +734,13 @@ export default function Websites() {
 
   return (
     <div>
-      <PageHeader icon={Globe} tone="pink" title="Pages" subtitle="Landing pages with a lead form built in."
-        actions={<Button onClick={startNew}><Plus className="size-4" /> New page</Button>} />
-      <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${sites.length ? ` (${sites.length})` : ""}` }]} /></div>
+      <PageHeader icon={Globe} tone="pink" title="Pages" subtitle={isClient ? "The landing pages your agency made for you." : "Landing pages with a lead form built in."}
+        actions={!isClient && <Button onClick={startNew}><Plus className="size-4" /> New page</Button>} />
+      {!isClient && <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${sites.length ? ` (${sites.length})` : ""}` }]} /></div>}
 
-      {current && <Editor key={current.id} site={current} feedback={feedback} onChange={(s) => { setCurrent(s); reload(); }}
+      {current && !isClient && <Editor key={current.id} site={current} feedback={feedback} onChange={(s) => { setCurrent(s); reload(); }}
         onClose={() => { setCurrent(null); setTab("history"); }} />}
-      {tab === "create" && (
+      {tab === "create" && !isClient && (
         <Card className="mx-auto max-w-4xl">
           <h2 className="mb-1 text-lg font-bold text-strong">New landing page</h2>
           <p className="mb-5 text-sm text-muted">Fill in what you know. Your earlier pages stay safe in History.</p>
@@ -746,15 +754,18 @@ export default function Websites() {
       )}
 
       {tab === "history" && (
-        loading ? <ListSkeleton /> : sites.length === 0 ? (
-          <Empty icon={Globe} title="Your pages will live here" text="A landing page with a lead form is the fastest way to your first lead. It takes about a minute."
+        loading ? <ListSkeleton /> : sitesError && sites.length === 0 ? (
+          <LoadError error={sitesError} what="your pages" onRetry={reload} />
+        ) : sites.length === 0 ? (
+          isClient ? <Empty icon={Globe} title="No pages yet" text="Pages your agency makes for you show up here." />
+          : <Empty icon={Globe} title="Your pages will live here" text="A landing page with a lead form is the fastest way to your first lead. It takes about a minute."
             action={<Button onClick={startNew}><Plus className="size-4" /> Make your first page</Button>} />
         ) : (
           <>
             <input className="input mb-4 max-w-sm" placeholder="Search pages" value={q} onChange={(e) => setQ(e.target.value)} />
             <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((s) => (
-                <SiteCard key={s.id} s={s} onOpen={() => open(s.id)} onDelete={() => {
+                <SiteCard key={s.id} s={s} viewOnly={isClient} onOpen={() => open(s.id)} onDelete={() => {
                   if (confirm(`Delete "${s.name}" and all its versions? This removes the live page too.`)) run(async () => {
                     await del(`/api/sites/${s.id}`);
                     if (current?.id === s.id) setCurrent(null);

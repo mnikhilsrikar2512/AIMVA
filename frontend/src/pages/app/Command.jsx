@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, Tabs, cx, IconButton } from "../../components/ui";
+import { LoadError } from "../../components/LoadError";
 import { AgentSwitch } from "../../components/Agents";
 import { DownloadMenu } from "../../components/DownloadMenu";
 import { useAuth } from "../../lib/auth";
@@ -542,7 +543,7 @@ export default function Command() {
   const { user } = useAuth();
   const business = user?.workspace?.name || user?.company || user?.name || "";
   const [days, setDays] = useState("30");
-  const { data, loading, reload } = useApi(`/api/command/overview?days=${days}`);
+  const { data, loading, reload, error } = useApi(`/api/command/overview?days=${days}`);
   const [productModal, setProductModal] = useState({ open: false, product: null });
   const [results, setResults] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -586,7 +587,8 @@ export default function Command() {
           text="Checks every campaign each morning. Suggest puts fixes in For you (the bell); Fix safely pauses money-wasters and trims overspend itself, never raising budgets." />
       </div>
 
-      {loading || !data ? <div className="grid h-60 place-items-center"><Spinner className="size-6" /></div> : empty ? (
+      {!data && error ? <LoadError error={error} what="your results" onRetry={reload} />
+        : loading || !data ? <div className="grid h-60 place-items-center"><Spinner className="size-6" /></div> : empty ? (
         <Empty icon={Package} title="Start with what you sell"
           text="Add a product, service or offer. Then link its campaigns and landing page, and AIMVA shows how each one performs and what to do next."
           action={<Button onClick={() => setProductModal({ open: true, product: null })}><Plus className="size-4" /> Add your first product</Button>} />

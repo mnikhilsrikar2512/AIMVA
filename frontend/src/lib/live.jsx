@@ -82,6 +82,18 @@ export function LiveProvider({ children }) {
         toast(`${name} messaged on WhatsApp`, { action: { label: "Open", onClick: open } });
       }
     });
+    // Client sign-off: refresh Publish buttons and the client's bell, and say what happened.
+    es.addEventListener("approval", (e) => {
+      const d = JSON.parse(e.data);
+      window.dispatchEvent(new CustomEvent("aimva:approval", { detail: d }));
+      const a = d.approval || {};
+      if (d.type === "requested" && viewOnly.current) {
+        toast(`Waiting for your OK: ${a.title}`, { action: { label: "Review", onClick: () => window.dispatchEvent(new Event("aimva:foryou")) }, duration: 10000 });
+      } else if (d.type === "decided" && !viewOnly.current) {
+        if (a.status === "approved") toast.success(`Your client approved ${a.title}. You can publish it now.`, { duration: 10000 });
+        else if (a.status === "changes") toast(`Your client asked for changes on ${a.title}`, { description: a.comment, duration: 12000 });
+      }
+    });
     es.addEventListener("agent", (e) => {
       const d = JSON.parse(e.data);
       window.dispatchEvent(new CustomEvent("aimva:agent", { detail: d }));

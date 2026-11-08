@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
+from ..lead_reply import wa_number, window_open
 from ..models import Integration, User, WaMessage, WaScheduled, utcnow
 from ..security import current_user, decrypt_json
 from ..services import get_integration
@@ -55,16 +56,19 @@ class SendIn(BaseModel):
 
 
 def send_whatsapp(db: Session, user_id: int, to: str, text: str, name: str = "", template: str = "",
-                  template_lang: str = "en") -> WaMessage:
+                  template_lang: str = "en", params: Optional[list] = None) -> WaMessage:
     """Send (or, without a connected number, simulate) a WhatsApp text, or an approved template when `template` is set.
-    Raises HTTPException(502) if WhatsApp refuses it."""
-    to = "".join(ch for ch in to if ch.isdigit())
+    `params` fill the template's body variables ({{1}}, {{2}}...). Raises HTTPException(502) if WhatsApp refuses it."""
+    to = wa_number(to)
     integ = get_integration(db, user_id, "whatsapp")
-    m = WaMessage(user_id=user_id, contact=to, contact_name=name, direction="out", body=text or f"[template: {template}]")
+    m = WaMessage(user_id=user_id, contact=to, contact_name=name, direction="out",
+                  body=f"[template: {template}]" if template else text)
     if integ:
         token = decrypt_json(integ.secret).get("access_token")
-        payload = ({"type": "template", "template": {"name": template, "language": {"code": template_lang}}} if template
-                   else {"type": "text", "text": {"body": text}})
+        tpl = {"name": template, "language": {"code": template_lang}}
+        if params:
+            tpl["components"] = [{"type": "body", "parameters": [{"type": "text", "text": str(p)[:200]} for p in params]}]
+        payload = {"type": "template", "template": tpl} if template else {"type": "text", "text": {"body": text}}
         r = httpx.post(f"{GRAPH}/{integ.meta.get('phone_number_id')}/messages",
                        headers={"Authorization": f"Bearer {token}"}, timeout=30,
                        json={"messaging_product": "whatsapp", "to": to, **payload})
@@ -81,8 +85,15 @@ def send_whatsapp(db: Session, user_id: int, to: str, text: str, name: str = "",
     return m
 
 
+CLOSED_WINDOW = ("This customer hasn't messaged you in the last 24 hours, so WhatsApp only delivers an approved template. "
+                 "Send your approved template from the lead, or call them.")
+
+
 @router.post("/api/whatsapp/send")
 def send(body: SendIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    # Free text outside the 24-hour window is refused by WhatsApp anyway; say why before trying.
+    if get_integration(db, user.id, "whatsapp") and not window_open(db, user.id, body.to):
+        raise HTTPException(409, CLOSED_WINDOW)
     return msg_out(send_whatsapp(db, user.id, body.to, body.body, body.name))
 
 
@@ -134,7 +145,7 @@ def schedule(body: ScheduleIn, user: User = Depends(current_user), db: Session =
         raise HTTPException(400, "Pick a time at least a minute from now.")
     if send_at > now + MAX_AHEAD:
         raise HTTPException(400, "You can schedule up to 90 days ahead.")
-    contact = "".join(ch for ch in body.to if ch.isdigit())
+    contact = wa_number(body.to)
     if db.scalar(select(func.count()).select_from(WaScheduled).where(WaScheduled.user_id == user.id,
                                                                       WaScheduled.status == "scheduled")) >= 500:
         raise HTTPException(400, "You have 500 messages waiting already. Cancel some first.")
@@ -206,14 +217,26 @@ class SimIn(BaseModel):
     name: str = ""
 
 
+def can_simulate(user: User) -> bool:
+    """The fake-inbound tool is for development and the platform owner only. It creates a real lead row, so customers
+    on a live server must never see it (their Results, reports and Google Sheet would fill with test data)."""
+    return not settings.is_production or (user.email or "").lower() in settings.admin_emails
+
+
 @router.post("/api/whatsapp/simulate-inbound")
-def simulate_inbound(body: SimIn, bg: BackgroundTasks, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def simulate_inbound(body: SimIn, bg: BackgroundTasks, request: Request, user: User = Depends(current_user),
+                     db: Session = Depends(get_db)):
     """Test the inbox without a real number: pretend a customer messaged you."""
+    if not can_simulate(getattr(request.state, "person", None) or user):
+        raise HTTPException(404, "Not found")
     contact = "".join(ch for ch in body.from_ if ch.isdigit())
     m = WaMessage(user_id=user.id, contact=contact, contact_name=body.name, direction="in", body=body.body, status="received")
     db.add(m)
     db.commit()
-    create_lead(db, user.id, bg, name=body.name, phone="+" + contact, message=body.body, source="whatsapp")
+    # On a live server (platform owner testing) skip the background jobs: no Sheets sync, and no Concierge welcome
+    # sent from a real business number to whatever phone number was typed in.
+    create_lead(db, user.id, None if settings.is_production else bg,
+                name=body.name, phone="+" + contact, message=body.body, source="whatsapp")
     return msg_out(m)
 
 

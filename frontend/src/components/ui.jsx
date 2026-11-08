@@ -163,22 +163,8 @@ export const TONES = {
   rose: { tile: "bg-rose-50 text-rose-600", chip: "border-transparent bg-rose-50 text-rose-700", dot: "bg-rose-500", text: "text-rose-600" },
 };
 
-export function IconTile({ icon: Icon, tone = "violet", size = "md" }) {
-  const s = size === "lg" ? "size-12 rounded-2xl" : size === "sm" ? "size-8 rounded-xl" : "size-11 rounded-2xl";
-  const i = size === "lg" ? "size-6" : size === "sm" ? "size-4" : "size-5";
-  return (
-    <div className={cx("grid shrink-0 place-items-center", s, TONES[tone].tile)}>
-      <Icon className={i} strokeWidth={2} />
-    </div>
-  );
-}
-
 export function Chip({ tone = "slate", children, className }) {
   return <span className={cx("chip", TONES[tone].chip, className)}>{children}</span>;
-}
-
-export function StatusDot({ tone = "green" }) {
-  return <span className={cx("inline-block size-2 rounded-full", TONES[tone].dot)} />;
 }
 
 /**

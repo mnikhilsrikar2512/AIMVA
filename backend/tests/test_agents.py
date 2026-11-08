@@ -96,15 +96,42 @@ def test_new_lead_gets_a_drafted_welcome_and_follow_ups(auth_client, client):
     assert feed[0]["title"] == "Drafted a welcome for Ravi Kumar"
 
 
-def test_connected_whatsapp_sends_the_welcome(auth_client, client, db, mock_http):
+def test_connected_whatsapp_sends_the_approved_template_to_a_form_lead(auth_client, client, db, mock_http):
+    # A form lead has never messaged the business, so WhatsApp only accepts an approved template as the first message.
+    profile(auth_client)
+    connect(db, "owner@example.com", "whatsapp", {"access_token": "t"},
+            {"phone_number_id": "123", "first_message_template": "lead_welcome", "template_languages": ["en", "hi"]})
+    route = mock_http.post("https://graph.facebook.com/v21.0/123/messages").respond(json={"messages": [{"id": "wamid.1"}]})
+    s = publish(auth_client)
+    lead_form(client, s["slug"])
+    body = json.loads(route.calls.last.request.content)
+    assert body["to"] == "919812345678" and body["type"] == "template"
+    assert body["template"]["name"] == "lead_welcome" and body["template"]["language"]["code"] == "en"
+    assert body["template"]["components"][0]["parameters"] == [{"type": "text", "text": "Ravi"}]
+    assert auth_client.get("/api/agents/jobs?kind=concierge").json()[0]["title"] == "Welcomed Ravi Kumar on WhatsApp"
+
+
+def test_connected_whatsapp_without_a_template_drafts_instead_of_failing(auth_client, client, db, mock_http):
     profile(auth_client)
     connect(db, "owner@example.com", "whatsapp", {"access_token": "t"}, {"phone_number_id": "123"})
     route = mock_http.post("https://graph.facebook.com/v21.0/123/messages").respond(json={"messages": [{"id": "wamid.1"}]})
     s = publish(auth_client)
     lead_form(client, s["slug"])
-    body = json.loads(route.calls.last.request.content)
-    assert body["to"] == "919812345678" and body["text"]["body"].startswith("Hi Ravi")
-    assert auth_client.get("/api/agents/jobs?kind=concierge").json()[0]["title"] == "Welcomed Ravi Kumar on WhatsApp"
+    assert not route.called
+    lead = auth_client.get("/api/leads").json()[0]
+    note = next(t for t in auth_client.get(f"/api/leads/{lead['id']}").json()["timeline"] if t["title"] == "Welcome message ready to send")
+    assert "approved template" in note["body"]
+    assert auth_client.get("/api/agents/jobs?kind=concierge").json()[0]["title"] == "Drafted a welcome for Ravi Kumar"
+
+
+def test_welcome_is_in_the_language_the_lead_wrote_in(auth_client, client):
+    profile(auth_client)
+    s = publish(auth_client)
+    lead_form(client, s["slug"], message="मुझे 2BHK फ्लैट की कीमत जाननी है")
+    lead = auth_client.get("/api/leads").json()[0]
+    assert lead["language"] == "hi-IN" and lead["language_name"] == "Hindi"
+    welcome = next(t for t in auth_client.get(f"/api/leads/{lead['id']}").json()["timeline"] if t["title"] == "Welcome message ready to send")
+    assert welcome["body"].startswith("नमस्ते Ravi") and "Skyline Homes" in welcome["body"]
 
 
 def test_follow_ups_stop_when_the_lead_replies_or_closes(auth_client, client, db):

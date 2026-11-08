@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Check, ImagePlus, Palette, Plus, Sparkles, Star, Trash2, UploadCloud, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Field, PageHeader, Spinner, cx } from "../../components/ui";
+import { LoadError } from "../../components/LoadError";
 import { api, del, post, put } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 
@@ -87,7 +88,7 @@ function Preview({ kit }) {
 }
 
 export default function Brand() {
-  const { data: loaded, loading } = useApi("/api/brand");
+  const { data: loaded, loading, error, reload } = useApi("/api/brand");
   const [kit, setKit] = useState(null);
   const [saved, setSaved] = useState(null);
   const [suggested, setSuggested] = useState([]);
@@ -96,6 +97,7 @@ export default function Brand() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { if (loaded) { setKit(loaded); setSaved(loaded); } }, [loaded]);
+  if (!kit && error) return <LoadError error={error} what="your Brand Kit" onRetry={reload} />;
   if (loading || !kit) return <div className="grid h-60 place-items-center"><Spinner className="size-6" /></div>;
 
   const dirty = FIELDS.some((f) => JSON.stringify(kit[f]) !== JSON.stringify(saved[f]));

@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Clapperboard, KeyRound, Plus, Trash2, Video, Volume2, VolumeX, Wand2 } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, Notice, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
+import { LoadError } from "../../components/LoadError";
 import { del, get, post } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
 import BrandControls from "../../components/BrandControls";
@@ -84,7 +85,7 @@ const GENERIC_DURATIONS = ["4s", "5s", "6s", "8s", "10s"];
 export default function VideoGen() {
   const { data: models } = useApi("/api/content/models");
   const { data: options } = useApi("/api/providers/options?kind=video", []);
-  const { data: assets, setData: setAssets, loading } = useApi("/api/content/assets?kind=video", []);
+  const { data: assets, setData: setAssets, loading, error: assetsError, reload: reloadAssets } = useApi("/api/content/assets?kind=video", []);
   const EMPTY = { prompt: "", aspect_ratio: "16:9", duration: "", resolution: "", negative_prompt: "", seed: null,
                   camera: "", style: "", start: "", generate_audio: false };
   const [form, setForm] = useState(EMPTY);
@@ -159,7 +160,9 @@ export default function VideoGen() {
         </Notice>
       )}
       {tab === "history" ? (
-        loading ? <ListSkeleton /> : assets.length === 0 ? (
+        loading ? <ListSkeleton /> : assetsError && assets.length === 0 ? (
+          <LoadError error={assetsError} what="your videos" onRetry={reloadAssets} />
+        ) : assets.length === 0 ? (
           <Empty icon={Video} preview="tiles" title="Your videos will live here" text="Every video you make is saved here, with its sound." action={<Button onClick={() => setTab("create")}><Plus className="size-4" /> Make your first video</Button>} />
         ) : (
           <>

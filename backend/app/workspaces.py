@@ -294,6 +294,37 @@ def keep_approved(db: Session, ws: User, kind: str, ref_id: int) -> None:
         a.content_hash = fingerprint(kind, obj)
 
 
+def approval_state(db: Session, ws: User, kind: str, ref_id: int) -> dict:
+    """Where one page or campaign stands with the client, for the Publish / Launch button.
+    state: none (never sent), pending, changes (client asked for changes), approved, edited (approved, then changed)."""
+    if not ws.require_approval:
+        return {"required": False, "state": "approved", "approval": None}
+    a = _latest(db, ws, kind, ref_id)
+    if not a or a.status == "withdrawn":
+        return {"required": True, "state": "none", "approval": None}
+    state = a.status
+    obj = db.get(KINDS[kind], ref_id)
+    if a.status == "approved" and obj and a.content_hash and a.content_hash != fingerprint(kind, obj):
+        state = "edited"
+    return {"required": True, "state": state, "approval": approval_out(a)}
+
+
+def approval_preview(db: Session, ws: User, a: Approval) -> dict:
+    """What the client looks at before deciding. Sites open as a draft preview; campaigns show the ad itself,
+    because a client can't open the Campaigns pages."""
+    obj = db.get(KINDS[a.kind], a.ref_id) if a.kind in KINDS else None
+    if not obj or obj.user_id != ws.id:
+        return {}
+    if a.kind == "site":
+        return {"preview_url": f"/api/sites/{obj.id}/preview", "live_url": obj.deploy_url or None}
+    if a.kind == "campaign":
+        cr = obj.creative or {}
+        return {"platform": obj.platform, "objective": obj.objective, "daily_budget": obj.daily_budget,
+                "headline": cr.get("headline", ""), "text": cr.get("text", ""), "image_url": cr.get("image_url", ""),
+                "cta": cr.get("cta", ""), "locations": (obj.targeting or {}).get("locations", [])}
+    return {"image_url": obj.url}
+
+
 class ApprovalIn(BaseModel):
     kind: Literal["campaign", "site", "asset"]
     ref_id: int
@@ -324,11 +355,22 @@ def request_approval(body: ApprovalIn, request: Request, bg: BackgroundTasks, ws
 
 
 @router.get("/api/approvals")
-def list_approvals(status: str = "", ws: User = Depends(current_user), db: Session = Depends(get_db)):
+def list_approvals(status: str = "", preview: bool = False, ws: User = Depends(current_user), db: Session = Depends(get_db)):
     q = select(Approval).where(Approval.workspace_id == ws.id)
     if status:
         q = q.where(Approval.status == status)
-    return [approval_out(a) for a in db.scalars(q.order_by(Approval.id.desc()).limit(200))]
+    rows = db.scalars(q.order_by(Approval.id.desc()).limit(200)).all()
+    if not preview:
+        return [approval_out(a) for a in rows]
+    people = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_({a.requested_by for a in rows if a.requested_by})))}
+    return [{**approval_out(a), "requested_by": people.get(a.requested_by, ""), "preview": approval_preview(db, ws, a)} for a in rows]
+
+
+@router.get("/api/approvals/status")
+def approval_status(kind: Literal["campaign", "site", "asset"], ref_id: int, ws: User = Depends(current_user),
+                    db: Session = Depends(get_db)):
+    _object(db, ws, kind, ref_id)
+    return approval_state(db, ws, kind, ref_id)
 
 
 class DecideIn(BaseModel):

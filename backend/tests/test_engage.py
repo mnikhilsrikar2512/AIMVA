@@ -118,18 +118,36 @@ def test_simulated_inbound_creates_lead(auth_client):
     assert lead["source"] == "whatsapp" and lead["phone"] == "+919876543210"
 
 
-def test_real_send_via_cloud_api(auth_client, mock_http):
+def customer_wrote(db, contact="919876543210", body="Hello?"):
+    """The customer messaged within the last day, so WhatsApp's 24-hour window is open for free text."""
+    from sqlalchemy import select as _select
+    from app.models import User, WaMessage
+    uid = db.scalar(_select(User.id).where(User.email == "owner@example.com"))
+    db.add(WaMessage(user_id=uid, contact=contact, direction="in", body=body, status="received"))
+    db.commit()
+
+
+def test_real_send_via_cloud_api(auth_client, db, mock_http):
     auth_client.post("/api/integrations/whatsapp/key", json={"values": {"access_token": "EAAG", "phone_number_id": "PN1"}})
+    customer_wrote(db)
     route = mock_http.post(f"{GRAPH}/PN1/messages").respond(json={"messages": [{"id": "wamid.1"}]})
     m = auth_client.post("/api/whatsapp/send", json={"to": "919876543210", "body": "Hi"}).json()
     assert m["status"] == "sent" and route.calls[0].request.headers["authorization"] == "Bearer EAAG"
 
 
-def test_failed_send_is_recorded(auth_client, mock_http):
+def test_failed_send_is_recorded(auth_client, db, mock_http):
     auth_client.post("/api/integrations/whatsapp/key", json={"values": {"access_token": "EAAG", "phone_number_id": "PN1"}})
+    customer_wrote(db)
     mock_http.post(f"{GRAPH}/PN1/messages").respond(400, json={"error": "bad"})
     assert auth_client.post("/api/whatsapp/send", json={"to": "919876543210", "body": "Hi"}).status_code == 502
-    assert auth_client.get("/api/whatsapp/messages/919876543210").json()[0]["status"] == "failed"
+    assert auth_client.get("/api/whatsapp/messages/919876543210").json()[-1]["status"] == "failed"
+
+
+def test_free_text_outside_the_24_hour_window_is_refused_before_sending(auth_client, mock_http):
+    auth_client.post("/api/integrations/whatsapp/key", json={"values": {"access_token": "EAAG", "phone_number_id": "PN1"}})
+    route = mock_http.post(f"{GRAPH}/PN1/messages").respond(json={"messages": [{"id": "wamid.1"}]})
+    r = auth_client.post("/api/whatsapp/send", json={"to": "919876543210", "body": "Hi"})
+    assert r.status_code == 409 and "approved template" in r.json()["detail"] and not route.called
 
 
 def test_webhook_verification(client):
@@ -139,8 +157,9 @@ def test_webhook_verification(client):
     assert bad.status_code == 403
 
 
-def test_webhook_inbound_and_status_updates(auth_client, other_client, client, mock_http):
+def test_webhook_inbound_and_status_updates(auth_client, other_client, client, db, mock_http):
     auth_client.post("/api/integrations/whatsapp/key", json={"values": {"access_token": "EAAG", "phone_number_id": "PN1"}})
+    customer_wrote(db)
     mock_http.post(f"{GRAPH}/PN1/messages").respond(json={"messages": [{"id": "wamid.out"}]})
     auth_client.post("/api/whatsapp/send", json={"to": "919876543210", "body": "Hi"})
     payload = {"entry": [{"changes": [{"value": {
@@ -151,7 +170,7 @@ def test_webhook_inbound_and_status_updates(auth_client, other_client, client, m
     }}]}]}
     assert wa_post(client, payload).json() == {"ok": True}
     msgs = auth_client.get("/api/whatsapp/messages/919876543210").json()
-    assert [(m["direction"], m["status"]) for m in msgs] == [("out", "read"), ("in", "received")]
+    assert [(m["direction"], m["status"]) for m in msgs] == [("in", "received"), ("out", "read"), ("in", "received")]
     assert auth_client.get("/api/leads").json()[0]["name"] == "Ravi"
     assert other_client.get("/api/whatsapp/conversations").json() == []
 

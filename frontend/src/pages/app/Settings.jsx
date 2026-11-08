@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, ExternalLink, KeyRound, Link2, Palette, Settings as SettingsIcon, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Chip, Field, Modal, PageHeader, Spinner, Tabs, ListSkeleton } from "../../components/ui";
+import { LoadError } from "../../components/LoadError";
 import { del, get, patch, post } from "../../lib/api";
 import { useAuth, useIsClient } from "../../lib/auth";
 import { useAction, useApi } from "../../lib/hooks";
@@ -50,7 +51,7 @@ function Profile() {
 }
 
 function Integrations() {
-  const { data, loading, reload } = useApi("/api/integrations", []);
+  const { data, loading, reload, error } = useApi("/api/integrations", []);
   const [keyFor, setKeyFor] = useState(null);
   const [values, setValues] = useState({});
   const [busy, run] = useAction();
@@ -61,6 +62,7 @@ function Integrations() {
   };
 
   if (loading) return <ListSkeleton />;
+  if (error && !data.length) return <LoadError error={error} what="your connections" onRetry={reload} />;
   const groups = [
     ["Advertising & data", ["meta", "google", "linkedin", "microsoft"]],
     ["Messaging & voice", ["whatsapp", "twilio"]],

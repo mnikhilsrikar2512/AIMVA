@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ease, rise, stagger } from "../../components/Motion";
 import { Download, Image as ImageIcon, LayoutGrid, MessageSquarePlus, Plus, RotateCcw, Sparkles, Trash2, Upload, Wand2 } from "lucide-react";
 import { Button, Card, Empty, Field, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
+import { LoadError } from "../../components/LoadError";
 import { api, del, post } from "../../lib/api";
 import { useAction, useApi } from "../../lib/hooks";
 import BrandControls from "../../components/BrandControls";
@@ -16,7 +17,7 @@ import { EnhanceButton, Rate } from "../../components/Quality";
 const SIZE_OPTIONS = [["1:1", "Square 1:1"], ["4:5", "Portrait 4:5"], ["9:16", "Story 9:16"], ["16:9", "Wide 16:9"], ["1.91:1", "Link ad 1.91:1"], ["custom", "Custom size…"]];
 
 export default function ImageGen() {
-  const { data: assets, setData: setAssets, loading } = useApi("/api/content/assets?kind=image", []);
+  const { data: assets, setData: setAssets, loading, error: assetsError, reload: reloadAssets } = useApi("/api/content/assets?kind=image", []);
   const { data: options } = useApi("/api/providers/options?kind=image", []);
   const EMPTY = { prompt: "", size: "1:1", width: 1024, height: 1024, count: 1, negative_prompt: "", seed: null, style: "", reference: "", keep_product: false };
   const [form, setForm] = useState(EMPTY);
@@ -91,7 +92,9 @@ export default function ImageGen() {
         </div>} />
       <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${assets.length ? ` (${assets.length})` : ""}` }]} /></div>
       {tab === "history" ? (
-        loading ? <ListSkeleton /> : assets.length === 0 ? (
+        loading ? <ListSkeleton /> : assetsError && assets.length === 0 ? (
+          <LoadError error={assetsError} what="your pictures" onRetry={reloadAssets} />
+        ) : assets.length === 0 ? (
           <Empty icon={ImageIcon} preview="tiles" title="Your pictures will live here" text="Everything you make is saved here, with every version you edit." action={<Button onClick={startNew}><Plus className="size-4" /> Make your first picture</Button>} />
         ) : (
           <>

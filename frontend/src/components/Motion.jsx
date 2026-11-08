@@ -94,13 +94,3 @@ export function Meter({ value, max, good = "bg-emerald-500", bad = "bg-rose-400"
     </div>
   );
 }
-
-/** Soft live indicator: a steady dot with a single expanding ring (no endless bouncing). */
-export function LiveDot({ tone = "bg-emerald-500", className }) {
-  return (
-    <span className={cx("relative inline-flex size-2", className)}>
-      <span className={cx("absolute inset-0 rounded-full opacity-60 motion-safe:animate-ping", tone)} style={{ animationIterationCount: 3 }} />
-      <span className={cx("relative inline-flex size-2 rounded-full", tone)} />
-    </span>
-  );
-}

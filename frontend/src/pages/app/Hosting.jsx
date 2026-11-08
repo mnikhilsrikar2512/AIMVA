@@ -4,8 +4,10 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, CloudUpload, ExternalLink, Globe2, Server } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, Modal, PageHeader, ListSkeleton } from "../../components/ui";
+import { LoadError } from "../../components/LoadError";
 import { get, patch, post } from "../../lib/api";
 import { useAction, useApi } from "../../lib/hooks";
+import { ApprovalGate } from "../../components/Approval";
 
 const TARGETS = [
   { id: "aimva", label: "AIMVA hosting", note: "Instant, free" },
@@ -14,7 +16,7 @@ const TARGETS = [
 ];
 
 export default function Hosting() {
-  const { data: sites, setData, loading } = useApi("/api/sites", []);
+  const { data: sites, setData, loading, error: sitesError, reload } = useApi("/api/sites", []);
   const { data: integrations } = useApi("/api/integrations", []);
   const [domainSite, setDomainSite] = useState(null);
   const [busy, run] = useAction();
@@ -38,7 +40,9 @@ export default function Hosting() {
         ))}
       </div>
       <Card className="p-0 sm:p-0">
-        {loading ? <ListSkeleton /> : sites.length === 0 ? (
+        {loading ? <ListSkeleton /> : sitesError && sites.length === 0 ? (
+          <LoadError error={sitesError} what="your pages" onRetry={reload} />
+        ) : sites.length === 0 ? (
           <Empty icon={Globe2} title="Nothing to put online yet" text="Make a page first. Then publish it here on AIMVA, your own domain, Netlify or Vercel." action={<Link to="/app/websites" className="btn-primary">Make a page</Link>} />
         ) : (
           <div className="overflow-x-auto">
@@ -72,6 +76,7 @@ export default function Hosting() {
                       </button>
                     </td>
                     <td className="px-5 py-4">
+                      <ApprovalGate kind="site" refId={s.id}>
                       <div className="flex gap-1.5">
                         {TARGETS.map((t) => (
                           <Button key={t.id} variant="ghost" size="sm" busy={deploying === `${t.id}:${s.id}`}
@@ -85,6 +90,7 @@ export default function Hosting() {
                           </Button>
                         ))}
                       </div>
+                      </ApprovalGate>
                     </td>
                   </tr>
                 ))}

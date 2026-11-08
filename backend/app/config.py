@@ -82,6 +82,8 @@ class Settings:
     # Work agents (app/agents): the background scheduler for follow-ups, Autopilot and weekly reports
     agents_scheduler = _env("AGENTS_SCHEDULER", "true").lower() == "true"
     tz_offset_minutes = int(_env("TZ_OFFSET_MINUTES", "330") or 0)  # business time zone for "9 am" / "Monday" (default IST)
+    # Country code added to local 10-digit numbers before WhatsApp (leads often type 98765 43210 without +91)
+    default_country_code = "".join(ch for ch in _env("DEFAULT_COUNTRY_CODE", "91") if ch.isdigit()) or "91"
 
     # OAuth apps (connect later)
     meta_app_id = _env("META_APP_ID")

@@ -130,6 +130,7 @@ class Lead(Base):
     product_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # attribution
     campaign_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     synced: Mapped[dict] = mapped_column(JSON, default=dict)
+    language: Mapped[str] = mapped_column(String(12), default="", server_default="")  # what the lead writes in (hi-IN, hi-Latn, ta-IN...); "" = not known yet
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

@@ -148,34 +148,6 @@ export function LaunchCard({ initialWhat = "" } = {}) {
 
 const KIND_TONE = { launch: "bg-violet-500", concierge: "bg-emerald-500", autopilot: "bg-sky-500", weekly_report: "bg-amber-500", page_fixer: "bg-pink-500" };
 
-/** What the agents did for you lately. */
-export function AgentActivity({ limit = 8 }) {
-  const { data: jobs, reload } = useApi(`/api/agents/jobs?limit=${limit}`, []);
-  useAgentEvents((d) => { if (d.type === "finished") reload(); });
-  return (
-    <Card>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 font-semibold text-strong"><Bot className="size-4 text-brand" /> Done for you</h2>
-      </div>
-      {jobs.length === 0 ? (
-        <p className="text-sm text-muted">AIMVA's agents welcome new leads, follow up, check your campaigns every morning and tidy new pages. What they do shows up here.</p>
-      ) : (
-        <ul className="space-y-3">
-          {jobs.map((j) => (
-            <li key={j.id} className="flex gap-3">
-              <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", j.status === "failed" ? "bg-rose-500" : KIND_TONE[j.kind])} />
-              <span className="min-w-0 text-sm">
-                <span className="block truncate text-strong">{j.title}</span>
-                <span className="text-xs text-faint">{j.agent} · {timeAgo(j.created_at)}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
 /** On/off (and suggest/auto) for one agent, shown on the page whose work it does. */
 export function AgentSwitch({ kind, title, text, modes }) {
   const { data: agents, setData } = useApi("/api/agents", []);

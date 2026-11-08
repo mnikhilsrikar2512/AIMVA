@@ -6,6 +6,7 @@ import { Globe, Megaphone, Phone, Play, UserRound } from "lucide-react";
 import { Spinner, cx } from "./ui";
 import { timeAgo, useApi } from "../lib/hooks";
 import { useLeadEvents } from "../lib/live";
+import { useIsClient } from "../lib/auth";
 import { ListSkeleton } from "./ui";
 
 const FILTERS = [["all", "All"], ["picture", "Pictures"], ["video", "Videos"], ["call", "Calls"], ["lead", "Leads"], ["campaign", "Campaigns"], ["page", "Pages"]];
@@ -16,6 +17,7 @@ const firstLine = (t = "", n = 90) => { const s = String(t).replace(/\s+/g, " ")
 export function RecentWork({ limit: initialLimit = 8 }) {
   const [kind, setKind] = useState("all");
   const [limit, setLimit] = useState(initialLimit);
+  const isClient = useIsClient();  // a client can open leads and pages; the rest is the agency's side
   const assets = useApi("/api/content/assets", []);
   const calls = useApi("/api/voice/calls", []);
   const leads = useApi("/api/leads", []);
@@ -62,7 +64,7 @@ export function RecentWork({ limit: initialLimit = 8 }) {
           {failed.length > 0 && (
             <p className="mb-2 text-xs text-muted">Some items didn't load. <button className="font-medium text-brand hover:underline" onClick={() => failed.forEach((s) => s.reload())}>Try again</button></p>
           )}
-          {shown.length === 0 ? (
+          {shown.length === 0 && failed.length > 0 ? null : shown.length === 0 ? (
             <p className="border-y border-line py-6 text-center text-sm text-muted">
               {kind === "all" ? "Everything that happens shows up here: new leads, calls, pages, pictures and campaigns, newest first." : `No ${FILTERS.find((f) => f[0] === kind)[1].toLowerCase()} yet.`}
             </p>
@@ -70,9 +72,11 @@ export function RecentWork({ limit: initialLimit = 8 }) {
             <ul className="border-t border-line">
               {shown.map((r) => {
                 const Icon = ICON[r.kind];
+                const opens = !isClient || /^\/app\/(leads|websites)/.test(r.to);
+                const Row = opens ? Link : "div";
                 return (
                   <li key={r.id} className="border-b border-line">
-                    <Link to={r.to} className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 px-1 py-2 transition hover:bg-surface-2">
+                    <Row to={opens ? r.to : undefined} className={cx("grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 px-1 py-2 transition", opens && "hover:bg-surface-2")}>
                       <span className="relative grid size-8 place-items-center overflow-hidden rounded-md bg-surface-2 text-muted">
                         {r.thumb ? <img src={r.thumb} alt="" className="size-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }} />
                           : r.kind === "video" ? <Play className="size-3.5" /> : Icon ? <Icon className="size-4" /> : null}
@@ -83,9 +87,9 @@ export function RecentWork({ limit: initialLimit = 8 }) {
                       </span>
                       <span className="flex items-center gap-2 whitespace-nowrap text-xs text-muted">
                         <span className="hidden sm:inline">{timeAgo(r.at)}</span>
-                        {r.go && <span className="font-medium text-brand">{r.go}</span>}
+                        {opens && r.go && <span className="font-medium text-brand">{isClient ? "Open" : r.go}</span>}
                       </span>
-                    </Link>
+                    </Row>
                   </li>
                 );
               })}

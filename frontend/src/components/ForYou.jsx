@@ -10,6 +10,8 @@ import { Spinner, cx } from "./ui";
 import { post } from "../lib/api";
 import { timeAgo, useApi } from "../lib/hooks";
 import { useAgentEvents, useLeadEvents } from "../lib/live";
+import { useIsClient } from "../lib/auth";
+import { ApprovalInbox, useApprovalInbox } from "./Approval";
 
 const DOT = { high: "bg-warm", medium: "bg-amber-500", low: "bg-line-strong" };
 const SEEN_KEY = "aimva_updates_seen_at";
@@ -121,6 +123,8 @@ export function ForYou({ className }) {
   const [tab, setTab] = useState("next");
   const [seenAt, setSeenAt] = useState(readSeen);
   const { recs, jobs } = useForYou();
+  const isClient = useIsClient();
+  const inbox = useApprovalInbox(isClient);  // the client approves or asks for changes from here
   const location = useLocation();
   useEffect(() => { setOpen(false); }, [location.pathname]);
   // N opens the panel from anywhere, unless the person is typing.
@@ -138,9 +142,10 @@ export function ForYou({ className }) {
     window.addEventListener("aimva:foryou", onOpen);
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("aimva:foryou", onOpen); };
   }, [open]);
-  const nNext = recs.data?.recommendations?.length || 0;
+  const nNext = isClient ? 0 : recs.data?.recommendations?.length || 0;  // suggestions are for the agency: they run things
   const nNew = (jobs.data || []).filter((j) => seenAt < j.created_at).length;
-  const count = nNext + nNew;
+  const nApprove = Array.isArray(inbox.data) ? inbox.data.length : 0;
+  const count = nNext + nNew + nApprove;
   const onOpenChange = (v) => {
     setOpen(v);
     if (!v && tab === "updates") { const now = new Date().toISOString(); writeSeen(now); setSeenAt(now); }
@@ -161,12 +166,16 @@ export function ForYou({ className }) {
         <Tabs value={tab} onValueChange={(v) => { setTab(v); if (v !== "updates") { const now = new Date().toISOString(); writeSeen(now); setSeenAt(now); } }} className="flex min-h-0 flex-1 flex-col">
           <div className="px-4 pt-3">
             <TabsList className="w-full">
-              <TabsTrigger value="next" className="flex-1">Next steps{nNext ? <span className="ml-1 text-faint">{nNext}</span> : null}</TabsTrigger>
+              <TabsTrigger value="next" className="flex-1">Next steps{nNext + nApprove ? <span className="ml-1 text-faint">{nNext + nApprove}</span> : null}</TabsTrigger>
               <TabsTrigger value="updates" className="flex-1">Updates{nNew ? <span className="ml-1 text-faint">{nNew}</span> : null}</TabsTrigger>
             </TabsList>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2">
-            <TabsContent value="next"><NextSteps recs={recs} onGo={() => setOpen(false)} /></TabsContent>
+            <TabsContent value="next"><ApprovalInbox inbox={inbox} />{isClient ? (!nApprove && !inbox.error && (
+              <div className="px-1 py-8 text-center">
+                <p className="font-medium text-strong">You're all caught up</p>
+                <p className="mt-1 text-sm text-muted">When your agency sends a page or campaign for your OK, it shows up here.</p>
+              </div>)) : <NextSteps recs={recs} onGo={() => setOpen(false)} />}</TabsContent>
             <TabsContent value="updates"><Updates jobs={jobs} seenAt={seenAt} /></TabsContent>
           </div>
         </Tabs>

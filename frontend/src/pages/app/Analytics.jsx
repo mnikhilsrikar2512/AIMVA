@@ -7,6 +7,7 @@ import { DownloadMenu } from "../../components/DownloadMenu";
 import { useLeadEvents } from "../../lib/live";
 import { useAuth } from "../../lib/auth";
 import { ChartTooltip } from "./Dashboard";
+import { LoadError } from "../../components/LoadError";
 
 const COLORS = { website: "#f472b6", meta: "#38bdf8", google: "#34d399", linkedin: "#22d3ee", whatsapp: "#4ade80", voice: "#a78bfa", manual: "#94a3b8" };
 const axis = { tick: { fill: "#675d52", fontSize: 12 }, axisLine: false, tickLine: false };
@@ -15,7 +16,7 @@ export default function Analytics() {
   const { user } = useAuth();
   const business = user?.workspace?.name || user?.company || user?.name || "";
   const [days, setDays] = useState("30");
-  const { data, loading, reload } = useApi(`/api/analytics/overview?days=${days}`);
+  const { data, loading, reload, error } = useApi(`/api/analytics/overview?days=${days}`);
   const { data: insights, reload: reloadInsights } = useApi("/api/analytics/insights");
   useLeadEvents(() => { reload(); reloadInsights(); });
   const k = data?.kpis;
@@ -33,7 +34,8 @@ export default function Analytics() {
             pdf={async (filename) => (await import("../../lib/reports/analytics")).analyticsReport({ data, days, business, filename })} />
           <Tabs value={days} onChange={setDays} tabs={[{ value: "7", label: "7d" }, { value: "30", label: "30d" }, { value: "90", label: "90d" }]} />
         </div>} />
-      {!k ? <div className="grid h-60 place-items-center"><Spinner className="size-6" /></div> : (
+      {!k && error ? <Card><LoadError error={error} what="your numbers" onRetry={reload} /></Card>
+        : !k ? <div className="grid h-60 place-items-center"><Spinner className="size-6" /></div> : (
         <div className="space-y-6">
           <StatStrip>
             <Stat label={`Leads (${days}d)`} value={k.leads} icon={Users} tone="amber" sub={`${k.hot_leads} hot · avg score ${k.avg_score}`} />

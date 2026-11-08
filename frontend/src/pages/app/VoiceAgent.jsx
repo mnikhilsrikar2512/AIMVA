@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
 import { AudioLines, Bot, Mic, MicOff, Phone, PhoneOff, Plus, Save, Send, Trash2, User as UserIcon } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton } from "../../components/ui";
+import { LoadError } from "../../components/LoadError";
 import { del, get, post, put } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
 import { speakWithPulse, useMicLevel } from "../../lib/audio";
@@ -224,7 +225,7 @@ function TestCall({ agent, onEnded }) {
 }
 
 export default function VoiceAgent() {
-  const { data: agents, setData: setAgents, loading } = useApi("/api/voice/agents", []);
+  const { data: agents, setData: setAgents, loading, error: agentsError, reload: reloadAgents } = useApi("/api/voice/agents", []);
   const { data: languages } = useApi("/api/voice/languages");
   const { data: calls, reload: reloadCalls } = useApi("/api/voice/calls", []);
   const [selId, setSelId] = useState(null);
@@ -245,7 +246,9 @@ export default function VoiceAgent() {
     <div>
       <PageHeader icon={AudioLines} tone="cyan" title="Calls" subtitle="Your call assistant greets every lead, asks your questions and hands over to you when it matters."
         actions={<Button variant="ghost" onClick={create} busy={busy}><Plus className="size-4" /> New agent</Button>} />
-      {loading ? <ListSkeleton /> : !agent ? (
+      {loading ? <ListSkeleton /> : agentsError && !agents.length ? (
+        <LoadError error={agentsError} what="your call assistant" onRetry={reloadAgents} />
+      ) : !agent ? (
         <Empty icon={AudioLines} preview="chat" title="Your call assistant starts here" text="It greets every new lead, asks your questions and books the visit. Try it in your browser first, no phone needed."
           action={<Button onClick={create}><Plus className="size-4" /> Set up the assistant</Button>} />
       ) : (

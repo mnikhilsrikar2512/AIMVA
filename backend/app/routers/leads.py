@@ -10,9 +10,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from .. import live
+from .. import lead_reply, live
 from ..db import SessionLocal, get_db
-from ..models import Lead, LeadEvent, User, utcnow
+from ..models import Lead, LeadEvent, User, WaMessage, utcnow
 from ..security import current_user
 from ..services import get_integration, score_lead
 from .integrations import oauth_access_token
@@ -24,7 +24,8 @@ COLUMNS = ["id", "created_at", "name", "email", "phone", "source", "stage", "sco
 def lead_out(l: Lead) -> dict:
     return {"id": l.id, "name": l.name, "email": l.email, "phone": l.phone, "message": l.message,
             "source": l.source, "source_ref": l.source_ref, "score": l.score, "stage": l.stage,
-            "value": l.value, "synced": l.synced or {}, "created_at": l.created_at.isoformat()}
+            "value": l.value, "synced": l.synced or {}, "language": l.language or "",
+            "language_name": lead_reply.LANGUAGES.get(l.language or "", ""), "created_at": l.created_at.isoformat()}
 
 
 def _cell(v) -> str:
@@ -69,6 +70,7 @@ def create_lead(db: Session, user_id: int, bg: Optional[BackgroundTasks] = None,
         lead = Lead(user_id=user_id, **{k: v for k, v in fields.items() if v is not None})
         lead.email = email
         db.add(lead)
+    lead_reply.remember_language(lead, " ".join(filter(None, [fields.get("message"), fields.get("name")])))
     is_new = lead.id is None
     lead.score = score_lead(lead)
     db.flush()
@@ -174,11 +176,26 @@ class LeadPatch(BaseModel):
     stage: Optional[Literal["new", "contacted", "qualified", "won", "lost"]] = None
     value: Optional[float] = None
     name: Optional[str] = None
+    language: Optional[str] = Field(None, max_length=12)
+
+
+def with_activity(db: Session, user_id: int, leads: list) -> list:
+    act = lead_reply.activity(db, user_id, leads)
+    out = []
+    for l in leads:
+        row = {**lead_out(l), **act[l.id]}
+        if not row["language"]:  # leads saved before languages were remembered: read it from their message
+            guess = lead_reply.detect(l.message)
+            if guess:
+                row["language"], row["language_name"] = guess, lead_reply.LANGUAGES[guess]
+        out.append(row)
+    return out
 
 
 @router.get("")
-def list_leads(q: str = "", source: str = "", stage: str = "", user: User = Depends(current_user),
-               db: Session = Depends(get_db)):
+def list_leads(q: str = "", source: str = "", stage: str = "", sort: Literal["needs", "newest"] = "needs",
+               user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Everyone who asked. sort=needs (default) puts leads waiting on you first; each row says who is waiting and since when."""
     stmt = select(Lead).where(Lead.user_id == user.id).order_by(Lead.created_at.desc()).limit(500)
     if source:
         stmt = stmt.where(Lead.source == source)
@@ -187,7 +204,10 @@ def list_leads(q: str = "", source: str = "", stage: str = "", user: User = Depe
     if q:
         like = f"%{q}%"
         stmt = stmt.where(or_(Lead.name.ilike(like), Lead.email.ilike(like), Lead.phone.ilike(like)))
-    return [lead_out(l) for l in db.scalars(stmt)]
+    leads = list(db.scalars(stmt))
+    if sort == "needs":
+        leads = lead_reply.needs_first(leads, lead_reply.activity(db, user.id, leads))
+    return with_activity(db, user.id, leads)
 
 
 @router.post("")
@@ -203,6 +223,8 @@ def patch_lead(lead_id: int, body: LeadPatch, user: User = Depends(current_user)
     if not lead or lead.user_id != user.id:
         raise HTTPException(404, "Not found.")
     changes = body.model_dump(exclude_none=True)
+    if "language" in changes and changes["language"] not in lead_reply.LANGUAGES and changes["language"] != "":
+        raise HTTPException(400, "Pick one of the listed languages.")
     if "stage" in changes and changes["stage"] != lead.stage:
         add_event(db, lead, "stage", f"Stage: {lead.stage} → {changes['stage']}", previous=lead.stage, stage=changes["stage"])
     if "value" in changes and changes["value"] != lead.value:
@@ -210,7 +232,7 @@ def patch_lead(lead_id: int, body: LeadPatch, user: User = Depends(current_user)
     for k, v in changes.items():
         setattr(lead, k, v)
     db.commit()
-    return lead_out(lead)
+    return with_activity(db, user.id, [lead])[0]
 
 
 @router.delete("/{lead_id}")
@@ -283,9 +305,11 @@ def timeline(db: Session, lead: Lead) -> list:
               "meta": e.meta or {}} for e in db.scalars(select(LeadEvent).where(LeadEvent.lead_id == lead.id))]
     phone = _digits(lead.phone)
     if phone:
-        for m in db.scalars(select(WaMessage).where(WaMessage.user_id == lead.user_id, WaMessage.contact == phone)):
+        for m in db.scalars(select(WaMessage).where(WaMessage.user_id == lead.user_id,
+                                                    WaMessage.contact.in_(lead_reply._contacts(lead.phone)))):
             items.append({"id": f"w{m.id}", "kind": "whatsapp", "at": m.created_at.isoformat(),
-                          "title": "WhatsApp received" if m.direction == "in" else "WhatsApp sent", "body": m.body,
+                          "title": "WhatsApp received" if m.direction == "in" else
+                          "Sent from your WhatsApp" if m.status == "own_app" else "WhatsApp sent", "body": m.body,
                           "meta": {"direction": m.direction, "status": m.status}})
     conds = [Call.lead_id == lead.id] + ([Call.to_number.contains(phone[-10:])] if len(phone) >= 10 else [])
     for c in db.scalars(select(Call).where(Call.user_id == lead.user_id, or_(*conds))):
@@ -297,10 +321,78 @@ def timeline(db: Session, lead: Lead) -> list:
     return sorted(items, key=lambda i: i["at"], reverse=True)
 
 
+def lead_view(db: Session, lead: Lead) -> dict:
+    return {**with_activity(db, lead.user_id, [lead])[0], "timeline": timeline(db, lead)}
+
+
 @router.get("/{lead_id}")
 def get_lead(lead_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return lead_view(db, _own(db, user, lead_id))
+
+
+@router.get("/meta/languages")
+def languages(user: User = Depends(current_user)):
+    return [{"code": k, "name": v} for k, v in lead_reply.LANGUAGES.items()]
+
+
+class DraftIn(BaseModel):
+    intent: Literal["auto", "welcome", "reply", "follow_up", "visit", "pricing"] = "auto"
+
+
+@router.post("/{lead_id}/reply-draft")
+def reply_draft(lead_id: int, body: DraftIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """A WhatsApp reply in the lead's language, and whether WhatsApp will take free text or only a template now."""
     lead = _own(db, user, lead_id)
-    return {**lead_out(lead), "timeline": timeline(db, lead)}
+    if not lead.phone:
+        raise HTTPException(400, "Add a phone number to message this lead.")
+    return lead_reply.draft(db, user, lead, body.intent)
+
+
+class ReplyIn(BaseModel):
+    text: str = Field("", max_length=4096)
+    template: bool = False  # send the approved template (outside WhatsApp's 24-hour window)
+    own_app: bool = False  # the business sent `text` from their own WhatsApp (wa.me link): just record it
+    intent: Literal["auto", "welcome", "reply", "follow_up", "visit", "pricing"] = "auto"
+
+
+@router.post("/{lead_id}/reply")
+def reply(lead_id: int, body: ReplyIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Send a WhatsApp reply to a lead. A new lead moves to "contacted" so it leaves the waiting list."""
+    from .whatsapp import CLOSED_WINDOW, send_whatsapp
+    lead = _own(db, user, lead_id)
+    if not lead.phone:
+        raise HTTPException(400, "Add a phone number to message this lead.")
+    language = lead_reply.language_of(db, lead)
+    state = lead_reply.send_state(db, user, lead, language, body.intent)
+    if body.own_app:
+        # Sent by a person from their own WhatsApp, so the API's 24-hour rule doesn't apply. We can't see the
+        # message leave their phone, so it's recorded as "sent from your WhatsApp", not as delivered.
+        if not body.text.strip():
+            raise HTTPException(400, "Write a message first.")
+        db.add(WaMessage(user_id=user.id, contact=lead_reply.wa_number(lead.phone), contact_name=lead.name,
+                         direction="out", body=body.text.strip(), status="own_app"))
+    elif body.template:
+        if not state["needs_template"]:
+            raise HTTPException(400, "You can write to this lead freely right now; send a message instead.")
+        integ = get_integration(db, user.id, "whatsapp")
+        tpl = lead_reply.template_for(integ, "follow_up" if body.intent == "follow_up" else "first", language)
+        if not tpl:
+            raise HTTPException(400, "Add your approved WhatsApp template in WhatsApp settings first.")
+        send_whatsapp(db, user.id, lead.phone, "", lead.name, tpl["name"], tpl["lang"],
+                      [lead_reply.first_name(lead)] if tpl["with_name"] else None)
+    else:
+        if not body.text.strip():
+            raise HTTPException(400, "Write a message first.")
+        if state["needs_template"]:
+            raise HTTPException(409, CLOSED_WINDOW)
+        send_whatsapp(db, user.id, lead.phone, body.text.strip(), lead.name)
+    if lead.stage == "new":
+        add_event(db, lead, "stage", "Stage: new → contacted", previous="new", stage="contacted")
+        lead.stage = "contacted"
+    db.commit()
+    live.publish(user.id, "lead", {"type": "activity", "source": "whatsapp", "lead": lead_out(lead),
+                                   "unseen": unseen_count(db, user.id)})
+    return lead_view(db, lead)
 
 
 class NoteIn(BaseModel):
@@ -312,7 +404,7 @@ def add_note(lead_id: int, body: NoteIn, user: User = Depends(current_user), db:
     lead = _own(db, user, lead_id)
     add_event(db, lead, "note", "Note added", body.body.strip())
     db.commit()
-    return {**lead_out(lead), "timeline": timeline(db, lead)}
+    return lead_view(db, lead)
 
 
 class CallLeadIn(BaseModel):
@@ -332,4 +424,4 @@ def call_lead(lead_id: int, body: CallLeadIn, user: User = Depends(current_user)
     if not agent or agent.user_id != user.id:
         raise HTTPException(400, "Create a voice agent first.")
     place_phone_call(db, user, agent, lead.phone, lead_id=lead.id)
-    return {**lead_out(lead), "timeline": timeline(db, lead)}
+    return lead_view(db, lead)

@@ -30,8 +30,23 @@ SCHEDULE = (("day2", timedelta(days=2)), ("day7", timedelta(days=7)))
 
 
 def message(db: Session, user: User, lead: Lead, step: str) -> str:
+    """The step's message in the lead's language. The business's own wording is sent as they wrote it."""
+    from .. import lead_reply
     cfg = setting(db, user.id, "concierge").config or {}
-    text = (cfg.get("messages") or {}).get(step) or DEFAULTS[step]
+    custom = (cfg.get("messages") or {}).get(step)
+    english = _english(db, user, lead, step, custom)
+    language = lead_reply.language_of(db, lead)
+    if custom or language == "en":
+        return english
+    translated = lead_reply.translate(db, user, english, language)
+    if translated:
+        return translated
+    text = lead_reply.ready_made(language, "welcome" if step == "welcome" else "follow_up", lead, user.company or "")
+    return text + ("\n\nReply STOP and we won't message again." if step == "day7" else "")
+
+
+def _english(db: Session, user: User, lead: Lead, step: str, custom: Optional[str]) -> str:
+    text = custom or DEFAULTS[step]
     first = (lead.name or "").split(" ")[0] or "there"
     nxt = NEXT.get(match_playbook("", user.industry), "When would be a good time for a quick call?")
     if "brochure" in (lead.message or "").lower() or "price sheet" in (lead.message or "").lower():
@@ -40,14 +55,32 @@ def message(db: Session, user: User, lead: Lead, step: str) -> str:
 
 
 def _deliver(db: Session, user: User, lead: Lead, step: str) -> str:
-    """Send on WhatsApp if a number is connected; otherwise draft it on the lead. Returns what happened."""
+    """Send on WhatsApp if a number is connected; otherwise draft it on the lead. Returns what happened.
+
+    WhatsApp only takes free text within 24 hours of the lead's last message. A form or ad lead has never messaged,
+    so the first message goes out as the business's approved template, or is drafted when they have none yet."""
+    from .. import lead_reply
     from ..routers.leads import add_event
     from ..routers.whatsapp import send_whatsapp
     text = message(db, user, lead, step)
     label = {"welcome": "Welcome message", "day2": "Day-2 follow-up", "day7": "Day-7 follow-up"}[step]
-    if get_integration(db, user.id, "whatsapp"):
+    integ = get_integration(db, user.id, "whatsapp")
+    if integ:
+        tpl = None
+        if not lead_reply.window_open(db, user.id, lead.phone):
+            tpl = lead_reply.template_for(integ, "first" if step == "welcome" else "follow_up", lead_reply.language_of(db, lead))
+            if not tpl:
+                add_event(db, lead, "note", f"{label} ready to send",
+                          text + "\n\nWhatsApp only lets a business start a chat with an approved template. Add yours in "
+                                 "WhatsApp settings and AIMVA will send it within seconds.", agent="concierge", draft=True)
+                db.commit()
+                return "drafted"
         try:
-            send_whatsapp(db, user.id, lead.phone, text, lead.name)
+            if tpl:
+                send_whatsapp(db, user.id, lead.phone, "", lead.name, tpl["name"], tpl["lang"],
+                              [lead_reply.first_name(lead)] if tpl["with_name"] else None)
+            else:
+                send_whatsapp(db, user.id, lead.phone, text, lead.name)
         except HTTPException as e:
             add_event(db, lead, "note", f"{label} not sent", f"{e.detail}\n\n{text}", agent="concierge")
             db.commit()
@@ -81,9 +114,10 @@ def on_new_lead(db: Session, lead_id: int) -> None:
 
 
 def _replied(db: Session, lead: Lead) -> bool:
-    digits = "".join(ch for ch in lead.phone if ch.isdigit())
-    return bool(digits and db.scalar(select(WaMessage.id).where(WaMessage.user_id == lead.user_id, WaMessage.direction == "in",
-                                                               WaMessage.contact == digits, WaMessage.created_at > lead.created_at)))
+    from ..lead_reply import _contacts
+    contacts = _contacts(lead.phone)
+    return bool(contacts and db.scalar(select(WaMessage.id).where(WaMessage.user_id == lead.user_id, WaMessage.direction == "in",
+                                                                 WaMessage.contact.in_(contacts), WaMessage.created_at > lead.created_at)))
 
 
 def run_due(db: Session, now=None) -> int:

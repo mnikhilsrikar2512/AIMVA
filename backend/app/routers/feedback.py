@@ -68,7 +68,7 @@ def my_feedback(kind: Kind, user: User = Depends(current_user), db: Session = De
 # ---- owner dashboard ---------------------------------------------------------------------------------
 def require_admin(user: User = Depends(current_person)) -> User:
     if user.email.lower() not in settings.admin_emails:
-        raise HTTPException(403, "Only platform owners can see this. Add your email to ADMIN_EMAILS in backend/.env.")
+        raise HTTPException(403, "Only the AIMVA team can see this page.")
     return user
 
 

@@ -26,8 +26,8 @@ export function summary(module, p) {
 }
 
 export function useTemplates(module) {
-  const { data, loading, reload, setData } = useApi(`/api/templates?module=${module}`, { templates: [] });
-  return { templates: data?.templates || [], industry: data?.industry, loading, reload, setData };
+  const { data, loading, reload, setData, error } = useApi(`/api/templates?module=${module}`, { templates: [] });
+  return { templates: data?.templates || [], industry: data?.industry, loading, reload, setData, error };
 }
 
 /** Remembers which template was applied, and reports what was changed when the result is used. */
@@ -74,7 +74,7 @@ function TemplateCard({ t, module, onUse, onKeep, onDismiss, onDelete, compact }
 const TABS = [["for", "For you"], ["all", "All"], ["mine", "Mine"], ["suggested", "Suggested"]];
 
 export function TemplateGallery({ module, open, onClose, onApply, data }) {
-  const { templates, reload, setData } = data;
+  const { templates, reload, setData, error } = data;
   const [tab, setTab] = useState("for");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
@@ -113,7 +113,8 @@ export function TemplateGallery({ module, open, onClose, onApply, data }) {
       </div>
       {list.length === 0 ? (
         <div className="grid h-40 place-items-center text-center text-sm text-muted">
-          {tab === "suggested" ? "No suggestions yet. Click “Suggest templates for me”: AIMVA learns from what you use and change." :
+          {error && !templates.length ? <span>Templates didn't load. <button type="button" className="font-medium text-brand hover:underline" onClick={reload}>Try again</button></span> :
+            tab === "suggested" ? "No suggestions yet. Click “Suggest templates for me”: AIMVA learns from what you use and change." :
             tab === "mine" ? "Save any form as a template with “Save as template”." : "No templates match."}
         </div>
       ) : (
@@ -144,7 +145,9 @@ export function TemplateStrip({ module, onApply, title = "Start from a template"
           Browse all{suggested ? ` · ${suggested} suggested` : ""}
         </button>
       </div>
-      {data.loading ? <div className="flex h-16 items-center"><Spinner className="size-4 text-faint" /></div> : (
+      {data.loading ? <div className="flex h-16 items-center"><Spinner className="size-4 text-faint" /></div> : data.error && !data.templates.length ? (
+        <p className="py-3 text-sm text-muted">Templates didn't load. <button type="button" className="font-medium text-brand hover:underline" onClick={data.reload}>Try again</button></p>
+      ) : (
         <motion.div variants={stagger} initial="hidden" animate="show" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1.5">
           {top.map((t) => {
             const [line] = summary(module, t.payload);

@@ -1,4 +1,5 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { toast } from "sonner";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./lib/auth";
 
@@ -44,6 +45,22 @@ function RequireAuth({ children }) {
   return children;
 }
 
+// A view-only client sees Home, Leads, Pages, Results, Analytics and Settings (see `client` in lib/modules.js).
+// Typing another app address sends them Home instead of loading a page whose every call is refused.
+const CLIENT_PAGES = new Set(["leads", "websites", "command", "analytics", "settings"]);
+
+function Away({ text }) {
+  useEffect(() => { toast(text, { id: "route-guard" }); }, [text]);
+  return <Navigate to="/app" replace />;
+}
+
+function Allowed({ path, children }) {
+  const { user } = useAuth();
+  if (path === "owner" && !user?.is_admin) return <Away text="That page is only for the AIMVA team." />;
+  if (user?.workspace?.role === "client" && !CLIENT_PAGES.has(path.split("/")[0])) return <Away text="Your agency looks after that part for you." />;
+  return children;
+}
+
 function GuestOnly({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <FullScreenSpinner />;
@@ -68,7 +85,7 @@ export default function App() {
           ["brand", Brand], ["images", ImageGen], ["videos", VideoGen], ["websites", Websites], ["hosting", Hosting],
           ["ads/:platform", Ads], ["voice", VoiceAgent], ["whatsapp", WhatsApp], ["leads", Leads],
           ["analytics", Analytics], ["settings", Settings], ["owner", Owner], ["command", Command],
-        ].map(([path, C]) => <Route key={path} path={path} element={page(<C />)} />)}
+        ].map(([path, C]) => <Route key={path} path={path} element={<Allowed path={path}>{page(<C />)}</Allowed>} />)}
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Route>
       <Route path="*" element={page(<NotFound />)} />

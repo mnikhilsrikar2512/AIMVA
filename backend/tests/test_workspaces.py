@@ -236,3 +236,40 @@ def test_profile_in_a_client_workspace_keeps_the_person(auth_client):
     assert doc.patch("/api/auth/profile", json={"company": "Hijacked"}).status_code == 403
     r = doc.patch("/api/auth/profile", json={"name": "Dr Meera Rao", "company": "SmileCare Dental Clinic"})
     assert r.status_code == 200 and r.json()["user"]["name"] == "Dr Meera Rao"
+
+
+def test_approval_status_drives_the_publish_button(agency_and_client):
+    agency, doc, ws = agency_and_client
+    site = agency.post("/api/sites", json=BRIEF).json()
+    st = lambda who: who.get("/api/approvals/status", params={"kind": "site", "ref_id": site["id"]}).json()
+    assert st(agency) == {"required": False, "state": "approved", "approval": None}  # approval off: Publish as usual
+    agency.patch(f"/api/workspaces/{ws['id']}", json={"require_approval": True})
+    assert st(agency)["state"] == "none"
+    a = agency.post("/api/approvals", json={"kind": "site", "ref_id": site["id"], "note": "First draft"}).json()
+    assert st(agency)["state"] == "pending" and st(doc)["state"] == "pending"
+    doc.post(f"/api/approvals/{a['id']}/decide", json={"decision": "changes", "comment": "Use our clinic photo"})
+    s = st(agency)
+    assert s["state"] == "changes" and s["approval"]["comment"] == "Use our clinic photo"
+    a2 = agency.post("/api/approvals", json={"kind": "site", "ref_id": site["id"]}).json()
+    doc.post(f"/api/approvals/{a2['id']}/decide", json={"decision": "approved"})
+    assert st(agency)["state"] == "approved"
+    agency.patch(f"/api/sites/{site['id']}", json={"html": site["html"] + "<p>new price</p>"})
+    assert st(agency)["state"] == "edited"  # changed after the client said yes: send it again
+    assert agency.get("/api/approvals/status", params={"kind": "site", "ref_id": 999999}).status_code == 404
+
+
+def test_client_sees_what_they_are_approving(agency_and_client):
+    agency, doc, ws = agency_and_client
+    agency.patch(f"/api/workspaces/{ws['id']}", json={"require_approval": True})
+    site = agency.post("/api/sites", json=BRIEF).json()
+    c = agency.post("/api/campaigns", json={"platform": "meta", "name": "Invisalign leads", "daily_budget": 500,
+                                            "creative": {"headline": "Straight teeth, no braces", "text": "Book a free scan"}}).json()
+    agency.post("/api/approvals", json={"kind": "site", "ref_id": site["id"]})
+    agency.post("/api/approvals", json={"kind": "campaign", "ref_id": c["id"], "note": "Starts Monday"})
+    rows = doc.get("/api/approvals", params={"status": "pending", "preview": True}).json()
+    by = {r["kind"]: r for r in rows}
+    assert by["campaign"]["preview"]["headline"] == "Straight teeth, no braces" and by["campaign"]["preview"]["daily_budget"] == 500
+    assert by["campaign"]["note"] == "Starts Monday" and by["campaign"]["requested_by"]
+    assert by["site"]["preview"]["preview_url"] == f"/api/sites/{site['id']}/preview"
+    assert doc.get(by["site"]["preview"]["preview_url"]).status_code == 200  # the client can open the draft
+    assert "preview" not in doc.get("/api/approvals").json()[0]  # plain list stays as it was

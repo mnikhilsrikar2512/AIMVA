@@ -42,6 +42,8 @@ TASKS = {
                        "rules": "Your scripted questions, asked in order", "free": False, "memory": False},  # live calls can't wait for a slow free reply
     "analyst": {"name": "Growth Analyst", "does": "Explains your results and writes the weekly brief.", "module": "Analytics & Command Center",
                 "rules": "Rule-based insights from your numbers", "free": True, "memory": True},
+    "lead_replier": {"name": "Lead Replier", "does": "Drafts WhatsApp replies to leads in the language they write in.", "module": "Leads",
+                     "rules": "Ready-made replies in 12 languages", "free": True, "memory": False},
     "template_curator": {"name": "Template Curator", "does": "Drafts new templates that fit your business.", "module": "Templates",
                          "rules": "Learns from your edits, best campaigns and pages", "free": True, "memory": True},
 }
