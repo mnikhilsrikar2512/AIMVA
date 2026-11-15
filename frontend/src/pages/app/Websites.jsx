@@ -526,8 +526,24 @@ function Editor({ site, onClose, onChange, feedback }) {
 
   // Regenerate, restore, HTML edits and whole-page AI edits replace the page: reload the editor with it.
   const replaced = (s) => { onChange(s); show(s, pageSlug); };
-  const autosave = async (html, asked) => onChange(await patch(pageSlug ? `/api/sites/${site.id}/pages/${pageSlug}` : `/api/sites/${site.id}`,
-    asked ? { html, note: "Edited with AI", request: asked.slice(0, 120) } : { html, note: "Edited visually" }));
+  // Same-page save check: send the version this editor started from; if a teammate saved after it, the server says
+  // who in a 409 and the owner picks Reload or Keep mine (the next save goes through with force).
+  const force = useRef(false);
+  const baseVersion = (pageSlug ? site.pages?.find((p) => p.slug === pageSlug)?.version : site.version) ?? undefined;
+  const autosave = async (html, asked) => {
+    const body = { ...(asked ? { html, note: "Edited with AI", request: asked.slice(0, 120) } : { html, note: "Edited visually" }),
+      ...(baseVersion !== undefined ? { base_version: baseVersion } : {}), ...(force.current ? { force: true } : {}) };
+    try {
+      onChange(await patch(pageSlug ? `/api/sites/${site.id}/pages/${pageSlug}` : `/api/sites/${site.id}`, body));
+      force.current = false;
+    } catch (err) {
+      if (err.status === 409) {
+        toast(err.message, { duration: Infinity, action: { label: "Keep mine", onClick: () => { force.current = true; ed.current?.flush().catch(() => {}); } },
+          cancel: { label: "Reload", onClick: async () => { try { replaced(await get(`/api/sites/${site.id}`)); } catch (e) { toast.error(e.message); } } } });
+      }
+      throw err;
+    }
+  };
   const addPage = (e) => { e.preventDefault(); run(async () => {
     await flush();
     const s = await post(`/api/sites/${site.id}/pages`, adding);

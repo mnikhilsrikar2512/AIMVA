@@ -38,7 +38,9 @@ export function TeamPanel() {
       try {
         await post("/api/projects/invite", { email, role: f.role, project_ids: ids });
       } catch (err) {
-        if (![404, 405].includes(err.status)) throw err;
+        // Only when the server has no such route. A 404 "Project not found." refuses the whole invite on purpose.
+        const noRoute = err.status === 405 || (err.status === 404 && err.data?.detail === "Not Found");
+        if (!noRoute) throw err;
         // A server without project invites yet: one invite per project.
         for (const id of ids) await post(`/api/workspaces/${id}/invites`, { email, role: f.role });
       }
