@@ -256,7 +256,7 @@ def place_phone_call(db: Session, user: User, agent: VoiceAgent, to: str, lead_i
     first = agent.questions[0] if agent.questions else ""
     from ..models import Lead
     lead = db.get(Lead, lead_id) if lead_id else None
-    lang = speech.call_language(agent.language, (lead.message if lead and lead.user_id == user.id else "") or "")
+    lang = speech.call_language(agent.language, (lead.message if lead and lead.user_id == user.id else "") or "", written=True)
     c = Call(user_id=user.id, agent_id=agent.id, channel="phone", to_number=to, lead_id=lead_id,
              status="active" if call_hours.is_open(to) else "scheduled", created_at=call_hours.now(),
              transcript=[{"role": "agent", "text": f"{agent.greeting} {first}".strip(), "lang": lang}])

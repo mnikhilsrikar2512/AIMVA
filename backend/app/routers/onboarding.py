@@ -167,7 +167,7 @@ class AnswersIn(BaseModel):
     team_size: Optional[Literal["solo", "small", "large"]] = None
     # The idea-first setup's follow-up questions (design.md 3.2), asked only when /api/start couldn't fill them.
     customer_languages: Optional[List[Literal["en", "hi-IN", "hi-Latn", "bn-IN", "ta-IN", "te-IN", "gu-IN", "kn-IN",
-                                              "ml-IN", "mr-IN", "pa-IN", "od-IN", "ur-IN"]]] = Field(None, max_length=5)
+                                              "ml-IN", "mr-IN", "pa-IN", "od-IN", "ur-IN", "te-Latn", "ta-Latn"]]] = Field(None, max_length=5)
     customer_area: Optional[str] = Short
     reply_owner: Optional[Literal["me", "someone", "aimva"]] = None
     ads_today: Optional[Literal["none", "self", "someone"]] = None

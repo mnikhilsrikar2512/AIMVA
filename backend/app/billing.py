@@ -8,6 +8,10 @@ Built but not switched on (owner's call, 2026-11-06):
   it records the usage and, once enforcement is on, answers 402 with an upgrade message when the plan is used up.
 
 Plan names, prices and limits below are a starting point: change them here (one place) before launch.
+
+One plan per account (owner decision 2026-11-15): a person's plan covers every project they own. A project (a
+workspace) is billed to its owner's account, and usage from all of that owner's projects counts against one
+allowance. Usage rows still name the project they came from, so a per-project breakdown stays possible.
 """
 import hashlib
 import hmac
@@ -62,6 +66,32 @@ def enforce() -> bool:
     return os.getenv("BILLING_ENFORCE", "false").strip().lower() == "true"
 
 
+# ---- Who pays ----------------------------------------------------------------------------------------------
+def payer(db: Session, account: User) -> User:
+    """The account whose plan covers this one: a person pays for themselves; a project is paid for by its owner
+    (the first owner, when several people own it). A project with no owner left pays for itself."""
+    if account.kind != "workspace":
+        return account
+    from .models import Membership
+    owner_id = db.scalar(select(Membership.member_id).where(Membership.workspace_id == account.id, Membership.role == "owner")
+                         .order_by(Membership.id).limit(1))
+    owner = db.get(User, owner_id) if owner_id else None
+    return owner if owner and owner.kind == "person" else account
+
+
+def covered_ids(db: Session, p: User) -> list:
+    """Every account one plan covers: the payer and each project it owns (first owner)."""
+    if p.kind == "workspace":
+        return [p.id]
+    from .models import Membership
+    ids = [p.id]
+    for wid in db.scalars(select(Membership.workspace_id).join(User, User.id == Membership.workspace_id)
+                          .where(Membership.member_id == p.id, Membership.role == "owner", User.kind == "workspace")):
+        if payer(db, db.get(User, wid)).id == p.id:
+            ids.append(wid)
+    return ids
+
+
 # ---- Subscription state ------------------------------------------------------------------------------------
 def subscription(db: Session, user_id: int, now: Optional[datetime] = None) -> Subscription:
     """The user's subscription, created as a trial on first use, rolled to the next period when one ends."""
@@ -101,12 +131,13 @@ def effective_plan(s: Subscription) -> str:
     return s.plan if s.status in ("trialing", "active") else "expired"
 
 
-def used(db: Session, user_id: int, meter: str, since: datetime) -> int:
+def used(db: Session, ids: list, meter: str, since: datetime) -> int:
+    """Usage across every account in `ids` (one plan's projects)."""
     if meter == "sites":  # a standing count, not a monthly one
         from .models import Site
-        return db.scalar(select(func.count()).select_from(Site).where(Site.user_id == user_id, Site.published.is_(True))) or 0
+        return db.scalar(select(func.count()).select_from(Site).where(Site.user_id.in_(ids), Site.published.is_(True))) or 0
     return db.scalar(select(func.coalesce(func.sum(UsageEvent.quantity), 0)).where(
-        UsageEvent.user_id == user_id, UsageEvent.meter == meter, UsageEvent.created_at >= since)) or 0
+        UsageEvent.user_id.in_(ids), UsageEvent.meter == meter, UsageEvent.created_at >= since)) or 0
 
 
 def extra(db: Session, user_id: int, meter: str, now: datetime) -> int:
@@ -115,13 +146,17 @@ def extra(db: Session, user_id: int, meter: str, now: datetime) -> int:
 
 
 def allowance(db: Session, user_id: int, meter: str, now: Optional[datetime] = None) -> dict:
+    """What's left of one meter on the plan that covers this account (all of its owner's projects together)."""
     now = now or utcnow()
-    s = subscription(db, user_id, now)
+    account = db.get(User, user_id)
+    p = payer(db, account) if account else None
+    pid = p.id if p else user_id
+    s = subscription(db, pid, now)
     limit = PLANS[effective_plan(s)]["limits"].get(meter)
-    u = used(db, user_id, meter, s.period_start)
+    u = used(db, covered_ids(db, p) if p else [user_id], meter, s.period_start)
     if limit is None:
         return {"meter": meter, "label": METERS[meter], "limit": None, "used": u, "remaining": None}
-    total = limit + extra(db, user_id, meter, now)
+    total = limit + extra(db, pid, meter, now)
     return {"meter": meter, "label": METERS[meter], "limit": total, "used": u, "remaining": max(total - u, 0)}
 
 
@@ -139,9 +174,12 @@ def charge(db: Session, user: User, meter: str, quantity: int = 1, ref: str = ""
 
 
 def billing_out(db: Session, user: User) -> dict:
-    s = subscription(db, user.id)
+    p = payer(db, user)
+    s = subscription(db, p.id)
     plan = effective_plan(s)
-    return {"plan": s.plan, "plan_name": PLANS[s.plan]["name"], "status": s.status, "effective_plan": plan,
+    projects = covered_ids(db, p)
+    return {"account_id": p.id, "projects_covered": len(projects), "pays_here": p.id == user.id,
+            "plan": s.plan, "plan_name": PLANS[s.plan]["name"], "status": s.status, "effective_plan": plan,
             "period_start": s.period_start.isoformat() + "Z", "period_end": s.period_end.isoformat() + "Z",
             "trial_days_left": max((s.period_end - utcnow()).days, 0) if s.status == "trialing" else None,
             "processor": s.processor, "enforced": enforce(), "payments_enabled": razorpay_ready(),
@@ -205,8 +243,12 @@ def my_billing(user: User = Depends(current_user), db: Session = Depends(get_db)
 
 
 @router.post("/api/billing/checkout")
-def checkout(body: CheckoutIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Start a Razorpay subscription; the frontend opens the returned short_url (or Razorpay Checkout with its id)."""
+def checkout(body: CheckoutIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Start a Razorpay subscription for the account that pays for this project; the frontend opens the returned
+    short_url (or Razorpay Checkout with its id). Only that account's own person can change its plan."""
+    user = payer(db, user)
+    if user.id != request.state.person.id:
+        raise HTTPException(403, "Only the project's owner can change the plan.")
     if body.plan not in PLANS or not PLANS[body.plan]["public"]:
         raise HTTPException(400, "Pick one of the plans.")
     if not razorpay_ready() or not _razorpay_plan(body.plan):
@@ -260,6 +302,8 @@ def set_plan(db: Session, admin: User, user_id: int, plan: str, note: str = "") 
     target = db.get(User, user_id)
     if not target:
         raise HTTPException(404, "User not found.")
+    target = payer(db, target)  # a project's plan is its owner's
+    user_id = target.id
     s = subscription(db, user_id)
     before = s.plan
     now = utcnow()
@@ -279,6 +323,8 @@ def grant_credits(db: Session, admin: User, user_id: int, meter: str, quantity: 
     target = db.get(User, user_id)
     if not target:
         raise HTTPException(404, "User not found.")
+    target = payer(db, target)
+    user_id = target.id
     db.add(CreditGrant(user_id=user_id, meter=meter, quantity=quantity,
                        expires_at=utcnow() + timedelta(days=days), note=note or f"Granted by {admin.email}"))
     staff.record(db, admin, "credits.grant", target, note, {"meter": meter, "quantity": quantity, "days": days})

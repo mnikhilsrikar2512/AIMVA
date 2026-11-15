@@ -22,7 +22,7 @@ import uuid
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -54,6 +54,7 @@ def _project(db: Session, person: User, pid: int, roles=WRITERS) -> tuple:
         raise HTTPException(404, "Project not found.")
     if role not in roles:
         raise HTTPException(403, "Only the project's owner can do that." if roles == ("owner",)
+                            else "Only the project's owner or an admin can do that." if roles == ("owner", "admin")
                             else "You can view this project but not change it.")
     return ws, role
 
@@ -232,6 +233,54 @@ def delete_project(pid: int, body: DeleteIn, request: Request, response: Respons
     return {"ok": True, **out}
 
 
+# ---- inviting one person to the projects the owner picks -------------------------------------------------
+class ProjectInviteIn(BaseModel):
+    email: EmailStr
+    role: Literal["admin", "editor"] = "editor"
+    project_ids: List[int] = Field(min_length=1, max_length=MAX_WORKSPACES)
+
+
+@router.post("/api/projects/invite")
+def invite_to_projects(body: ProjectInviteIn, bg: BackgroundTasks, person: User = Depends(current_person),
+                       db: Session = Depends(get_db)):
+    """Invite one teammate to the projects the owner ticks (any number, from one to all of them), with one email.
+    Every project must be one this person manages; otherwise nothing is changed."""
+    from datetime import timedelta
+    from sqlalchemy import delete
+    from .config import settings
+    from .mailer import send_email
+    from .models import Invite
+    from .workspaces import INVITE_DAYS
+    rate_limit(f"invite:{person.id}", 30, 3600)
+    targets = [_project(db, person, pid, roles=("owner", "admin"))[0] for pid in dict.fromkeys(body.project_ids)]
+    email = body.email.lower()
+    existing = db.scalar(select(User).where(func.lower(User.email) == email, User.kind == "person"))
+    results = []
+    for ws in targets:
+        if existing and role_in(db, existing, ws.id):
+            result = "already"
+        elif existing and existing.is_verified:
+            db.add(Membership(workspace_id=ws.id, member_id=existing.id, role=body.role))
+            result = "added"
+        else:
+            db.execute(delete(Invite).where(Invite.workspace_id == ws.id, func.lower(Invite.email) == email,
+                                            Invite.accepted_at.is_(None)))
+            db.add(Invite(workspace_id=ws.id, email=email, role=body.role, invited_by=person.id,
+                          expires_at=utcnow() + timedelta(days=INVITE_DAYS)))
+            result = "invited"
+        results.append({"id": ws.id, "name": project_name(ws), "result": result})
+    db.commit()
+    names = ", ".join(r["name"] for r in results if r["result"] != "already")
+    if names and existing and existing.is_verified:
+        bg.add_task(send_email, email, f"You now have access to {names} on AIMVA",
+                    f"{person.name} gave you {body.role} access to {names}. Sign in at {settings.public_url}/login")
+    elif names:
+        bg.add_task(send_email, email, f"{person.name} invited you to {names} on AIMVA",
+                    f"Create your account with this email address to join: {settings.public_url}/signup?email={email}\n"
+                    f"The invitation lasts {INVITE_DAYS} days.")
+    return {"email": email, "role": body.role, "projects": results}
+
+
 # ---- revealed modules -------------------------------------------------------------------------------------
 def module_out(key: str, i: int, profile: dict) -> dict:
     return {"key": key, "line": outcome_line(key, profile), "auto_start": i == 0}
@@ -317,21 +366,6 @@ class StartIn(BaseModel):
     project_id: Optional[int] = None
 
 
-def _ai_kind(db: Session, ws: User, idea: str) -> Optional[str]:
-    """When the rules can't place an idea, ask the AI writer to pick one kind. Only an exact kind is accepted."""
-    from .ai_engine import agent_writer
-    write = agent_writer(db, ws.id, "site_reader")
-    if not write:
-        return None
-    try:
-        answer = write(f"Business idea: {idea[:600]}\n\nAnswer with exactly one of: local_service, product_seller, "
-                       "personal_brand, b2b, idea_only, unclear.", "You classify small Indian businesses. One word only.", 10)
-    except Exception:
-        return None
-    word = (answer or "").strip().lower().strip(".`'\" ")
-    return word if word in idea_sense.KINDS else None
-
-
 @router.post("/api/start")
 def start(body: StartIn, bg: BackgroundTasks, request: Request, user: User = Depends(current_user),
           db: Session = Depends(get_db)):
@@ -350,10 +384,9 @@ def start(body: StartIn, bg: BackgroundTasks, request: Request, user: User = Dep
         if not r or r.user_id != ws.id or r.kind != "document":
             raise HTTPException(404, "That file wasn't found.")
     rate_limit(f"start:{person.id}", 10, 3600)
-    read = idea_sense.read_idea(idea, link)
+    from .ai_engine import agent_writer
+    read = idea_sense.read_idea(idea, link, write=agent_writer(db, ws.id, "site_reader"))  # AI first, rules as backup
     profile, modules = read["profile"], read["modules"]
-    if profile["kind"] == "unclear" and idea and (kind := _ai_kind(db, ws, idea)) and kind != "unclear":
-        profile["kind"], modules = kind, idea_sense.REVEAL[kind]
     if not profile["name"]:
         profile["name"] = ws.company if ws.company and ws.company != "New project" else ""
     answers = ws.onboarding_answers or {}

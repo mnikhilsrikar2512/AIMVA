@@ -692,9 +692,13 @@ def list_sites(user: User = Depends(current_user), db: Session = Depends(get_db)
 MAX_VERSIONS = 30
 
 
-def add_version(db: Session, site: Site, note: str, generator: str = "") -> SiteVersion:
+def add_version(db: Session, site: Site, note: str, generator: str = "", by: Optional[int] = None, request: str = "",
+                page: str = "", html: Optional[str] = None) -> SiteVersion:
+    """Keep a copy of the main page (or, with `page`, of one extra page's `html`), with who saved it (`by`, a person's
+    id; None for agents) and, for AI edits, the owner's own words (`request`)."""
     last = db.scalar(select(SiteVersion.number).where(SiteVersion.site_id == site.id).order_by(SiteVersion.number.desc()))
-    v = SiteVersion(site_id=site.id, number=(last or 0) + 1, html=site.html, brief=site.brief or {}, note=note, generator=generator)
+    v = SiteVersion(site_id=site.id, number=(last or 0) + 1, html=site.html if html is None else html, brief=site.brief or {},
+                    note=note, generator=generator, page=page, request=" ".join((request or "").split())[:120], by_id=by)
     db.add(v)
     db.flush()
     old = list(db.scalars(select(SiteVersion).where(SiteVersion.site_id == site.id).order_by(SiteVersion.number.desc()).offset(MAX_VERSIONS)))
@@ -798,7 +802,7 @@ def design_match(body: MatchIn, user: User = Depends(current_user)):
 
 
 @router.post("/api/sites")
-def create_site(b: Brief, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_site(b: Brief, req: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     rate_limit(f"site:{user.id}", 20, 600)
     slug = _slugify(b.business)
     html, source = _generate(db, user, b, slug)
@@ -806,7 +810,7 @@ def create_site(b: Brief, user: User = Depends(current_user), db: Session = Depe
     s = Site(user_id=user.id, name=b.business, slug=slug, brief=b.model_dump(), html=html)
     db.add(s)
     db.flush()
-    add_version(db, s, "Generated", source)
+    add_version(db, s, "Generated", source, person_id(req))
     db.commit()
     if fixed:
         from ..agents import record
@@ -848,25 +852,35 @@ class SitePatch(BaseModel):
     custom_domain: Optional[str] = None
     published: Optional[bool] = None
     note: Literal["Edited HTML", "Edited visually", "Edited with AI"] = "Edited HTML"  # how the version history labels this change
+    request: Optional[str] = Field(None, max_length=600)  # for "Edited with AI": what the owner asked for, in their words
+
+
+def person_id(req: Request) -> Optional[int]:
+    """The signed-in person behind a request (not the project they are working in), for "who made this"."""
+    person = getattr(req.state, "person", None)
+    return person.id if person else None
 
 
 MERGE_WINDOW = 180  # seconds: autosaved visual edits within this window update one version instead of piling up new ones
 
 
-def _merge_or_add_version(db: Session, s: Site, note: str) -> None:
+def _merge_or_add_version(db: Session, s: Site, note: str, by: Optional[int] = None, request: str = "", page: str = "",
+                          html: Optional[str] = None) -> None:
     last = db.scalar(select(SiteVersion).where(SiteVersion.site_id == s.id).order_by(SiteVersion.number.desc()))
-    if note == "Edited visually" and last is not None and last.note == note and last.created_at is not None:
+    if (note == "Edited visually" and last is not None and last.note == note and last.created_at is not None
+            and last.page == page and last.by_id == by):  # one person's autosaves on one page, never two people's
         age = (utcnow() - last.created_at.replace(tzinfo=None)).total_seconds()
         if age < MERGE_WINDOW:
-            last.html = s.html
+            last.html = s.html if html is None else html
             return
-    add_version(db, s, note, "ai" if note == "Edited with AI" else "manual")
+    add_version(db, s, note, "ai" if note == "Edited with AI" else "manual", by,
+                request if note == "Edited with AI" else "", page, html)
 
 
 @router.patch("/api/sites/{site_id}")
-def update_site(site_id: int, body: SitePatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_site(site_id: int, body: SitePatch, req: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     s = _own(db, user, site_id)
-    changes = body.model_dump(exclude_none=True, exclude={"note"})
+    changes = body.model_dump(exclude_none=True, exclude={"note", "request"})
     if "html" in changes and len(changes["html"]) > 3_000_000:
         raise HTTPException(400, "The page is too large (over 3 MB). Remove embedded images or video.")
     html_changed = "html" in changes and changes["html"] != s.html
@@ -879,7 +893,7 @@ def update_site(site_id: int, body: SitePatch, user: User = Depends(current_user
     for k, v in changes.items():
         setattr(s, k, v)
     if html_changed:
-        _merge_or_add_version(db, s, body.note)
+        _merge_or_add_version(db, s, body.note, person_id(req), body.request or "")
     db.commit()
     return site_out(s, True)
 
@@ -917,7 +931,7 @@ AI_EDIT_RULES = ("Keep the same language, the existing CSS classes and CSS varia
 
 
 @router.post("/api/sites/{site_id}/ai-edit")
-def ai_edit(site_id: int, body: AiEditIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def ai_edit(site_id: int, body: AiEditIn, req: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Change part of the page in plain words ("make this darker", "add three FAQs"). With a section, the rewritten
     section comes back for the editor to drop in (and autosave). Without one, the whole page is rewritten and saved."""
     rate_limit(f"site-ai-edit:{user.id}", 40, 600)
@@ -964,9 +978,10 @@ def ai_edit(site_id: int, body: AiEditIn, user: User = Depends(current_user), db
         new = new.replace("</body>", "".join(scripts) + "</body>", 1) if "</body>" in new else new + "".join(scripts)
     if page:
         s.pages = [{**p, "html": new} if p["slug"] == page["slug"] else p for p in s.pages]
+        add_version(db, s, "Edited with AI", "ai", person_id(req), instruction, page["slug"], new)
     else:
         s.html = new
-        add_version(db, s, "Edited with AI", "ai")
+        add_version(db, s, "Edited with AI", "ai", person_id(req), instruction)
     db.commit()
     return {"site": site_out(s, True)}
 
@@ -1054,6 +1069,8 @@ class PageIn(BaseModel):
 class PagePatch(BaseModel):
     title: Optional[str] = Field(None, min_length=2, max_length=60)
     html: Optional[str] = Field(None, max_length=3_000_000)
+    note: Literal["Edited HTML", "Edited visually", "Edited with AI"] = "Edited HTML"
+    request: Optional[str] = Field(None, max_length=600)
 
 
 @router.post("/api/sites/{site_id}/pages")
@@ -1094,10 +1111,14 @@ def add_page(site_id: int, body: PageIn, user: User = Depends(current_user), db:
 
 
 @router.patch("/api/sites/{site_id}/pages/{page}")
-def update_page(site_id: int, page: str, body: PagePatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_page(site_id: int, page: str, body: PagePatch, req: Request, user: User = Depends(current_user),
+                db: Session = Depends(get_db)):
     s = _own(db, user, site_id)
-    _page(s, page)
-    s.pages = [{**p, **body.model_dump(exclude_none=True)} if p["slug"] == page else p for p in s.pages]
+    before = _page(s, page)
+    changes = body.model_dump(exclude_none=True, exclude={"note", "request"})
+    s.pages = [{**p, **changes} if p["slug"] == page else p for p in s.pages]
+    if "html" in changes and changes["html"] != before.get("html"):  # extra pages keep a history too
+        _merge_or_add_version(db, s, body.note, person_id(req), body.request or "", page, changes["html"])
     db.commit()
     return site_out(s, True)
 
@@ -1112,23 +1133,41 @@ def delete_page(site_id: int, page: str, user: User = Depends(current_user), db:
 
 
 @router.post("/api/sites/{site_id}/regenerate")
-def regenerate(site_id: int, b: Brief, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def regenerate(site_id: int, b: Brief, req: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     rate_limit(f"site:{user.id}", 20, 600)
     s = _own(db, user, site_id)
     html, source = _generate(db, user, b, s.slug)
     s.html = _auto_fix(db, user, html, b)[0]
     s.brief, s.name = b.model_dump(), b.business
-    add_version(db, s, "Regenerated", source)
+    add_version(db, s, "Regenerated", source, person_id(req))
     db.commit()
     return {**site_out(s, True), "generator": source}
 
 
+def _page_now(s: Site, slug: str) -> Optional[str]:
+    """The page's html as it is now: the main page for "", an extra page by slug (None once that page is deleted)."""
+    if not slug:
+        return s.html
+    return next((p.get("html") for p in (s.pages or []) if p["slug"] == slug), None)
+
+
 @router.get("/api/sites/{site_id}/versions")
-def list_versions(site_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def list_versions(site_id: int, req: Request, page: Optional[str] = None, user: User = Depends(current_user),
+                  db: Session = Depends(get_db)):
+    """The page's history, newest first. `page` (an extra page's slug, or "" for the main page) narrows it to one page.
+    `by` is the teammate who saved a version, or null when it was the viewer or an agent; `request` is what the owner
+    asked the AI for, in their own words."""
     s = _own(db, user, site_id)
     q = select(SiteVersion).where(SiteVersion.site_id == s.id).order_by(SiteVersion.number.desc())
+    if page is not None:
+        q = q.where(SiteVersion.page == page)
+    rows = list(db.scalars(q))
+    me = person_id(req)
+    ids = {v.by_id for v in rows if v.by_id and v.by_id != me}
+    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(ids))).all()) if ids else {}
     return [{"id": v.id, "number": v.number, "note": v.note, "generator": v.generator, "created_at": v.created_at.isoformat(),
-             "current": v.html == s.html} for v in db.scalars(q)]
+             "page": v.page or "", "request": v.request or "", "by": names.get(v.by_id) or None,
+             "current": v.html == _page_now(s, v.page or "")} for v in rows]
 
 
 def _version(db: Session, s: Site, vid: int) -> SiteVersion:
@@ -1141,15 +1180,22 @@ def _version(db: Session, s: Site, vid: int) -> SiteVersion:
 @router.get("/api/sites/{site_id}/versions/{vid}")
 def get_version(site_id: int, vid: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     v = _version(db, _own(db, user, site_id), vid)
-    return {"id": v.id, "number": v.number, "note": v.note, "html": v.html, "brief": v.brief}
+    return {"id": v.id, "number": v.number, "note": v.note, "html": v.html, "brief": v.brief, "page": v.page or "",
+            "request": v.request or ""}
 
 
 @router.post("/api/sites/{site_id}/versions/{vid}/restore")
-def restore_version(site_id: int, vid: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def restore_version(site_id: int, vid: int, req: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     s = _own(db, user, site_id)
     v = _version(db, s, vid)
+    if v.page:  # an extra page's version goes back into that page only
+        _page(s, v.page)
+        s.pages = [{**p, "html": v.html} if p["slug"] == v.page else p for p in s.pages]
+        add_version(db, s, f"Restored version {v.number}", v.generator, person_id(req), page=v.page, html=v.html)
+        db.commit()
+        return site_out(s, True)
     s.html, s.brief = v.html, v.brief or s.brief
-    add_version(db, s, f"Restored version {v.number}", v.generator)
+    add_version(db, s, f"Restored version {v.number}", v.generator, person_id(req))
     db.commit()
     return site_out(s, True)
 
@@ -1381,7 +1427,7 @@ def _apply_seo(html: str, title: str, desc: str) -> str:
 
 
 @router.post("/api/sites/{site_id}/publish")
-def publish(site_id: int, body: PublishIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def publish(site_id: int, body: PublishIn, req: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     """One-step launch: name, address, SEO, pre-launch checks, then deploy."""
     from ..workspaces import require_approved
     rate_limit(f"publish:{user.id}", 20, 600)
@@ -1400,7 +1446,7 @@ def publish(site_id: int, body: PublishIn, user: User = Depends(current_user), d
     new_html = _apply_seo(s.html, body.seo_title.strip(), body.seo_description.strip())
     if new_html != s.html:
         s.html = new_html
-        add_version(db, s, "SEO updated for launch", "manual")
+        add_version(db, s, "SEO updated for launch", "manual", person_id(req))
     checks_now = site_checks(s, db)
     blockers = [c["detail"] or c["message"] for c in checks_now if c["level"] == "blocker" and not c["ok"]]
     if blockers:

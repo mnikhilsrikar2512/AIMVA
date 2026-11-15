@@ -1,6 +1,7 @@
 """Score how well /api/start reads an owner's idea (kind of business, industry, city), on hand-labelled sets.
 
     python scripts/idea_bench.py          # every set, with each miss listed
+    python scripts/idea_bench.py --ai     # the same, with the AI writer reading first (needs a configured AI key)
 
 ideas_dev.tsv was used while writing app/idea_sense.py; ideas_test.tsv was written before it existed; ideas_fresh*.tsv
 were written after the rules, to catch rules that only fit the first two sets. "kind" decides which modules the
@@ -14,6 +15,7 @@ from app.idea_sense import read_idea, route  # noqa: E402
 
 HERE = os.path.join(os.path.dirname(__file__), "prompt_sets")
 SPLITS = ("dev", "test", "fresh", "fresh2", "fresh3")
+WRITE = None  # set by --ai: the AI writer /api/start uses, so the score is the one owners get
 
 
 def rows(name):
@@ -28,7 +30,7 @@ def score(name, show=True):
     data = rows(name)
     ok = {"kind": 0, "industry": 0, "city": 0}
     for kind, industry, city, idea in data:
-        p = read_idea(idea)["profile"]
+        p = read_idea(idea, write=WRITE)["profile"]
         got = {"kind": p["kind"], "industry": p["industry"], "city": p["city"] or "-"}
         want = {"kind": kind, "industry": industry, "city": city}
         for k in ok:
@@ -49,7 +51,14 @@ def score_routes(name, show=True):
 
 
 def main():
-    print("IDEAS (POST /api/start)")
+    global WRITE
+    if "--ai" in sys.argv:
+        from app.ai_engine import agent_writer
+        from app.db import SessionLocal
+        WRITE = agent_writer(SessionLocal(), None, "site_reader")
+        if not WRITE:
+            sys.exit("No AI engine is configured for site_reader: add a key (docs/AI_KEYS.md) and try again.")
+    print("IDEAS (POST /api/start)" + (", AI first" if WRITE else ", rules only"))
     for split in SPLITS:
         acc, n = score(f"ideas_{split}.tsv")
         if n:
