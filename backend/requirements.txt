@@ -1,7 +1,7 @@
 # Runtime dependencies only (what the Docker image installs). Python 3.13.
 # Tests and tools: pip install -r requirements-dev.txt
 alembic==1.20.1
-annotated-doc==0.0.5
+annotated-doc==0.0.6
 annotated-types==0.7.0
 anyio==4.16.0
 argon2-cffi-bindings==26.1.0
