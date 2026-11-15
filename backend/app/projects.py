@@ -215,16 +215,20 @@ def delete_project_data(db: Session, person: User, ws: User) -> dict:
 
 
 @router.delete("/api/projects/{pid}")
-def delete_project(pid: int, body: DeleteIn, response: Response, person: User = Depends(current_person),
+def delete_project(pid: int, body: DeleteIn, request: Request, response: Response, person: User = Depends(current_person),
                    db: Session = Depends(get_db)):
     """Delete one project. The owner's own account is never deleted here; that is account deletion in Settings."""
     ws, _ = _project(db, person, pid, roles=("owner",))
     if ws.id == person.id or ws.kind != "workspace":
         raise HTTPException(400, "This is your first project. To remove it, delete your account in Settings.")
-    if body.confirm_name.strip().lower() != (ws.company or ws.name).strip().lower():
+    typed = body.confirm_name.strip().lower()
+    names = {n.strip().lower() for n in (project_name(ws), ws.company, ws.name) if n and n.strip()}  # the card shows project_name
+    if typed not in names:
         raise HTTPException(400, "Type the project's name exactly to delete it.")
+    was_active = _active(request, person) == ws.id
     out = delete_project_data(db, person, ws)
-    response.delete_cookie(WORKSPACE_COOKIE, path="/")
+    if was_active:  # deleting another project from the Projects window must not switch the person out of this one
+        response.delete_cookie(WORKSPACE_COOKIE, path="/")
     return {"ok": True, **out}
 
 

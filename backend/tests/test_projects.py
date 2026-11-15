@@ -272,3 +272,28 @@ def test_lead_language_edges():
     assert lead_reply.detect("I don't speak Hindi, please reply in English") == "en"
     assert lead_reply.detect("तुमचा पत्ता सांगा") == "mr-IN"
     assert lead_reply.ready_made("ur-IN", "welcome", type("L", (), {"name": "Ali"})(), "Clinic").startswith("السلام علیکم Ali")
+
+
+def test_delete_accepts_the_name_the_card_shows_and_keeps_the_open_project(auth_client, db, monkeypatch):
+    monkeypatch.setattr("app.routers.agents._run_launch", lambda job_id: None)
+    a = auth_client.post("/api/projects", json={}).json()
+    auth_client.post("/api/start", json={"idea": "Dental clinic in Kukatpally"})
+    shown = next(p["name"] for p in auth_client.get("/api/projects").json() if p["id"] == a["id"])
+    assert shown == "Dental clinic"
+    b = auth_client.post("/api/projects", json={"name": "Bakery"}).json()  # now the open project
+    r = auth_client.request("DELETE", f"/api/projects/{a['id']}", json={"confirm_name": shown})
+    assert r.status_code == 200, r.text
+    assert "aimva_ws" not in r.headers.get("set-cookie", "")  # still inside Bakery
+    assert auth_client.get("/api/auth/me").json()["workspace"]["id"] == b["id"]
+    r = auth_client.request("DELETE", f"/api/projects/{b['id']}", json={"confirm_name": "Bakery"})
+    assert "aimva_ws" in r.headers.get("set-cookie", "")  # deleting the open one does leave it
+
+
+def test_gap_answers_after_start_reach_the_profile(auth_client, monkeypatch):
+    monkeypatch.setattr("app.routers.agents._run_launch", lambda job_id: None)
+    out = auth_client.post("/api/start", json={"idea": "Handmade soaps and skincare sold online"}).json()
+    assert out["gaps"][0] == "customer_languages"
+    auth_client.post("/api/onboarding/answers", json={"answers": {"customer_languages": ["ta-IN", "en"], "customer_area": "Madurai"}})
+    wa = auth_client.get("/api/modules/whatsapp/prompt").json()["prompt"]
+    assert "Tamil" in wa
+    assert "Madurai" in auth_client.get("/api/modules/campaigns/prompt").json()["prompt"]

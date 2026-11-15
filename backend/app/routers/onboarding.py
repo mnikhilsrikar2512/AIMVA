@@ -187,7 +187,16 @@ def save_answers(body: AnswersBody, user: User = Depends(current_user), db: Sess
             new[k] = new[k].strip()
     if "presence" in new:
         new["presence"] = sorted(set(new["presence"]))
-    user.onboarding_answers = {**(user.onboarding_answers or {}), **new}  # a new dict, so the JSON column is saved
+    merged = {**(user.onboarding_answers or {}), **new}  # a new dict, so the JSON column is saved
+    if merged.get("profile") and ("customer_languages" in new or "customer_area" in new):
+        # Gap answers given after /api/start must reach the profile, which the module prompts and reveal lines read.
+        profile = dict(merged["profile"])
+        if "customer_languages" in new:
+            profile["customer_languages"] = new["customer_languages"]
+        if new.get("customer_area"):
+            profile["area"] = new["customer_area"]
+        merged["profile"] = profile
+    user.onboarding_answers = merged
     db.commit()
     return status(db, user)
 
