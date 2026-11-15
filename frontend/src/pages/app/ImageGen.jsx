@@ -168,7 +168,7 @@ export default function ImageGen() {
         <div>
           {busy ? (
             <>
-            <JobProgress className="mb-4" seconds={18} steps={["Reading your sentence…", "Composing the picture…", "Adding light and detail…", "Applying your brand…", "Finishing up…"]} />
+            <JobProgress className="mb-4" seconds={18} label="Making your pictures…" />
             <div className="grid gap-4 sm:grid-cols-2">
               {Array.from({ length: Math.min(Number(form.count), maxCount) }).map((_, i) => (
                 <div key={i} className="card grid aspect-square animate-pulse place-items-center text-sm text-muted">

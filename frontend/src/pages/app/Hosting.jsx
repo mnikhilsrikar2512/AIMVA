@@ -7,7 +7,6 @@ import { Button, Card, Chip, Empty, Field, Modal, PageHeader, ListSkeleton } fro
 import { LoadError } from "../../components/LoadError";
 import { get, patch, post } from "../../lib/api";
 import { useAction, useApi } from "../../lib/hooks";
-import { ApprovalGate } from "../../components/Approval";
 
 const TARGETS = [
   { id: "aimva", label: "AIMVA hosting", note: "Instant, free" },
@@ -76,7 +75,6 @@ export default function Hosting() {
                       </button>
                     </td>
                     <td className="px-5 py-4">
-                      <ApprovalGate kind="site" refId={s.id}>
                       <div className="flex gap-1.5">
                         {TARGETS.map((t) => (
                           <Button key={t.id} variant="ghost" size="sm" busy={deploying === `${t.id}:${s.id}`}
@@ -90,7 +88,6 @@ export default function Hosting() {
                           </Button>
                         ))}
                       </div>
-                      </ApprovalGate>
                     </td>
                   </tr>
                 ))}

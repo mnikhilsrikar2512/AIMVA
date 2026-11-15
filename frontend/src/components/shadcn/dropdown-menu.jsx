@@ -9,7 +9,7 @@ export function DropdownMenuContent({ className, sideOffset = 6, align = "end", 
   return (
     <M.Portal>
       <M.Content sideOffset={sideOffset} align={align}
-        className={cn("z-50 min-w-44 rounded-xl bg-surface p-1 text-sm shadow-[var(--shadow-lift)] outline-none data-[state=open]:animate-[fade_.12s_ease]", className)}
+        className={cn("z-50 min-w-44 rounded-xl bg-surface p-1 text-sm shadow-[var(--shadow-lift)] outline-none data-[state=open]:animate-[appfade_.12s_ease-out]", className)}
         {...props} />
     </M.Portal>
   );
@@ -18,7 +18,7 @@ export function DropdownMenuItem({ className, danger, ...props }) {
   return (
     <M.Item
       className={cn("flex h-8 cursor-pointer select-none items-center gap-2 rounded-lg px-2.5 text-ink outline-none data-[highlighted]:bg-surface-2 data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:text-muted",
-        danger && "text-rose-700 data-[highlighted]:bg-rose-50 [&_svg]:text-rose-600", className)}
+        danger && "text-danger data-[highlighted]:bg-danger/10 [&_svg]:text-danger", className)}
       {...props} />
   );
 }

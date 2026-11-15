@@ -430,7 +430,7 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
       <header className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-2">{left}</div>
         <div className="flex items-center gap-1">
-          <span className={cx("mr-1 hidden items-center gap-1 text-xs sm:flex", status === "error" ? "text-rose-600" : "text-faint")} aria-live="polite">
+          <span className={cx("mr-1 hidden items-center gap-1 text-xs sm:flex", status === "error" ? "text-danger" : "text-faint")} aria-live="polite">
             <StatusIcon className={cx("size-3.5", (status === "saving" || status === "dirty") && "animate-spin")} /> {statusText}
           </span>
           <button type="button" className="btn-subtle btn-sm" onClick={() => send({ type: "undo" })} disabled={!hist.undo} aria-label="Undo" title="Undo (Ctrl/⌘ Z)"><Undo2 className="size-4" /></button>
@@ -487,7 +487,7 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
           const flip = note.x > fw - 300;
           return (
             <div className="absolute z-10" style={{ left: fx + note.x, top }}>
-              <span className={cx("absolute bottom-0 left-0 grid size-6 place-items-center rounded-[50%_50%_50%_2px] text-[11px] font-semibold text-white shadow-md ring-[1.5px] ring-white", note.busy ? "bg-strong" : "bg-violet-600")}>
+              <span className={cx("absolute bottom-0 left-0 grid size-6 place-items-center rounded-[50%_50%_50%_2px] text-[11px] font-semibold text-white shadow-md ring-[1.5px] ring-white", note.busy ? "bg-strong" : "bg-brand")}>
                 {note.busy ? <Loader2 className="size-3 animate-spin" /> : 1}
               </span>
               <form onSubmit={runNote} className={cx("absolute top-2 w-72 max-w-[80vw] rounded-xl bg-surface shadow-xl ring-1 ring-ink/10", flip ? "right-1" : "left-2")}>
@@ -497,7 +497,7 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
                     onChange={(e) => { setNote({ ...note, text: e.target.value }); e.target.style.height = "auto"; e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`; }}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runNote(); } if (e.key === "Escape") setNote(null); }} />
                   <button type="submit" aria-label="Apply" disabled={note.busy || note.text.trim().length < 3}
-                    className="grid size-7 shrink-0 place-items-center rounded-full bg-violet-600 text-white disabled:bg-ink/15"><ArrowUp className="size-3.5" /></button>
+                    className="grid size-7 shrink-0 place-items-center rounded-full bg-brand text-white disabled:bg-ink/15"><ArrowUp className="size-3.5" /></button>
                 </div>
                 {note.busy && <p className="px-3 pb-2 text-xs text-muted">Changing this part of the page…</p>}
               </form>
@@ -510,7 +510,7 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
         <div className="mx-auto flex max-w-3xl flex-col gap-2">
           <div className="flex items-center gap-2 text-xs text-muted">
             <button type="button" onClick={toggleComments} aria-pressed={commenting} title="Click any spot on the page and say what to change"
-              className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold", commenting ? "bg-violet-600 text-white" : "bg-surface-2 text-strong hover:bg-lavender")}>
+              className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold", commenting ? "bg-brand text-white" : "bg-surface-2 text-strong hover:bg-lavender")}>
               <MessageSquarePlus className="size-3.5" /> {commenting ? "Commenting · click the page" : "Comment"}
             </button>
             {commenting ? <span className="truncate">Click any spot, say what should change, press Enter.</span> : target ? (

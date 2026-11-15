@@ -1,5 +1,6 @@
-// Celebrations: real milestones (first page live, first lead, first sale, 10/50/100 leads…), each once per
-// workspace, at most one every 4 hours, never over open work, with rotating words. See design.md section 6.
+// Milestones: real outcomes (first page live, first lead, first sale, 10/50/100 leads…), each once per project, at
+// most one every 4 hours, never over open work. Big ones are one still, typeset moment: no confetti, no animation
+// (design.md 9.2). Smaller ones are a plain toast.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
@@ -8,46 +9,6 @@ import { useAuth } from "../lib/auth";
 import { get } from "../lib/api";
 import { parseServerDate } from "../lib/hooks";
 import { useLeadEvents } from "../lib/live";
-
-/* ---- confetti: a tiny canvas burst, no dependency ------------------------------------------------- */
-const COLORS = ["#0b6b67", "#f4a21c", "#13827a", "#a35700", "#7cc6b8", "#ffd27a"];
-const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-
-export function confetti({ big = false } = {}) {
-  if (reducedMotion()) return;
-  const c = document.createElement("canvas");
-  c.setAttribute("aria-hidden", "true");
-  c.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:80";
-  document.body.appendChild(c);
-  const dpr = window.devicePixelRatio || 1;
-  const W = (c.width = innerWidth * dpr), H = (c.height = innerHeight * dpr);
-  const ctx = c.getContext("2d");
-  const n = big ? 160 : 60;
-  const parts = Array.from({ length: n }, (_, i) => {
-    // Big: from both lower corners towards the middle. Medium: one burst from the top right, near the bell.
-    const left = big ? i % 2 === 0 : false;
-    const x = big ? (left ? 0 : W) : W - 60 * dpr;
-    const y = big ? H * 0.85 : 40 * dpr;
-    const ang = big ? (left ? -Math.PI / 3 : (-2 * Math.PI) / 3) + (Math.random() - 0.5) * 0.7 : Math.PI * (0.55 + Math.random() * 0.5);
-    const sp = (big ? 14 + Math.random() * 12 : 6 + Math.random() * 7) * dpr;
-    return { x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: (4 + Math.random() * 5) * dpr, rot: Math.random() * 6,
-      vr: (Math.random() - 0.5) * 0.3, color: COLORS[i % COLORS.length], shape: i % 3 };
-  });
-  const until = performance.now() + (big ? 1900 : 1200);
-  const tick = (t) => {
-    ctx.clearRect(0, 0, W, H);
-    const fade = Math.max(0, Math.min(1, (until - t) / 500));
-    for (const p of parts) {
-      p.vy += 0.32 * dpr; p.vx *= 0.985; p.vy *= 0.985; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
-      ctx.save(); ctx.globalAlpha = fade; ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color;
-      if (p.shape === 0) { ctx.beginPath(); ctx.arc(0, 0, p.r * 0.6, 0, Math.PI * 2); ctx.fill(); }
-      else ctx.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / (p.shape === 1 ? 2 : 1.2));
-      ctx.restore();
-    }
-    if (t < until) requestAnimationFrame(tick); else c.remove();
-  };
-  requestAnimationFrame(tick);
-}
 
 /* ---- milestones ----------------------------------------------------------------------------------- */
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -118,8 +79,7 @@ export function Celebrations({ onboarding }) {
     const st = load(key) || { seen: [], last: 0 };
     st.seen = [...new Set([...st.seen, m.id])]; st.last = Date.now(); save(key, st);
     const w = m.words(facts);
-    if (m.size === "big") { setMoment({ ...w, id: m.id }); confetti({ big: true }); return; }
-    if (m.size === "medium") confetti();
+    if (m.size === "big") { setMoment({ ...w, id: m.id }); return; }
     toast(w.title, { description: w.text, duration: m.size === "medium" ? 6000 : 4000 });
   }, [key]);
 
@@ -162,12 +122,12 @@ export function Celebrations({ onboarding }) {
 
   if (!moment) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[70] grid place-items-center bg-bg/70 p-6 backdrop-blur-sm animate-[fade_250ms_ease]" onClick={() => setMoment(null)} role="status" aria-live="polite">
-      <div className="max-w-md text-center animate-[rise_500ms_cubic-bezier(.22,1,.36,1)]" onClick={(e) => e.stopPropagation()}>
-        <p className="serif-moment text-4xl leading-tight text-strong sm:text-5xl">{moment.title}</p>
-        <p className="mt-3 text-base text-muted">{moment.text}</p>
-        <div className="mt-6 flex items-center justify-center gap-2">
-          {moment.action && <Link to={moment.action.to} className="btn-primary" onClick={() => setMoment(null)}>{moment.action.label}</Link>}
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-bg p-6" onClick={() => setMoment(null)} role="status" aria-live="polite">
+      <div className="max-w-md text-center" onClick={(e) => e.stopPropagation()}>
+        <p className="serif-moment text-[40px] leading-tight text-strong">{moment.title}</p>
+        <p className="mt-4 inline-block rounded-md bg-accent-soft px-3 py-1.5 text-base text-accent-strong">{moment.text}</p>
+        <div className="mt-8 flex items-center justify-center gap-2">
+          {moment.action && <Link to={moment.action.to} className="btn-accent" onClick={() => setMoment(null)}>{moment.action.label}</Link>}
           <button type="button" className="btn-subtle" onClick={() => setMoment(null)} autoFocus>Back to work</button>
         </div>
       </div>

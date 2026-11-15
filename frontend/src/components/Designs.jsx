@@ -80,7 +80,7 @@ export function DirectionsButton({ getBrief, onPick }) {
       <Button type="button" variant="ghost" onClick={show}><LayoutTemplate className="size-4" /> Show me 3 designs</Button>
       <Modal open={open} onClose={() => setOpen(false)} title="Pick a design" wide="xl">
         <p className="mb-4 text-sm text-muted">Same content, three different structures and styles. The AI writer follows the one you pick, and you can change anything after.</p>
-        {error ? <p className="rounded-xl bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p> : !options ? (
+        {error ? <p className="rounded-xl bg-rose-50 px-4 py-2 text-sm text-danger">{error}</p> : !options ? (
           <div className="grid h-72 place-items-center"><Spinner className="size-6 text-brand" /></div>
         ) : (
           <div className="grid gap-4 md:grid-cols-3">

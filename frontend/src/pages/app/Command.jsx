@@ -40,7 +40,7 @@ function Delta({ value, invert }) {
   const up = value >= 0;
   const good = invert ? !up : up;
   const I = up ? ArrowUpRight : ArrowDownRight;
-  return <span className={cx("inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums", good ? "text-emerald-600" : "text-rose-600")}><I className="size-3.5" />{Math.abs(value)}%</span>;
+  return <span className={cx("inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums", good ? "text-emerald-600" : "text-danger")}><I className="size-3.5" />{Math.abs(value)}%</span>;
 }
 
 function Section({ id, title, sub, actions, children, className }) {
@@ -83,13 +83,12 @@ function Pulse({ k, summary, brief, onBrief, briefBusy }) {
   const winRate = k.leads ? Math.round((k.won / k.leads) * 100) : null;
   return (
     <section className="relative overflow-hidden rounded-[1.75rem] p-3 sm:p-5">
-      <div className="aura pointer-events-none absolute inset-0 opacity-80" aria-hidden="true" />
       <motion.div variants={stagger} initial="hidden" animate="show"
         className="relative grid grid-cols-3 gap-2 sm:grid-cols-[1fr_minmax(70px,0.5fr)_1fr_minmax(70px,0.5fr)_1fr] sm:gap-1">
         <FlowNode label="Ad spend" tone="text-brand" value={<CountUp value={k.spend} format={compact} />} sub={<Delta value={k.spend_change} invert />} />
         <FlowLink active={k.leads > 0} label={k.cpl ? `${inr(k.cpl)} / lead` : k.leads > 0 ? "no spend tracked" : "no leads yet"} />
         <FlowNode label="Leads" tone="text-sky-600" value={<CountUp value={k.leads} />}
-          sub={<span className="inline-flex items-center gap-1.5"><Delta value={k.leads_change} />{k.hot > 0 && <span className="font-semibold text-rose-600">{k.hot} hot</span>}</span>} />
+          sub={<span className="inline-flex items-center gap-1.5"><Delta value={k.leads_change} />{k.hot > 0 && <span className="font-semibold text-danger">{k.hot} hot</span>}</span>} />
         <FlowLink active={k.won > 0} label={winRate !== null ? `${winRate}% won` : "—"} />
         <FlowNode label="Revenue won" tone="text-emerald-600" value={<CountUp value={k.revenue} format={compact} />}
           sub={k.roas ? <span className="font-semibold text-emerald-700">{times(k.roas)} return</span> : `${k.won} won`} />
@@ -148,7 +147,7 @@ function Pacing({ products }) {
                   {/* projected month-end spend */}
                   <span className={cx("absolute -top-1 h-4 w-0.5 rounded-full", over ? "bg-rose-600" : "bg-strong/40")} style={{ left: `calc(${proj}% - 1px)` }} title="Projected month end" />
                 </div>
-                <p className={cx("mt-1 text-xs", over ? "font-semibold text-rose-600" : "text-faint")}>
+                <p className={cx("mt-1 text-xs", over ? "font-semibold text-danger" : "text-faint")}>
                   of {compact(p.monthly_budget)} · on pace for {compact(p.month_projection)}
                 </p>
               </li>
@@ -203,7 +202,7 @@ function ProductCard({ p, selected, onSelect, onEdit }) {
     <motion.div variants={rise} id={`product-${p.id}`} whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 300, damping: 24 }}
       className={cx("card relative flex scroll-mt-6 flex-col p-5 transition-shadow hover:shadow-[var(--shadow-lift)]", selected && "ring-2 ring-brand/60")}>
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand/15 to-peach/25 text-brand"><Package className="size-5" /></span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-surface-2 text-strong"><Package className="size-5" /></span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold text-strong" title={p.name}>{p.name}</p>
           <p className="truncate text-xs text-muted">{p.kind}{p.price ? ` · ${compact(p.price)}` : ""} · {active} live campaign{active === 1 ? "" : "s"}</p>

@@ -1,22 +1,22 @@
-// Ctrl/Cmd+K: go anywhere, make anything, find a lead by name, switch client. The power-user way around the rail.
+// Ctrl/Cmd+K: go anywhere, make anything, find a lead by name, jump to a project. Also "All tools" in the rail.
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Building2, Compass, Eye, Keyboard, LogOut, Plus, Rocket, UserPlus, UserRound } from "lucide-react";
+import { toast } from "sonner";
+import { Bell, Building2, Compass, Eye, Keyboard, LogOut, Plus, Rocket, SquareStack, UserPlus, UserRound } from "lucide-react";
 import { CommandDialog, CommandGroup, CommandItem } from "./shadcn/command";
-import { AddClientDialog } from "./Team";
 import { useAuth } from "../lib/auth";
 import { get } from "../lib/api";
 import { visibleNav } from "../lib/modules";
-import { switchWorkspace, useWorkspaces } from "../lib/workspaces";
+import { openProject, useProjects } from "../lib/projects";
+import { post } from "../lib/api";
 
 
 export function CommandPalette({ onToggleFocus }) {
   const [open, setOpen] = useState(false);
   const [leads, setLeads] = useState(null);
-  const [adding, setAdding] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { list } = useWorkspaces();
+  const { list } = useProjects();
   const isClient = user?.workspace?.role === "client";
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function CommandPalette({ onToggleFocus }) {
   useEffect(() => { if (open && !leads) get("/api/leads").then((l) => setLeads(l.slice(0, 200))).catch(() => setLeads([])); }, [open, leads]);
 
   const go = (to) => { setOpen(false); navigate(to); };
-  const run = (fn) => { setOpen(false); setTimeout(fn, 50); };
+  const run = (fn) => { setOpen(false); setTimeout(() => Promise.resolve().then(fn).catch((e) => toast.error(e.message)), 50); };
 
   return (
     <>
@@ -62,13 +62,14 @@ export function CommandPalette({ onToggleFocus }) {
             ))}
           </CommandGroup>
         )}
-        <CommandGroup heading="Workspace" value="workspace">
-          {list.length > 1 && list.filter((w) => !w.active).map((w) => (
-            <CommandItem key={w.id} value={`switch to ${w.own ? "my business own account" : w.name}`} onSelect={() => run(() => switchWorkspace(w.id, w.own ? "your own account" : w.name))}>
-              <Building2 /> Switch to {w.own ? "my business" : w.name}
+        <CommandGroup heading="Projects" value="projects">
+          {list.length > 1 && <CommandItem value="all projects window businesses" onSelect={() => go("/app/projects")}><SquareStack /> All projects</CommandItem>}
+          {list.length > 1 && list.filter((p) => !p.active).map((p) => (
+            <CommandItem key={p.id} value={`open project ${p.name}`} onSelect={() => run(() => openProject(p))}>
+              <Building2 /> {p.name}
             </CommandItem>
           ))}
-          {!isClient && <CommandItem value="add a client agency workspace" onSelect={() => run(() => setAdding(true))}><Plus /> Add a client</CommandItem>}
+          <CommandItem value="new project business idea start" onSelect={() => run(async () => { await post("/api/projects", {}); window.location.assign("/start?new=1"); })}><Plus /> New project</CommandItem>
           {!isClient && <CommandItem value="invite someone team member colleague" onSelect={() => go("/app/settings?tab=team")}><UserPlus /> Invite someone</CommandItem>}
         </CommandGroup>
         <CommandGroup heading="View" value="view">
@@ -82,7 +83,6 @@ export function CommandPalette({ onToggleFocus }) {
           <CommandItem value="sign out log out" onSelect={() => run(async () => { await logout(); navigate("/"); })}><LogOut /> Sign out</CommandItem>
         </CommandGroup>
       </CommandDialog>
-      <AddClientDialog open={adding} onClose={() => setAdding(false)} />
     </>
   );
 }

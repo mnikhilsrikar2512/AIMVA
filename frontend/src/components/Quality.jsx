@@ -118,7 +118,7 @@ export function ImportBar({ onImported }) {
 const STATUS = {
   ready: [ShieldCheck, "Ready to launch", "text-emerald-700 bg-emerald-50"],
   review: [AlertTriangle, "Worth a quick look before launch", "text-amber-800 bg-amber-50"],
-  blocked: [XCircle, "Fix before you can publish", "text-rose-700 bg-rose-50"],
+  blocked: [XCircle, "Fix before you can publish", "text-danger bg-rose-50"],
 };
 const ICON = { blocker: [XCircle, "text-rose-500"], warning: [AlertTriangle, "text-amber-500"], tip: [Lightbulb, "text-sky-500"] };
 
@@ -207,7 +207,7 @@ export function Rate({ kind, id, initial, className }) {
         <ThumbsUp className="size-3.5" />
       </button>
       <button type="button" onClick={() => send(-1)} aria-label="Needs work" aria-pressed={state?.rating === -1}
-        className={cx("grid size-8 place-items-center rounded-full transition", state?.rating === -1 ? "bg-rose-50 text-rose-600" : "text-faint hover:bg-ink/[0.05] hover:text-strong")}>
+        className={cx("grid size-8 place-items-center rounded-full transition", state?.rating === -1 ? "bg-rose-50 text-danger" : "text-faint hover:bg-ink/[0.05] hover:text-strong")}>
         <ThumbsDown className="size-3.5" />
       </button>
       {asking && (

@@ -182,7 +182,7 @@ export default function Leads() {
                     <p className="flex flex-wrap items-center gap-x-2">
                       <button type="button" className="text-left font-semibold text-strong hover:underline" onClick={(e) => { e.stopPropagation(); openLead(l.id); }}>{l.name || l.email || l.phone || "—"}</button>
                       {fresh.has(l.id) && <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-xs font-bold uppercase text-emerald-600">New</span>}
-                      {l.opted_out && <span className="text-xs font-semibold text-rose-600" title="They replied STOP: no WhatsApp or calls">Opted out</span>}
+                      {l.opted_out && <span className="text-xs font-semibold text-danger" title="They replied STOP: no WhatsApp or calls">Opted out</span>}
                       {l.needs_reply && <span className="text-xs font-semibold text-warm" title="Nobody has answered them yet">{waited(l.waiting_since)}</span>}
                       {l.language && l.language !== "en" && <span className="text-xs text-muted" title="They write in this language; replies are drafted in it">{l.language_name}</span>}
                     </p>

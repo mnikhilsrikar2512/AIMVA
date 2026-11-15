@@ -114,16 +114,16 @@ export default function PublishDialog({ site, open, onClose, onPublished, before
                 {checks.map((c) => (
                   <li key={c.key} className="flex items-center gap-2">
                     {c.ok ? <CheckCircle2 className="size-4 text-emerald-500" /> : c.level === "blocker" ? <XCircle className="size-4 text-rose-500" /> : <AlertTriangle className="size-4 text-amber-500" />}
-                    <span className={cx(c.ok ? "text-ink" : c.level === "blocker" ? "font-medium text-rose-700" : "text-amber-700")}>{c.message}</span>
+                    <span className={cx(c.ok ? "text-ink" : c.level === "blocker" ? "font-medium text-danger" : "text-amber-700")}>{c.message}</span>
                     {!c.ok && c.key === "title" && f.seo_title && <span className="text-xs text-faint">(fixed by the SEO title above)</span>}
                     {!c.ok && c.key === "description" && f.seo_description && <span className="text-xs text-faint">(fixed by the description above)</span>}
                   </li>
                 ))}
               </ul>
             )}
-            {blockers.length > 0 && <p className="mt-2 text-xs text-rose-700">Fix the red items (e.g. add a lead form with a phone or email field) before publishing.</p>}
+            {blockers.length > 0 && <p className="mt-2 text-xs text-danger">Fix the red items (e.g. add a lead form with a phone or email field) before publishing.</p>}
           </div>
-          {error && <p className="rounded-xl bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>}
+          {error && <p className="rounded-xl bg-rose-50 px-4 py-2 text-sm text-danger">{error}</p>}
           <div className="flex justify-end">
             <Button type="submit" busy={busy} disabled={!checks || blockers.length > 0}><Rocket className="size-4" /> {site.published ? "Republish" : "Publish now"}</Button>
           </div>

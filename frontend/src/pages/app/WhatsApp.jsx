@@ -5,9 +5,38 @@ import { Link, useSearchParams } from "react-router-dom";
 import { BadgeCheck, Check, CheckCheck, FlaskConical, LayoutTemplate, MessageCircle, Plus, Send } from "lucide-react";
 import { Button, Card, Empty, Field, Modal, Notice, PageHeader, Spinner, cx } from "../../components/ui";
 import { get, patch, post } from "../../lib/api";
+import { toast } from "sonner";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
 import { useAuth } from "../../lib/auth";
 import { LoadError, LoadErrorBar } from "../../components/LoadError";
+import { useModulePrompt } from "../../components/ModulePrompt";
+import { put } from "../../lib/api";
+
+/**
+ * WhatsApp replies from one prompt (design.md 5.2). The sentence is written from the business profile and says
+ * what the replies will do; Turn on switches on the automatic welcome and follow-ups. Shown until it's on.
+ */
+function RepliesPrompt() {
+  const { data: agents, setData, error } = useApi("/api/agents", []);
+  const [{ prompt, line, loading }] = useModulePrompt("whatsapp");
+  const [busy, setBusy] = useState(false);
+  const a = Array.isArray(agents) ? agents.find((x) => x.kind === "concierge") : null;
+  if (error || !a || a.enabled || loading) return null;
+  const turnOn = async () => {
+    setBusy(true);
+    try {
+      const next = await put("/api/agents/concierge", { enabled: true, mode: "auto" });
+      setData((all) => all.map((x) => (x.kind === "concierge" ? next : x)));
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+  return (
+    <section className="mb-10 max-w-3xl">
+      <p className="text-[17px] leading-relaxed text-strong">{prompt}</p>
+      {line && <p className="mt-2 text-sm text-muted">{line}</p>}
+      <Button variant="accent" className="mt-5" busy={busy} onClick={turnOn}>Turn on</Button>
+    </section>
+  );
+}
 
 
 export default function WhatsApp() {
@@ -69,6 +98,7 @@ export default function WhatsApp() {
           {user?.can_simulate && <Button variant="ghost" onClick={() => setSim(true)}><FlaskConical className="size-4" /> Simulate inbound</Button>}
           <Button onClick={() => setNewChat(true)}><Plus className="size-4" /> New chat</Button>
         </>} />
+      <RepliesPrompt />
       {integError && <LoadErrorBar what="your WhatsApp connection" onRetry={reloadIntegrations} />}
       {!connected && !integLoading && !integError && (
         <Notice tone="green" icon={MessageCircle} action={<Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect number</Link>}>

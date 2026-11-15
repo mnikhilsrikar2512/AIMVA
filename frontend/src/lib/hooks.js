@@ -11,7 +11,7 @@ export function useApi(path, initial = null) {
 
   // Spinner only on the first load; later reloads (filters, live updates) swap data in place.
   const reload = useCallback(async () => {
-    if (!path) return;
+    if (!path) { setLoading(false); return; }
     if (!loaded.current) setLoading(true);
     try {
       setData(await get(path));

@@ -48,7 +48,7 @@ function VideoCard({ a, rating, onChange, onDelete, onComment }) {
         {a.status === "done" || (addingSound && p.silent_url) ? (
           <video src={a.url} controls className="h-full w-full" />
         ) : a.status === "queued" ? (
-          <div className="w-[min(18rem,85%)] rounded-lg bg-surface/95 p-3"><JobProgress startedAt={a.created_at} seconds={150} canLeave steps={["Reading your description…", "Planning the shots…", "Rendering the frames…", "Smoothing the motion…", "Almost there…"]} /></div>
+          <div className="w-[min(18rem,85%)] rounded-lg bg-surface/95 p-3"><JobProgress startedAt={a.created_at} seconds={150} canLeave label="Making your video…" /></div>
         ) : <p className="px-4 text-center text-sm text-rose-300">Render failed{p.error ? `: ${p.error}` : ""}</p>}
         {addingSound && (
           <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-strong">

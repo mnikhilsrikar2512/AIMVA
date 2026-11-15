@@ -159,7 +159,7 @@ export default function Brand() {
                       <button className="grid size-7 place-items-center rounded-full bg-white shadow" title="Make primary"
                         onClick={async () => applyServer(await post(`/api/brand/assets/${l.id}/primary`))}><Star className="size-3.5" /></button>
                     )}
-                    <button className="grid size-7 place-items-center rounded-full bg-white text-rose-600 shadow" title="Delete"
+                    <button className="grid size-7 place-items-center rounded-full bg-white text-danger shadow" title="Delete"
                       onClick={async () => applyServer(await del(`/api/brand/assets/${l.id}`))}><Trash2 className="size-3.5" /></button>
                   </div>
                 </div>
@@ -253,7 +253,7 @@ export default function Brand() {
               {kit.images.map((im) => (
                 <div key={im.id} className="group relative aspect-square overflow-hidden rounded-2xl bg-surface-2">
                   <img src={im.url} alt={im.filename} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                  <button className="absolute right-2 top-2 grid size-7 place-items-center rounded-full bg-white text-rose-600 opacity-0 shadow transition group-hover:opacity-100" title="Delete"
+                  <button className="absolute right-2 top-2 grid size-7 place-items-center rounded-full bg-white text-danger opacity-0 shadow transition group-hover:opacity-100" title="Delete"
                     onClick={async () => applyServer(await del(`/api/brand/assets/${im.id}`))}><Trash2 className="size-3.5" /></button>
                 </div>
               ))}

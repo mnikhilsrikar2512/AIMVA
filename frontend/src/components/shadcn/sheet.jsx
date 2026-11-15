@@ -12,10 +12,10 @@ export const SheetDescription = ({ className, ...p }) => <D.Description classNam
 export function SheetContent({ side = "right", className, children, ...props }) {
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-50 bg-strong/20 data-[state=open]:animate-[fade_.15s_ease]" />
+      <D.Overlay className="fixed inset-0 z-50 bg-strong/20 data-[state=open]:animate-[appfade_.12s_ease-out]" />
       <D.Content
         className={cn(
-          "fixed inset-y-0 z-50 flex w-full max-w-sm flex-col bg-bg shadow-[var(--shadow-lift)] outline-none data-[state=open]:animate-[slidein_.18s_ease]",
+          "fixed inset-y-0 z-50 flex w-full max-w-sm flex-col bg-bg shadow-[var(--shadow-lift)] outline-none data-[state=open]:animate-[appfade_.12s_ease-out]",
           side === "right" ? "right-0 border-l border-line" : "left-0 border-r border-line",
           className,
         )}

@@ -260,7 +260,7 @@ export function TermsPage() {
         "Send spam, mislead people, or pretend to be someone else.",
         "Create images, video or voice of a real person without their permission.",
         "Upload malware, try to get into accounts or systems that aren't yours, or overload the service.",
-        "Copy, resell or rebuild AIMVA, except as an agency running workspaces for your own clients.",
+        "Copy, resell or rebuild AIMVA.",
       ]} />
 
       <H>8. Other companies' platforms</H>

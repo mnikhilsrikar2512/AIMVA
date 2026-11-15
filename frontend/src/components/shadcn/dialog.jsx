@@ -10,12 +10,12 @@ export const DialogClose = D.Close;
 export function DialogContent({ className, children, hideClose, ...props }) {
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-50 bg-strong/25 backdrop-blur-[2px] data-[state=open]:animate-[fade_.15s_ease]" />
+      <D.Overlay className="fixed inset-0 z-50 bg-strong/25 backdrop-blur-[2px] data-[state=open]:animate-[appfade_.12s_ease-out]" />
       <D.Content
         className={cn(
           "fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] w-full overflow-y-auto bg-surface pb-[env(safe-area-inset-bottom)] shadow-[var(--shadow-lift)] outline-none sm:pb-0",
           "rounded-t-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl",
-          "data-[state=open]:animate-[rise_.18s_ease]",
+          "data-[state=open]:animate-[appfade_.12s_ease-out]",
           className,
         )}
         {...props}

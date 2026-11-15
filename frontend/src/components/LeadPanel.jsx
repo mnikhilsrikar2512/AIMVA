@@ -17,10 +17,10 @@ import { FollowUps } from "./Agents";
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
 const STAGE_STYLE = {
   new: "border-sky-500/40 bg-sky-500/15 text-sky-700",
-  contacted: "border-violet-500/40 bg-violet-500/15 text-violet-700",
+  contacted: "border-brand/40 bg-violet-500/15 text-brand",
   qualified: "border-amber-500/40 bg-amber-500/15 text-amber-700",
   won: "border-emerald-500/40 bg-emerald-500/15 text-emerald-700",
-  lost: "border-rose-500/40 bg-rose-500/15 text-rose-700",
+  lost: "border-rose-500/40 bg-rose-500/15 text-danger",
 };
 const SOURCE_TONE = { website: "pink", meta: "blue", google: "green", linkedin: "cyan", whatsapp: "green", voice: "violet", manual: "slate" };
 const KIND = {
@@ -28,7 +28,7 @@ const KIND = {
   form: { icon: FileText, color: "text-pink-600 bg-pink-500/15" },
   ad: { icon: Megaphone, color: "text-sky-600 bg-sky-500/15" },
   whatsapp: { icon: MessageCircle, color: "text-emerald-600 bg-emerald-500/15" },
-  call: { icon: AudioLines, color: "text-violet-600 bg-violet-500/15" },
+  call: { icon: AudioLines, color: "text-brand bg-violet-500/15" },
   stage: { icon: Flag, color: "text-amber-600 bg-amber-500/15" },
   value: { icon: IndianRupee, color: "text-amber-600 bg-amber-500/15" },
   note: { icon: StickyNote, color: "text-slate-600 bg-slate-500/15" },
@@ -124,7 +124,7 @@ function TimelineItem({ item }) {
             {open && (
               <div className="mt-2 space-y-1 rounded-2xl bg-surface-2/60 p-3 text-xs">
                 {transcript.map((t, i) => (
-                  <p key={i}><b className={t.role === "agent" ? "text-cyan-600" : "text-violet-600"}>{t.role === "agent" ? "Agent" : "Lead"}:</b> <span className="text-ink">{t.text}</span></p>
+                  <p key={i}><b className={t.role === "agent" ? "text-cyan-600" : "text-brand"}>{t.role === "agent" ? "Agent" : "Lead"}:</b> <span className="text-ink">{t.text}</span></p>
                 ))}
               </div>
             )}
@@ -274,7 +274,7 @@ export default function LeadPanel({ leadId, onClose, onChanged, onDelete, startR
             {/* Header */}
             <div className="border-b border-line p-5">
               <div className="flex items-start gap-3">
-                <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-lg font-bold text-white">
+                <div className="grid size-12 shrink-0 place-items-center rounded-full bg-surface-2 text-lg font-semibold text-strong ring-1 ring-line">
                   {(lead.name || lead.email || "#")[0].toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -435,7 +435,7 @@ export default function LeadPanel({ leadId, onClose, onChanged, onDelete, startR
                     if (v !== lead.value) act("value", () => patch(`/api/leads/${lead.id}`, { value: v }), "Value updated");
                   }} />
               </label>
-              {onDelete && <button type="button" onClick={() => onDelete(lead)} className="mt-3 block text-xs text-muted underline-offset-2 hover:text-rose-600 hover:underline">Delete this lead</button>}
+              {onDelete && <button type="button" onClick={() => onDelete(lead)} className="mt-3 block text-xs text-muted underline-offset-2 hover:text-danger hover:underline">Delete this lead</button>}
               </>}
             </div>
 

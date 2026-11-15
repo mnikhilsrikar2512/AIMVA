@@ -196,12 +196,12 @@ function TestCall({ agent, onEnded }) {
           {messages.map((m, i) => (
             <motion.div key={i} className={cx("flex gap-2", m.role === "user" && "flex-row-reverse")}
               initial={{ opacity: 0, y: 8, x: m.role === "user" ? 14 : -14 }} animate={{ opacity: 1, y: 0, x: 0 }} transition={{ type: "spring", stiffness: 320, damping: 26 }}>
-              <div className={cx("grid size-7 shrink-0 place-items-center rounded-full", m.role === "agent" ? "bg-cyan-500/15 text-cyan-600" : "bg-violet-500/15 text-violet-600")}>
+              <div className={cx("grid size-7 shrink-0 place-items-center rounded-full", m.role === "agent" ? "bg-cyan-500/15 text-cyan-600" : "bg-violet-500/15 text-brand")}>
                 {m.role === "agent" ? <Bot className="size-4" /> : <UserIcon className="size-4" />}
               </div>
               <div className={cx("max-w-[80%] rounded-2xl px-3.5 py-2 text-sm", m.role === "agent" ? "bg-surface-2 text-ink" : "bg-brand/25 text-strong")}>
                 {m.text}
-                {m.sentiment != null && <span className={cx("ml-2 text-xs", m.sentiment > 0.2 ? "text-emerald-600" : m.sentiment < -0.2 ? "text-rose-600" : "text-faint")}>{m.sentiment > 0 ? "+" : ""}{m.sentiment}</span>}
+                {m.sentiment != null && <span className={cx("ml-2 text-xs", m.sentiment > 0.2 ? "text-emerald-600" : m.sentiment < -0.2 ? "text-danger" : "text-faint")}>{m.sentiment > 0 ? "+" : ""}{m.sentiment}</span>}
               </div>
             </motion.div>
           ))}
@@ -304,7 +304,7 @@ export default function VoiceAgent() {
         {viewCall && (
           <div className="space-y-2 text-sm">
             {viewCall.transcript.map((t, i) => (
-              <p key={i}><b className={t.role === "agent" ? "text-cyan-600" : "text-violet-600"}>{t.role === "agent" ? "Agent" : "Caller"}:</b> <span className="text-ink">{t.text}</span></p>
+              <p key={i}><b className={t.role === "agent" ? "text-cyan-600" : "text-brand"}>{t.role === "agent" ? "Agent" : "Caller"}:</b> <span className="text-ink">{t.text}</span></p>
             ))}
             {Object.keys(viewCall.answers).length > 0 && (
               <div className="mt-4 rounded-2xl bg-surface-2/60 p-3">

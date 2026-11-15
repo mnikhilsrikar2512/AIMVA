@@ -64,7 +64,7 @@ function TemplateCard({ t, module, onUse, onKeep, onDismiss, onDelete, compact }
         <Button type="button" size="sm" onClick={() => onUse(t)}><Wand2 className="size-3.5" /> Use</Button>
         {t.source === "suggested" && onKeep && <Button type="button" size="sm" variant="ghost" onClick={() => onKeep(t)}><Bookmark className="size-3.5" /> Keep</Button>}
         {t.source === "suggested" && onDismiss && <button type="button" className="grid size-8 place-items-center rounded-full text-faint hover:bg-ink/[0.05] hover:text-strong" onClick={() => onDismiss(t)} aria-label="Dismiss"><X className="size-3.5" /></button>}
-        {t.source === "mine" && onDelete && <button type="button" className="ml-auto grid size-8 place-items-center rounded-full text-faint opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100" onClick={() => onDelete(t)} aria-label={`Delete ${t.name}`}><Trash2 className="size-3.5" /></button>}
+        {t.source === "mine" && onDelete && <button type="button" className="ml-auto grid size-8 place-items-center rounded-full text-faint opacity-0 transition hover:bg-danger/10 hover:text-danger group-hover:opacity-100" onClick={() => onDelete(t)} aria-label={`Delete ${t.name}`}><Trash2 className="size-3.5" /></button>}
         {t.uses > 0 && <span className="ml-auto text-xs text-faint">used {t.uses}×</span>}
       </div>
     </motion.div>
@@ -159,7 +159,7 @@ export function TemplateStrip({ module, onApply, title = "Start from a template"
                 <span className="block pr-4 text-sm font-semibold leading-snug text-strong">{t.name}</span>
                 <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-muted">{t.reason || t.description}</span>
                 {(t.recommended || t.source !== "builtin") && <span className={cx("mt-1.5 inline-block rounded-full px-1.5 py-0.5 text-xs font-semibold",
-                  t.source === "suggested" ? "bg-amber-100 text-amber-800" : t.source === "mine" ? "bg-emerald-100 text-emerald-800" : "bg-violet-100 text-violet-700")}>
+                  t.source === "suggested" ? "bg-amber-100 text-amber-800" : t.source === "mine" ? "bg-emerald-100 text-emerald-800" : "bg-lavender text-brand")}>
                   {t.source === "suggested" ? "Suggested" : t.source === "mine" ? "Yours" : "For you"}</span>}
               </motion.button>
             );

@@ -92,7 +92,6 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const { setUser } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const submit = async (e) => {
     e.preventDefault();
@@ -100,10 +99,9 @@ export function LoginPage() {
     setError("");
     try {
       const d = await post("/api/auth/login", { email, password });
-      setUser(d.workspace ? { ...d.user, workspace: d.workspace } : d.user);  // a client may land in their workspace
-      // Every successful sign-in lands on Home. The one exception is an invite link, which must open to be accepted.
-      const from = location.state?.from || "";
-      navigate(from.startsWith("/invite") ? from : "/app", { replace: true });
+      // Where to go next is decided by GuestOnly in App.jsx as soon as the user is set (it reads `landing`):
+      // one project goes to its Home, two or more to the Projects window, and an invite link still opens first.
+      setUser({ ...d.user, landing: d.landing, ...(d.workspace ? { workspace: d.workspace } : {}) });
     } catch (err) {
       if (err.status === 403 && err.data?.needs_verification) {
         devNotice(err.data.dev_code);
@@ -280,8 +278,8 @@ export function VerifyPage() {
     try {
       const d = await post("/api/auth/verify-email", { email, code: c });
       setUser(d.user);
-      // A new account goes to the three onboarding questions first, then Home.
-      navigate(d.user?.industry ? "/app" : "/welcome", { replace: true });
+      // A new account starts with its idea (/start); an account that is already set up goes to the app.
+      navigate(d.user?.industry ? "/app" : "/start", { replace: true });
     } catch (err) {
       setError(err.message);
       setCode("");

@@ -36,7 +36,7 @@ function Steps({ steps, running }) {
       </AnimatePresence>
       {running && (
         <li className="flex items-center gap-3 text-sm text-muted">
-          <CircleDashed className="size-5 animate-spin text-brand [animation-duration:2.4s]" /> Working on the next step…
+          <CircleDashed className="size-5 text-brand" /> Working on the next step…
         </li>
       )}
     </ol>
@@ -80,11 +80,10 @@ export function LaunchCard({ initialWhat = "" } = {}) {
 
   return (
     <Card className="relative overflow-hidden">
-      <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full bg-[radial-gradient(circle,rgba(109,93,252,.18),transparent_65%)]" />
       <div className="relative flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-white"><Rocket className="size-5" /></span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-2 text-strong"><Rocket className="size-5" /></span>
         <div className="min-w-0">
-          <h2 className="font-semibold text-strong">Launch with AIMVA</h2>
+          <h2 className="font-semibold text-strong">Launch from a link or a sentence</h2>
           <p className="text-sm text-muted">Paste your website or describe what you sell. AIMVA builds the landing page, ad drafts, call-back assistant and follow-ups for you.</p>
         </div>
       </div>
