@@ -44,12 +44,12 @@ function ProjectCard({ p, onRename, onArchive, onDelete }) {
   };
   const canManage = ["owner", "admin"].includes(p.role);
   return (
-    <li className="group relative flex flex-col overflow-hidden rounded-[10px] border border-line bg-surface transition-colors hover:border-line-strong">
-      <button type="button" onClick={open} aria-busy={opening || undefined} className="flex flex-1 flex-col text-left outline-offset-[-2px]">
-        <span className="block aspect-[4/3] w-full overflow-hidden border-b border-line bg-surface-2">
+    <li className="group relative flex flex-col">
+      <button type="button" onClick={open} aria-busy={opening || undefined} className="flex flex-1 flex-col text-left">
+        <span className="block aspect-[4/3] w-full overflow-hidden rounded-[10px] bg-surface-2/60">
           {p.thumbnail && !broken ? <img src={p.thumbnail} alt="" loading="lazy" className="size-full object-cover" onError={() => setBroken(true)} /> : <PageSketch />}
         </span>
-        <span className="block px-4 pb-4 pt-3 pr-12">
+        <span className="mt-2 block rounded-md px-3 py-2 pr-12 transition-colors group-hover:bg-surface-2 group-focus-within:bg-surface-2">
           <span className="block truncate text-[15px] font-semibold text-strong">{p.name}</span>
           {p.idea && <span className="mt-0.5 block truncate text-sm text-muted">{p.idea}</span>}
           <span className="mt-2 block text-xs text-muted">
@@ -62,7 +62,7 @@ function ProjectCard({ p, onRename, onArchive, onDelete }) {
         <DropdownMenu>
           <Tooltip content="More">
             <DropdownMenuTrigger asChild>
-              <button type="button" aria-label={`More for ${p.name}`} className="btn-subtle btn-sm absolute bottom-3 right-2 w-8 px-0"><MoreHorizontal className="size-4" /></button>
+              <button type="button" aria-label={`More for ${p.name}`} className="btn-subtle btn-sm absolute bottom-2.5 right-1.5 w-8 px-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"><MoreHorizontal className="size-4" /></button>
             </DropdownMenuTrigger>
           </Tooltip>
           <DropdownMenuContent>
@@ -162,7 +162,7 @@ export default function Projects() {
       {error && !list.length ? <LoadError error={error} what="your projects" onRetry={reload} />
         : loading ? (
           <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3" aria-label="Loading">
-            {[0, 1, 2].map((i) => <li key={i} className="aspect-[4/4.2] rounded-[10px] border border-line bg-surface-2/60" />)}
+            {[0, 1, 2].map((i) => <li key={i} className="aspect-[4/3] rounded-[10px] bg-surface-2/60" />)}
           </ul>
         ) : !list.length ? (
           <p className="text-sm text-muted">{showArchived ? "Nothing archived." : "No projects yet."}</p>
