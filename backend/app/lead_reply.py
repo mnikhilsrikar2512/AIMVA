@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .models import Call, Lead, User, WaMessage, utcnow
 from .services import get_integration
-from .speech import detect_language as _script_language
+from .speech import SCRIPTS as _SCRIPTS
 
 WINDOW = timedelta(hours=24)
 CLOSED = {"won", "lost"}
@@ -28,17 +28,75 @@ CLOSED = {"won", "lost"}
 LANGUAGES = {  # code -> name shown to the business
     "en": "English", "hi-IN": "Hindi", "hi-Latn": "Hinglish", "bn-IN": "Bengali", "ta-IN": "Tamil", "te-IN": "Telugu",
     "gu-IN": "Gujarati", "kn-IN": "Kannada", "ml-IN": "Malayalam", "mr-IN": "Marathi", "pa-IN": "Punjabi", "od-IN": "Odia",
-    "ar-SA": "Arabic",
+    "ur-IN": "Urdu", "ar-SA": "Arabic",
 }
 SCRIPT_OF = {  # languages whose reply must be in their own script
     "hi-IN": r"[ऀ-ॿ]", "mr-IN": r"[ऀ-ॿ]", "bn-IN": r"[ঀ-৿]", "pa-IN": r"[਀-੿]",
     "gu-IN": r"[઀-૿]", "od-IN": r"[଀-୿]", "ta-IN": r"[஀-௿]", "te-IN": r"[ఀ-౿]",
-    "kn-IN": r"[ಀ-೿]", "ml-IN": r"[ഀ-ൿ]", "ar-SA": r"[؀-ۿ]",
+    "kn-IN": r"[ಀ-೿]", "ml-IN": r"[ഀ-ൿ]", "ur-IN": r"[؀-ۿ]", "ar-SA": r"[؀-ۿ]",
 }
-_MARATHI = {"आहे", "आहेत", "मला", "तुम्ही", "पाहिजे", "काय", "आम्ही", "कधी"}
-_HINGLISH = {"hai", "hain", "kya", "kitna", "kitne", "kitni", "chahiye", "mujhe", "aap", "aapka", "aapki", "kab", "kaise",
-             "nahi", "nahin", "haan", "karna", "karo", "raha", "rahi", "mera", "meri", "humein", "abhi", "batao",
-             "bataiye", "bataye", "milega", "milegi", "sakte", "sakta", "wala", "wali", "accha", "acha", "theek", "thik"}
+# Words Marathi uses where Hindi uses something else (Hindi: है, मुझे, कितना, कीमत, जानकारी, कल, बताइए, नहीं...).
+_MARATHI = {"आहे", "आहेत", "आहात", "आहोत", "मला", "तुम्ही", "तुमचा", "तुमची", "तुमचे", "तुमच्या", "आम्ही", "आमचा", "आमचे",
+            "पाहिजे", "काय", "कधी", "किती", "किंमत", "माहिती", "उद्या", "सांगा", "करा", "पाठवा", "द्या", "घ्या", "हवा",
+            "हवे", "हवी", "नको", "नाही", "कुठे", "येईल", "येऊ", "लागेल", "लागतील", "शकतो", "शकता", "आणि", "पण", "बोलू",
+            "बघायचे", "झाले", "झाली", "होईल", "आता", "ना", "भेटता", "रुपये"}
+_MARATHI_ENDINGS = re.compile(r"(?:ायला|ायचे|ायचं|ायची|तील|ाल)$")
+# Arabic-script letters that Urdu uses and Arabic doesn't (ٹ ڈ ڑ ں ے ھ پ چ ژ گ and the Urdu forms of k and y).
+_URDU = re.compile(r"[ٹڈڑںےۓھپچژگکی]")
+# Hindi written in English letters. These are almost never English words; "hai" as the first word is usually a
+# misspelt "hi" ("Hai sir"), so it doesn't count there.
+_HINGLISH = {"hai", "hain", "kya", "kitna", "kitne", "kitni", "chahiye", "chahte", "chahenge", "mujhe", "aap", "aapka",
+             "aapki", "aapke", "kab", "kaise", "kahan", "kaun", "kyun", "nahi", "nahin", "nai", "haan", "han", "karna",
+             "karo", "karein", "kijiye", "dijiye", "raha", "rahi", "rahe", "rahega", "mera", "meri", "mere", "maine",
+             "humein", "hum", "tum", "abhi", "batao", "bata", "bataiye", "bataye", "bhejo", "bhej", "bhejiye", "milega",
+             "milegi", "milenge", "milte", "sakte", "sakta", "sakti", "wala", "wali", "accha", "acha", "theek", "thik",
+             "lagega", "lagegi", "lagenge", "jayega", "jayegi", "hoga", "hogi", "aaya", "aaunga", "aaungi", "aa", "kal",
+             "aaj", "shaam", "subah", "jaldi", "thoda", "paise", "rupaye", "baat", "bolo", "samajh", "ghar", "yeh", "woh",
+             "tha", "thi", "baar", "tak", "hoon", "bhara", "liye", "mein", "aur", "bhi", "zaroor", "kuch", "koi", "jaana",
+             "dekhna"}
+# Count only next to a real Hindi word: short words that are also names, places or English ("Ka Nagar", "Ho Chi Minh").
+_HINGLISH_WEAK = {"bhai", "bhaiya", "ji", "sahab", "yaar", "plz", "sir", "madam", "ka", "ki", "ke", "ko", "ye", "sa", "pe",
+                  "ho", "hu", "hun", "ek", "din", "aa", "h"}
+# "reply in Tamil", "call me in Hindi", "speak Telugu", "Hindi me baat karo" — unless it's "I don't speak Hindi".
+_LANG_NAMES = {"english": "en", "hindi": "hi-IN", "bengali": "bn-IN", "bangla": "bn-IN", "tamil": "ta-IN",
+               "telugu": "te-IN", "gujarati": "gu-IN", "kannada": "kn-IN", "malayalam": "ml-IN", "marathi": "mr-IN",
+               "punjabi": "pa-IN", "odia": "od-IN", "oriya": "od-IN", "urdu": "ur-IN"}
+_LANG = "|".join(_LANG_NAMES)
+_ASK = re.compile(rf"\b(?:reply|replies|respond|answer|write|message|text|in|speak|talk|explain|call(?:back)?(?: me)?)"
+                  rf"\s+(?:to me\s+|me\s+|only\s+)?(?:in\s+)?({_LANG})\b|\b({_LANG})\s+(?:is fine|works|please|only|is ok)\b", re.I)
+_NOT = re.compile(rf"\b(?:don'?t|do not|can'?t|cannot|no|not|never mind)\b[^.?!,]{{0,20}}\b({_LANG})\b", re.I)
+
+
+def _asked_language(text: str) -> Optional[str]:
+    """A language the lead asks for in words. A later ask wins ("Tamil? Never mind, English works")."""
+    refused = {m.group(1).lower() for m in _NOT.finditer(text)}
+    asks = [(m.group(1) or m.group(2)).lower() for m in _ASK.finditer(text)]
+    asks = [a for a in asks if a not in refused]
+    return _LANG_NAMES[asks[-1]] if asks else None
+
+
+def _script(text: str) -> Optional[str]:
+    """The script most of the message is written in, if at least two letters of it are there."""
+    counts = {code: len(re.findall(pattern, text)) for pattern, code in _SCRIPTS}
+    code, n = max(counts.items(), key=lambda kv: kv[1])
+    if n < 2:
+        return None
+    if code == "ar-SA" and _URDU.search(text):
+        return "ur-IN"
+    if code == "hi-IN":
+        words = re.findall(r"[ऀ-ॿ]+", text)
+        if set(words) & _MARATHI or any(_MARATHI_ENDINGS.search(w) for w in words if len(w) > 4):
+            return "mr-IN"
+    return code
+
+
+def _hinglish(text: str) -> bool:
+    words = re.findall(r"[a-z]+", text.lower())
+    if words[:1] == ["hai"]:
+        words = words[1:]
+    strong = sum(w in _HINGLISH for w in words)
+    weak = sum(w in _HINGLISH_WEAK for w in words)
+    return strong >= 2 or (strong == 1 and (weak >= 1 or len(words) <= 6))
 
 
 def wa_number(phone: str) -> str:
@@ -58,16 +116,17 @@ def _contacts(phone: str) -> set:
 
 
 def detect(text: str) -> Optional[str]:
-    """The language a message is written in, when it is clear enough to act on."""
+    """The language a message is written in, or asks for, when it is clear enough to act on. Scored on
+    scripts/prompt_sets/leads_*.tsv: run `python scripts/lead_language_bench.py` after any change here."""
     if not text:
         return None
-    code = _script_language(text)
-    if code == "hi-IN" and set(re.findall(r"[ऀ-ॿ]+", text)) & _MARATHI:
-        return "mr-IN"
+    asked = _asked_language(text)
+    if asked:
+        return asked
+    code = _script(text)
     if code:
         return code
-    words = set(re.findall(r"[a-z]+", text.lower()))
-    if len(words & _HINGLISH) >= 2:
+    if _hinglish(text):
         return "hi-Latn"
     return None
 
@@ -203,6 +262,10 @@ READY = {  # ready-made replies when no AI is available. {name} = first name, {b
               "follow_up": "ନମସ୍କାର {name}, ଆପଣଙ୍କ ପଚରାଉଚରା ବିଷୟରେ ପୁଣି ଯୋଗାଯୋଗ କରୁଛୁ। କିଛି ପ୍ରଶ୍ନ ଥିଲେ ଜଣାନ୍ତୁ, ଆମେ ସାହାଯ୍ୟ କରିବୁ।",
               "visit": "ନମସ୍କାର {name}! ଆପଣ ଦେଖା କରିବାର ସମୟ ସ୍ଥିର କରିବାକୁ ଚାହାଁନ୍ତି କି? ଆପଣଙ୍କ ସୁବିଧାର ଦିନ ଓ ସମୟ ଜଣାନ୍ତୁ।",
               "pricing": "ନମସ୍କାର {name}, ଆପଣଙ୍କ ବଜେଟ୍ ଅନୁସାରେ ଦାମ୍‌ର ବିବରଣୀ ପଠାଇପାରିବୁ। କଥା ହେବା ପାଇଁ ସୁବିଧାଜନକ ସମୟ କେବେ?"},
+    "ur-IN": {"welcome": "السلام علیکم {name}، {business} میں دلچسپی کا شکریہ! آپ سے بات کرنے کا مناسب وقت کب ہوگا؟",
+              "follow_up": "السلام علیکم {name}، آپ کی پوچھ گچھ کے بارے میں دوبارہ رابطہ کر رہے ہیں۔ کوئی سوال ہو تو بتائیں، ہم مدد کریں گے۔",
+              "visit": "السلام علیکم {name}! کیا آپ ملاقات کا وقت طے کرنا چاہیں گے؟ اپنی سہولت کا دن اور وقت بتائیں۔",
+              "pricing": "السلام علیکم {name}، ہم آپ کے بجٹ کے مطابق قیمتوں کی تفصیل بھیج سکتے ہیں۔ بات کرنے کا مناسب وقت کب ہوگا؟"},
 }
 INTENTS = {
     "welcome": "Thank them for their enquiry and ask when is a good time to talk.",

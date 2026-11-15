@@ -220,10 +220,11 @@ def cancel_subscription(sub: Subscription) -> bool:
         return False
 
 
-def erase_account(db: Session, account: User) -> dict:
-    """Revoke, cancel, remove files and delete one account (a person or a client workspace) with all its rows."""
+def erase_account(db: Session, account: User, keep_grants: frozenset = frozenset()) -> dict:
+    """Revoke, cancel, remove files and delete one account (a person or a project) with all its rows.
+    Providers in keep_grants are not revoked (another project still uses that login); their stored token goes anyway."""
     revoked = [i.provider for i in db.scalars(select(Integration).where(Integration.user_id == account.id))
-               if revoke_integration(i)]
+               if i.provider not in keep_grants and revoke_integration(i)]
     sub = db.scalar(select(Subscription).where(Subscription.user_id == account.id))
     cancelled = bool(sub and cancel_subscription(sub))
     # Templates an owner published for everyone stay available to everyone; they just lose their author.
@@ -267,7 +268,13 @@ def delete_account(body: DeleteAccountIn, request: Request, response: Response, 
     from .mailer import send_email
     email, name, pid = person.email, person.name, person.id
     deleted_ws = [ws for ws, shared in owned_workspaces(db, person) if not shared]
-    result = {"revoked": [], "workspaces_deleted": [ws.company or ws.name for ws in deleted_ws], "plan_cancelled": False}
+    result = {"revoked": [], "workspaces_deleted": [ws.company or ws.name for ws in deleted_ws], "plan_cancelled": False,
+              "campaigns_not_paused": [], "pages_still_online": []}
+    from .teardown import stop_everything
+    for acct in [person, *deleted_ws]:  # live ads would keep spending with no account left to pause them
+        stopped = stop_everything(db, acct)
+        result["campaigns_not_paused"] += stopped["campaigns_not_paused"]
+        result["pages_still_online"] += stopped["pages_still_online"]
     for ws in deleted_ws:
         r = erase_account(db, ws)
         result["revoked"] += r["revoked"]

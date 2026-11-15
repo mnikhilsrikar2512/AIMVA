@@ -85,7 +85,7 @@ def landing_workspace(db: Session, person: User) -> Optional[User]:
 
 def ws_out(ws: User, role: str, person: User, active_id: int) -> dict:
     return {"id": ws.id, "name": ws.company or ws.name, "role": role, "own": ws.id == person.id,
-            "active": ws.id == active_id, "require_approval": ws.require_approval}
+            "active": ws.id == active_id, "require_approval": ws.require_approval and settings.agency_features}
 
 
 @router.get("/api/workspaces")
@@ -143,6 +143,8 @@ def update_workspace(wid: int, body: WorkspacePatch, person: User = Depends(curr
         if ws.kind == "workspace":
             ws.name = body.name.strip()
     if body.require_approval is not None:
+        if body.require_approval and not settings.agency_features:
+            raise HTTPException(400, "Client approvals aren't available.")
         ws.require_approval = body.require_approval
     db.commit()
     return ws_out(ws, role_in(db, person, wid), person, wid)
@@ -161,16 +163,23 @@ def delete_workspace(wid: int, body: DeleteIn, response: Response, person: User 
         raise HTTPException(400, "This is your own account, not a client workspace.")
     if body.confirm_name.strip().lower() != (ws.company or ws.name).strip().lower():
         raise HTTPException(400, "Type the workspace's name exactly to delete it.")
-    db.delete(ws)
-    db.commit()
+    # Same path as deleting a project: pause its ads and take its pages down first, never just drop the rows.
+    from .projects import delete_project_data
+    out = delete_project_data(db, person, ws)
     response.delete_cookie(WORKSPACE_COOKIE, path="/")
-    return {"ok": True}
+    return {"ok": True, **out}
 
 
 # ---- People -----------------------------------------------------------------------------------------------
 class InviteIn(BaseModel):
     email: EmailStr
     role: Literal["admin", "editor", "client"]
+
+
+def _agency_only() -> None:
+    """Client approvals and the client role are agency features, off for release 1 (settings.agency_features)."""
+    if not settings.agency_features:
+        raise HTTPException(404, "Not found.")
 
 
 @router.get("/api/workspaces/{wid}/members")
@@ -191,6 +200,8 @@ def members(wid: int, person: User = Depends(current_person), db: Session = Depe
 def invite(wid: int, body: InviteIn, bg: BackgroundTasks, person: User = Depends(current_person), db: Session = Depends(get_db)):
     from .mailer import send_email
     ws = _need(db, person, wid)
+    if body.role == "client" and not settings.agency_features:
+        raise HTTPException(400, "Invite people as an admin or an editor.")
     email = body.email.lower()
     existing = db.scalar(select(User).where(func.lower(User.email) == email, User.kind == "person"))
     if existing and role_in(db, existing, wid):
@@ -276,7 +287,7 @@ def _latest(db: Session, ws: User, kind: str, ref_id: int) -> Optional[Approval]
 def require_approved(db: Session, ws: User, kind: str, ref_id: int) -> None:
     """When the workspace asks for client sign-off, block publishing until the latest request is approved
     and the content hasn't changed since."""
-    if not ws.require_approval:
+    if not ws.require_approval or not settings.agency_features:
         return
     a = _latest(db, ws, kind, ref_id)
     obj = db.get(KINDS[kind], ref_id)
@@ -287,7 +298,7 @@ def require_approved(db: Session, ws: User, kind: str, ref_id: int) -> None:
 def keep_approved(db: Session, ws: User, kind: str, ref_id: int) -> None:
     """Publishing itself rewrites a page (new address in the lead form, SEO tags). Those are part of the approved
     launch, so move the approval's fingerprint along with them. The caller commits."""
-    if not ws.require_approval:
+    if not ws.require_approval or not settings.agency_features:
         return
     a, obj = _latest(db, ws, kind, ref_id), db.get(KINDS[kind], ref_id)
     if a and obj and a.status == "approved":
@@ -297,7 +308,7 @@ def keep_approved(db: Session, ws: User, kind: str, ref_id: int) -> None:
 def approval_state(db: Session, ws: User, kind: str, ref_id: int) -> dict:
     """Where one page or campaign stands with the client, for the Publish / Launch button.
     state: none (never sent), pending, changes (client asked for changes), approved, edited (approved, then changed)."""
-    if not ws.require_approval:
+    if not ws.require_approval or not settings.agency_features:
         return {"required": False, "state": "approved", "approval": None}
     a = _latest(db, ws, kind, ref_id)
     if not a or a.status == "withdrawn":
@@ -335,6 +346,7 @@ class ApprovalIn(BaseModel):
 def request_approval(body: ApprovalIn, request: Request, bg: BackgroundTasks, ws: User = Depends(current_user),
                      db: Session = Depends(get_db)):
     from .mailer import send_email
+    _agency_only()
     obj = _object(db, ws, body.kind, body.ref_id)
     if request.state.role == "client":
         raise HTTPException(403, "Only the agency sends things for approval.")
@@ -356,6 +368,7 @@ def request_approval(body: ApprovalIn, request: Request, bg: BackgroundTasks, ws
 
 @router.get("/api/approvals")
 def list_approvals(status: str = "", preview: bool = False, ws: User = Depends(current_user), db: Session = Depends(get_db)):
+    _agency_only()
     q = select(Approval).where(Approval.workspace_id == ws.id)
     if status:
         q = q.where(Approval.status == status)
@@ -370,7 +383,7 @@ def list_approvals(status: str = "", preview: bool = False, ws: User = Depends(c
 def approval_status(kind: Literal["campaign", "site", "asset"], ref_id: int, ws: User = Depends(current_user),
                     db: Session = Depends(get_db)):
     _object(db, ws, kind, ref_id)
-    return approval_state(db, ws, kind, ref_id)
+    return approval_state(db, ws, kind, ref_id)  # always answers: off means {"required": false, "state": "approved"}
 
 
 class DecideIn(BaseModel):
@@ -382,6 +395,7 @@ class DecideIn(BaseModel):
 def decide(aid: int, body: DecideIn, request: Request, bg: BackgroundTasks, ws: User = Depends(current_user),
            db: Session = Depends(get_db)):
     from .mailer import send_email
+    _agency_only()
     if request.state.role == "editor":
         raise HTTPException(403, "The client (or the workspace owner on their behalf) decides approvals.")
     a = db.get(Approval, aid)

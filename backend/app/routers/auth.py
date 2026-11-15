@@ -181,7 +181,9 @@ def login(body: LoginIn, request: Request, response: Response, bg: BackgroundTas
         return {"needs_verification": True, "email": user.email, **{k: v for k, v in info.items() if k == "dev_code"}}
     set_session(response, user)
     out = _session_reply(request, user)
-    if not request.cookies.get(WORKSPACE_COOKIE) and (ws := landing_workspace(db, user)):
+    from ..projects import landing
+    out["landing"] = landing(db, user)  # "projects" with two or more open projects, else "home" (PRD P-5)
+    if out["landing"] == "home" and not request.cookies.get(WORKSPACE_COOKIE) and (ws := landing_workspace(db, user)):
         response.set_cookie(WORKSPACE_COOKIE, str(ws.id), httponly=True, secure=settings.cookie_secure, samesite="lax",
                             max_age=settings.session_days * 86400, path="/")
         out["workspace"] = {"id": ws.id, "name": ws.company or ws.name, "role": role_in(db, user, ws.id)}

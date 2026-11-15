@@ -1,3 +1,4 @@
+import pytest
 """scripts/db.py: the demo data must work through the real API (sign-in, roles, workspaces, approvals, public pages),
 and unseed must remove all of it while leaving real accounts alone."""
 from sqlalchemy import func, select
@@ -6,6 +7,14 @@ from app import models as M
 from scripts import db as dbtool
 
 from .conftest import make_client, signup_and_verify
+
+
+@pytest.fixture(autouse=True)
+def _agency_features_on(monkeypatch):
+    """These tests cover the agency features (client role, approvals), which are off by default for release 1
+    but kept in the code; turn them on here so they stay tested."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "agency_features", True)
 
 PW = dbtool.DEFAULT_PASSWORD
 

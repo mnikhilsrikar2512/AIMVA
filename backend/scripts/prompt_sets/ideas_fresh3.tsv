@@ -1,0 +1,42 @@
+# kind	industry	city	idea  (fresh3: written after the third round of rules; the final unseen score, nothing tuned on it)
+# 2026-11-15: "ek restaurant kholna hai Pune me" was first labelled city "-"; it names Pune, so corrected after scoring.
+local_service	healthcare	Hyderabad	Hair transplant clinic, Jubilee Hills
+local_service	healthcare	-	Maternity and child hospital with 30 beds
+local_service	healthcare	Kochi	Dental implant centre in Ernakulam
+local_service	services	-	Pilates and zumba studio for women
+local_service	services	Bengaluru	Electric bike rental in Koramangala
+local_service	services	-	Home cleaning and sofa shampooing
+local_service	services	Jaipur	Heritage hotel in Jaipur for weddings
+local_service	services	-	Kids birthday party venue with play area
+local_service	education	-	Online and offline CA coaching
+local_service	education	Chennai	Swimming classes in Adyar for kids
+local_service	real_estate	Hyderabad	Open plots with HMDA approval near Shadnagar, Hyderabad
+local_service	real_estate	Pune	Luxury 4 BHK apartments in Kharadi
+product_seller	retail	-	Handmade terracotta jewellery sold through Instagram
+product_seller	retail	-	Protein bars made with dates, no sugar
+product_seller	retail	Delhi	Wedding lehengas store in Chandni Chowk, Delhi
+product_seller	retail	-	Refurbished laptops for students
+product_seller	retail	-	Ladies footwear brand
+product_seller	retail	-	Natural honey from Kerala farms, shipped anywhere
+personal_brand	other	-	Yoga teacher with online batches
+personal_brand	other	-	Celebrity hairstylist
+personal_brand	healthcare	-	Dr. Kavya, dermatologist, want to be known for acne care
+personal_brand	other	-	Wildlife photographer selling prints and workshops
+personal_brand	other	-	Poet and spoken word artist
+b2b	saas	-	School management software
+b2b	other	-	We make corrugated boxes for FMCG companies
+b2b	other	Ahmedabad	Textile machinery spare parts supplier in Ahmedabad
+b2b	other	-	Security guard services for apartments and offices
+b2b	saas	-	WhatsApp automation platform for D2C brands
+idea_only	other	-	I want to start a bakery
+idea_only	retail	-	Planning to sell organic baby food online
+idea_only	healthcare	Bengaluru	Thinking of opening a physio clinic in Bangalore
+idea_only	other	-	thinking of a travel company for senior citizens
+unclear	other	-	need customers fast
+unclear	other	-	ads
+local_service	healthcare	Warangal	వరంగల్ లో దంత వైద్యశాల
+product_seller	retail	-	ఆన్‌లైన్‌లో బట్టలు అమ్ముతున్నాము
+local_service	education	Indore	इंदौर में हमारा कोचिंग क्लास है
+idea_only	other	Pune	ek restaurant kholna hai Pune me
+product_seller	retail	-	hum gharelu masale bechte hai
+local_service	services	Madurai	மதுரையில் உணவகம்

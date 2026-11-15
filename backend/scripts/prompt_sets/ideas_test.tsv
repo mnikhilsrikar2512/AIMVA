@@ -1,0 +1,59 @@
+# kind	industry	city	idea  (held-out: written before app/idea_sense.py existed, never used to tune it)
+# kind: local_service | product_seller | personal_brand | b2b | idea_only | unclear. city "-" = none given.
+local_service	healthcare	Hyderabad	Dental clinic in Kukatpally, Hyderabad doing implants and braces
+local_service	healthcare	Pune	Physiotherapy centre in Kothrud, Pune
+local_service	services	Bengaluru	Unisex salon in Indiranagar, Bangalore
+local_service	services	Chennai	We run a gym in Anna Nagar Chennai with personal trainers
+local_service	education	Kota	NEET coaching institute in Kota
+local_service	education	Delhi	Spoken English classes for working professionals in Laxmi Nagar, Delhi
+local_service	real_estate	Hyderabad	Real estate agent selling 2 and 3 BHK flats in Gachibowli
+local_service	real_estate	Mumbai	Builder with a new residential project in Thane
+local_service	services	Ahmedabad	AC repair and service in Ahmedabad
+local_service	services	Kochi	Wedding photography studio in Kochi
+local_service	healthcare	Lucknow	Eye hospital in Gomti Nagar Lucknow
+local_service	services	Jaipur	Pest control services in Jaipur
+local_service	education	-	Play school and daycare for kids aged 2 to 5
+local_service	services	Kolkata	Bengali restaurant in Salt Lake, Kolkata
+local_service	healthcare	-	Skin and hair clinic offering laser treatments
+product_seller	retail	-	Handmade soaps and skincare sold online
+product_seller	retail	Surat	We sell sarees from Surat on Instagram and WhatsApp
+product_seller	retail	Bengaluru	Home bakery in Whitefield, cakes delivered same day
+product_seller	retail	-	D2C brand of millet snacks
+product_seller	retail	Jaipur	Silver jewellery boutique in Jaipur, ship across India
+product_seller	retail	-	Organic cold-pressed oils, delivered to your door
+product_seller	retail	Guntur	Homemade pickles from Guntur, shipping pan India
+product_seller	retail	Hyderabad	Furniture showroom in Hyderabad
+product_seller	retail	-	Online store for kids' clothes
+personal_brand	other	-	I'm a fitness influencer with 50k followers on Instagram
+personal_brand	other	-	Career coach helping freshers crack interviews
+personal_brand	healthcare	-	Dr. Meera Iyer, gynaecologist, building my personal brand
+personal_brand	other	-	YouTuber teaching stock market basics in Telugu
+personal_brand	other	-	Freelance chartered accountant for startups
+personal_brand	other	-	Motivational speaker and author
+b2b	saas	-	HR software for small companies
+b2b	other	Rajkot	Manufacturer of stainless steel kitchen equipment in Rajkot
+b2b	other	-	IT staffing and recruitment for tech companies
+b2b	saas	Bengaluru	Bengaluru-based SaaS for restaurant billing
+b2b	other	Ludhiana	Wholesale supplier of hosiery in Ludhiana
+b2b	other	Chennai	Industrial packaging manufacturer, Chennai
+b2b	other	-	Logistics company offering warehousing to e-commerce brands
+idea_only	other	Hyderabad	I want to start a cloud kitchen in Madhapur
+idea_only	other	-	Planning to launch a pet grooming business
+idea_only	education	-	Thinking of starting online coding classes for kids
+idea_only	retail	-	I have an idea for a subscription box of Indian snacks
+idea_only	healthcare	Pune	Want to open a dental clinic in Pune next year
+unclear	other	-	hello
+unclear	other	-	business
+unclear	other	-	test
+local_service	healthcare	Hyderabad	మాది హైదరాబాద్‌లో డెంటల్ క్లినిక్
+local_service	services	-	మా బ్యూటీ పార్లర్ కి కస్టమర్లు కావాలి
+product_seller	retail	-	మేము చీరలు ఆన్‌లైన్‌లో అమ్ముతాము
+local_service	healthcare	Delhi	मेरा दिल्ली में डेंटल क्लिनिक है
+local_service	education	Patna	पटना में कोचिंग सेंटर चलाते हैं
+product_seller	retail	-	हम हाथ से बने गहने ऑनलाइन बेचते हैं
+idea_only	other	-	मैं एक कैफे खोलना चाहता हूँ
+local_service	services	Indore	Indore mein mera salon hai
+product_seller	retail	-	ghar ka bana achaar bechte hai online
+idea_only	other	Lucknow	Lucknow mein tiffin service shuru karna chahta hu
+local_service	real_estate	Chennai	சென்னையில் வீடு மனைகள் விற்கிறோம்
+local_service	services	Bengaluru	https://example.com - yoga studio in Koramangala

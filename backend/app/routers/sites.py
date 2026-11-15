@@ -1417,9 +1417,13 @@ def publish(site_id: int, body: PublishIn, user: User = Depends(current_user), d
 
 @router.delete("/api/sites/{site_id}")
 def delete_site(site_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    db.delete(_own(db, user, site_id))
+    from ..teardown import take_down_site
+    s = _own(db, user, site_id)
+    offline = take_down_site(db, s)  # a Netlify copy would otherwise stay online with no way to remove it here
+    url = s.deploy_url
+    db.delete(s)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "still_online": None if offline else url}
 
 
 class DeployIn(BaseModel):

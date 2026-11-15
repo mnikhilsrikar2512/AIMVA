@@ -68,6 +68,9 @@ class Settings:
     team_url = _env("TEAM_URL").rstrip("/")
     cookie_secure = _env("COOKIE_SECURE", "false").lower() == "true"
     session_days = int(_env("SESSION_DAYS", "7"))
+    # Agency features (client role, client approvals). Off for release 1: AIMVA is for business owners only
+    # (owner decision 2026-11-15). The code and tables stay so the decision can be reversed without a migration.
+    agency_features = _env("AGENCY_FEATURES", "false").lower() == "true"
     # Owners who can see platform-wide quality and usage metrics (comma-separated emails).
     admin_emails = {e.strip().lower() for e in _env("ADMIN_EMAILS").split(",") if e.strip()}
 
