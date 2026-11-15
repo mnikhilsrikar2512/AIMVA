@@ -1,0 +1,78 @@
+# language	lead message  (held-out set: written before app/lead_reply.py detect() was changed, never used to tune it)
+# The label is the language AIMVA should reply in. "en" also covers "not sure", because English is the fallback.
+en	Hi, I saw your ad. What is the price?
+en	Interested. Please share details
+en	Can I book an appointment for tomorrow evening?
+en	Is the 2BHK still available?
+en	hi
+en	Price?
+en	Please call me after 6 pm
+en	What are your timings on Sunday?
+en	Do you deliver to Kondapur?
+en	Need a quote for 50 pieces
+en	ok thanks
+en	Namaste, I want to know about the course fees
+en	Hello sir, is the offer valid till Sunday?
+en	I have a toothache, can I come today?
+en	Send me the brochure please
+en	Is there any discount for students?
+hi-Latn	price kya hai
+hi-Latn	Rate batao bhai
+hi-Latn	kitne ka hai ye
+hi-Latn	mujhe details chahiye
+hi-Latn	Sir appointment mil sakta hai kal?
+hi-Latn	flat ka rate kya h
+hi-Latn	bhaiya delivery kab tak hogi
+hi-Latn	kya aap ghar pe aa sakte ho
+hi-Latn	Haan ji interested hu, call karo
+hi-Latn	koi discount hai kya
+hi-Latn	Main kal aaunga, timing kya hai
+hi-Latn	2bhk ka price bata dijiye
+hi-Latn	fees kitni hai course ki
+hi-Latn	Abhi baat kar sakte hai?
+hi-Latn	plz details bhejiye
+hi-Latn	mere area me service hai kya
+hi-IN	कीमत क्या है?
+hi-IN	मुझे जानकारी चाहिए
+hi-IN	कल अपॉइंटमेंट मिल सकता है क्या
+hi-IN	नमस्ते, फ्लैट का रेट बताइए
+hi-IN	डिलीवरी कब तक होगी
+hi-IN	मैं शाम को कॉल करूँगा
+mr-IN	किंमत किती आहे?
+mr-IN	मला माहिती पाहिजे
+mr-IN	उद्या भेटायला येऊ शकतो का?
+mr-IN	फ्लॅट अजून उपलब्ध आहे का
+mr-IN	कृपया मला कॉल करा
+mr-IN	तुमचा पत्ता सांगा
+bn-IN	দাম কত?
+bn-IN	আমাকে বিস্তারিত জানান
+bn-IN	কাল কি অ্যাপয়েন্টমেন্ট পাওয়া যাবে?
+ta-IN	விலை என்ன?
+ta-IN	எனக்கு விவரங்கள் வேண்டும்
+ta-IN	நாளை வர முடியுமா?
+te-IN	ధర ఎంత?
+te-IN	నాకు వివరాలు కావాలి
+te-IN	రేపు అపాయింట్మెంట్ దొరుకుతుందా?
+te-IN	ఫ్లాట్ ఇంకా ఉందా
+gu-IN	કિંમત કેટલી છે?
+gu-IN	મને વિગતો જોઈએ છે
+kn-IN	ಬೆಲೆ ಎಷ್ಟು?
+kn-IN	ನನಗೆ ವಿವರಗಳು ಬೇಕು
+ml-IN	വില എത്രയാണ്?
+ml-IN	എനിക്ക് വിവരങ്ങൾ വേണം
+pa-IN	ਕੀਮਤ ਕਿੰਨੀ ਹੈ?
+pa-IN	ਮੈਨੂੰ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ
+od-IN	ଦାମ କେତେ?
+ur-IN	قیمت کیا ہے؟
+ur-IN	مجھے تفصیلات چاہئیں
+ur-IN	کل اپوائنٹمنٹ مل سکتی ہے؟
+ar-SA	كم السعر؟
+ar-SA	أريد معلومات عن الشقة
+te-IN	Hi sir ధర ఎంత
+hi-IN	Hello, 2BHK का price क्या है?
+ta-IN	Sir, விலை எவ்வளவு? Please tell
+en	I don't speak Hindi, please reply in English
+ta-IN	Please call me in Tamil
+te-IN	Can someone explain in Telugu?
+en	Hai, is this available?
+en	Is the price in INR?

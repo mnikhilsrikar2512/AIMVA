@@ -1,0 +1,45 @@
+# kind	industry	city	idea  (fresh2: written after the second round of rules; nothing tuned on it)
+# 2026-11-15: "Food blogger in Hyderabad" was first labelled city "-"; it names Hyderabad, so corrected after scoring.
+local_service	healthcare	Bengaluru	we r a small dental clinic near marathahalli bangalore, want more patients for aligners
+local_service	healthcare	-	Ayurvedic panchakarma centre
+local_service	healthcare	Chennai	Fertility clinic in Velachery
+local_service	healthcare	-	Veterinary hospital for dogs and cats
+local_service	services	Kolkata	Home tutors and nannies agency in Kolkata
+local_service	services	-	Event decorators for birthdays and baby showers
+local_service	services	Hyderabad	Biryani restaurant in Dilsukhnagar, dine in and takeaway
+local_service	services	-	Modular kitchen and wardrobe installation
+local_service	services	Ahmedabad	Banquet hall for weddings in Ahmedabad
+local_service	education	Pune	Coding bootcamp in Baner for college students
+local_service	education	-	Chess academy for kids
+local_service	real_estate	Noida	2/3 BHK ready to move flats in Noida extension
+local_service	real_estate	-	Farm land and weekend homes near the city
+product_seller	retail	-	We make cotton kurtis and sell on Meesho and Instagram
+product_seller	retail	Mumbai	Premium tea brand from Mumbai, sold in 200 stores and online
+product_seller	retail	-	Spices and masalas, homemade, sending all over India
+product_seller	retail	-	Second-hand iPhones with warranty
+product_seller	retail	Hyderabad	Mobile shop in Ameerpet
+product_seller	retail	-	Indoor plants and pots nursery with delivery
+personal_brand	other	-	Classical singer who teaches online
+personal_brand	other	-	I'm a wedding photographer and want my portfolio out there
+personal_brand	other	-	Tarot reader
+personal_brand	healthcare	-	Psychologist offering online therapy
+personal_brand	other	Hyderabad	Food blogger in Hyderabad
+b2b	saas	-	Payroll and attendance software for SMEs
+b2b	other	-	We supply raw cashews to processors
+b2b	other	Pune	Auto parts manufacturer, Chakan Pune
+b2b	other	-	Recruitment agency for nurses going to the UK
+b2b	other	-	Facility management services for IT parks
+idea_only	other	-	Want to start a dog daycare
+idea_only	retail	-	planning an online store for handmade jewellery
+idea_only	education	Hyderabad	Thinking of opening a coaching centre in Kukatpally for bank exams
+idea_only	other	-	Idea: a mobile car wash app
+unclear	other	-	grow my sales
+unclear	other	-	please help with leads
+local_service	healthcare	Hyderabad	మాకు హైదరాబాద్ లో పిల్లల ఆసుపత్రి ఉంది
+product_seller	retail	-	మేము ఇంట్లో తయారు చేసిన స్వీట్లు అమ్ముతాము
+local_service	services	Delhi	दिल्ली में हमारा ब्यूटी सैलून है
+idea_only	other	-	मैं एक जिम खोलना चाहती हूँ
+product_seller	retail	-	hum online kurtis bechte hai
+local_service	education	Patna	Patna mein coaching institute hai
+local_service	real_estate	Bengaluru	ಬೆಂಗಳೂರಿನಲ್ಲಿ ಫ್ಲಾಟ್ ಮಾರಾಟ
+local_service	healthcare	Chennai	சென்னையில் கண் மருத்துவமனை

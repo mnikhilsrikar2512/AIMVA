@@ -132,15 +132,19 @@ class ProfileIn(BaseModel):
     goal: Goal = "more_leads"
 
 
+def starter_voice_agent(db: Session, user: User) -> None:
+    """Give a new business a ready-to-test voice agent written for its industry (once)."""
+    if not _count(db, VoiceAgent, user.id):
+        t = TEMPLATES.get(user.industry or "other", TEMPLATES["other"])["agent"]
+        db.add(VoiceAgent(user_id=user.id, name=f"{(user.company or 'Your').strip()} assistant", language="en-IN",
+                          greeting=t["greeting"], questions=t["questions"],
+                          instructions="You are a friendly, concise assistant. Keep replies under 2 sentences."))
+
+
 @router.post("/profile")
 def save_profile(body: ProfileIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     user.company, user.industry, user.goal = body.company.strip(), body.industry, body.goal
-    # Give new users a ready-to-test voice agent written for their industry.
-    if not _count(db, VoiceAgent, user.id):
-        t = TEMPLATES[body.industry]["agent"]
-        db.add(VoiceAgent(user_id=user.id, name=f"{body.company.strip()} assistant", language="en-IN",
-                          greeting=t["greeting"], questions=t["questions"],
-                          instructions="You are a friendly, concise assistant. Keep replies under 2 sentences."))
+    starter_voice_agent(db, user)
     db.commit()
     return status(db, user)
 
@@ -161,6 +165,12 @@ class AnswersIn(BaseModel):
     agency_name: Optional[str] = Short
     monthly_budget: Optional[Literal["none", "lt25k", "25k_1l", "gt1l"]] = None
     team_size: Optional[Literal["solo", "small", "large"]] = None
+    # The idea-first setup's follow-up questions (design.md 3.2), asked only when /api/start couldn't fill them.
+    customer_languages: Optional[List[Literal["en", "hi-IN", "hi-Latn", "bn-IN", "ta-IN", "te-IN", "gu-IN", "kn-IN",
+                                              "ml-IN", "mr-IN", "pa-IN", "od-IN", "ur-IN"]]] = Field(None, max_length=5)
+    customer_area: Optional[str] = Short
+    reply_owner: Optional[Literal["me", "someone", "aimva"]] = None
+    ads_today: Optional[Literal["none", "self", "someone"]] = None
 
 
 class AnswersBody(BaseModel):
@@ -172,7 +182,7 @@ def save_answers(body: AnswersBody, user: User = Depends(current_user), db: Sess
     new = body.answers.model_dump(exclude_none=True)
     if "handles" in new:
         new["handles"] = {k: v.strip()[:300] for k, v in new["handles"].items() if v.strip()}
-    for k in ("website", "agency_name"):
+    for k in ("website", "agency_name", "customer_area"):
         if k in new:
             new[k] = new[k].strip()
     if "presence" in new:

@@ -8,6 +8,14 @@ from .conftest import make_client, signup_and_verify
 from .test_sites_leads import BRIEF
 
 
+@pytest.fixture(autouse=True)
+def _agency_features_on(monkeypatch):
+    """These tests cover the agency features (client role, approvals), which are off by default for release 1
+    but kept in the code; turn them on here so they stay tested."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "agency_features", True)
+
+
 def new_ws(c, name="SmileCare Dental"):
     r = c.post("/api/workspaces", json={"name": name})
     assert r.status_code == 200, r.text

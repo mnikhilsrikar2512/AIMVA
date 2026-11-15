@@ -215,7 +215,7 @@ def run(db: Session, job_row: AgentJob) -> None:
         db.add(site)
         db.flush()
         sites.add_version(db, site, "Made by the Launch Agent", source)
-        if body.publish and user.require_approval:
+        if body.publish and user.require_approval and settings.agency_features:
             body.publish = False  # this client signs off first: the page stays a draft until they approve it
         if body.publish:
             site.published, site.deploy_target, site.published_at = True, "aimva", utcnow()

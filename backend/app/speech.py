@@ -115,7 +115,7 @@ SCRIPTS = [  # Unicode blocks -> language
     (r"[ഀ-ൿ]", "ml-IN"), (r"[؀-ۿ]", "ar-SA"),
 ]
 NAMES = {"hindi": "hi-IN", "bengali": "bn-IN", "bangla": "bn-IN", "tamil": "ta-IN", "telugu": "te-IN", "gujarati": "gu-IN",
-         "kannada": "kn-IN", "malayalam": "ml-IN", "marathi": "mr-IN", "punjabi": "pa-IN", "odia": "od-IN", "oriya": "od-IN"}
+         "kannada": "kn-IN", "malayalam": "ml-IN", "marathi": "mr-IN", "punjabi": "pa-IN", "odia": "od-IN", "oriya": "od-IN", "urdu": "ur-IN"}
 _ASK = re.compile(r"\b(?:in|speak|talk|call(?:back)?(?: me)? in|prefer)\s+(" + "|".join(NAMES) + r")\b", re.I)
 
 
@@ -128,7 +128,8 @@ def detect_language(text: str) -> Optional[str]:
         return NAMES[m.group(1).lower()]
     for pattern, code in SCRIPTS:
         if len(re.findall(pattern, text)) >= 3:
-            return code
+            # Urdu shares Arabic's script; an Urdu speaker must not get an Arabic call (no Urdu voice yet: caller falls back)
+            return "ur-IN" if code == "ar-SA" and re.search(r"[ٹڈڑںےۓھپچژگکی]", text) else code
     return None
 
 

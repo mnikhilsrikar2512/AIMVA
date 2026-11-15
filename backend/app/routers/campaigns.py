@@ -111,7 +111,10 @@ def update_campaign(cid: int, body: CampaignPatch, user: User = Depends(current_
         setattr(c, k, v)
     if c.external_id and c.platform == "meta" and body.status in ("active", "paused"):
         token = oauth_access_token(db, user.id, "meta")
-        httpx.post(f"{GRAPH}/{c.external_id}", data={"status": body.status.upper(), "access_token": token}, timeout=30)
+        r = httpx.post(f"{GRAPH}/{c.external_id}", data={"status": body.status.upper(), "access_token": token}, timeout=30)
+        if r.status_code >= 400:  # before: ignored, so AIMVA said "paused" while Meta kept spending
+            db.rollback()
+            raise HTTPException(502, "Meta didn't accept the change. Try again, or change it in Meta Ads Manager.")
     elif c.external_id and c.platform in ("google", "linkedin") and body.status in ("active", "paused"):
         from .. import ad_platforms
         set_status = ad_platforms.google_set_status if c.platform == "google" else ad_platforms.linkedin_set_status
@@ -121,8 +124,16 @@ def update_campaign(cid: int, body: CampaignPatch, user: User = Depends(current_
 
 
 @router.delete("/{cid}")
-def delete_campaign(cid: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    db.delete(_own(db, user, cid))
+def delete_campaign(cid: int, force: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Pause it on the ad platform first: a deleted row can't pause a campaign that keeps spending.
+    force=true deletes it anyway (the owner has stopped it on the platform themselves)."""
+    from ..teardown import pause_campaign
+    c = _own(db, user, cid)
+    if not pause_campaign(db, c) and not force:
+        db.rollback()
+        raise HTTPException(409, "Couldn't pause this campaign on the ad platform, so it may still be spending. "
+                                 "Pause it there, then delete it here.")
+    db.delete(c)
     db.commit()
     return {"ok": True}
 

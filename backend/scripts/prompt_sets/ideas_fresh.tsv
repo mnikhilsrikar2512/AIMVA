@@ -1,0 +1,54 @@
+# kind	industry	city	idea  (fresh: written after app/idea_sense.py, to catch rules that only fit dev/test)
+# 2026-11-15: "perfume brand" was first labelled industry other; corrected to retail (same rule as "handmade candles" in dev).
+local_service	healthcare	Hyderabad	Child specialist clinic in Manikonda
+local_service	healthcare	-	Ortho and spine clinic
+local_service	healthcare	Mysuru	Dental care in Mysore, painless root canals
+local_service	services	Hyderabad	Bridal mehendi artist in Secunderabad
+local_service	services	-	Packers and movers
+local_service	services	Goa	Beach shack restaurant in Goa
+local_service	services	-	Wedding planner for destination weddings
+local_service	services	Pune	Bike service centre in Hinjewadi
+local_service	education	Bengaluru	Abacus and Vedic maths classes in HSR Layout
+local_service	education	-	UPSC coaching with hostel
+local_service	education	Hyderabad	Montessori preschool in Miyapur
+local_service	real_estate	Hyderabad	Gated community villas in Kompally
+local_service	real_estate	-	Commercial office space for lease
+local_service	real_estate	Chennai	Premium apartments on OMR
+local_service	services	Delhi	Tattoo studio in Rajouri Garden, Delhi
+local_service	services	-	Car rental with driver for outstation trips
+product_seller	retail	-	Organic vegetables subscription, delivered weekly
+product_seller	retail	Bhopal	Bhopal-based brand of handcrafted leather bags
+product_seller	retail	-	Ready-to-cook biryani kits
+product_seller	retail	-	Electric scooters dealership
+product_seller	retail	Kanpur	Kanpur leather shoes online
+product_seller	retail	-	Silk sarees from Kanchipuram, we courier anywhere
+product_seller	retail	-	Toys for toddlers sold on our website
+personal_brand	other	-	Astrologer and vastu consultant
+personal_brand	other	-	Bharatanatyam dancer offering workshops
+personal_brand	healthcare	-	Dr. Arjun Reddy, cardiologist, want patients to know me
+personal_brand	other	-	Fitness trainer doing online sessions
+personal_brand	other	-	Makeup artist with my own Instagram page
+b2b	saas	-	Billing app for clinics
+b2b	other	-	Contract manufacturing for cosmetics brands
+b2b	other	Hyderabad	Pharma distributor in Hyderabad
+b2b	other	-	Solar panel installation for factories
+b2b	other	-	Bulk uniforms supplier to schools
+b2b	saas	-	AI chatbot platform for banks
+idea_only	other	-	Want to open a juice bar
+idea_only	retail	-	I'm planning to start selling homemade chocolates
+idea_only	other	Warangal	Thinking of a gaming cafe in Warangal
+idea_only	education	-	Want to start tuition classes from home
+idea_only	retail	-	about to launch my own perfume brand
+unclear	other	-	help
+unclear	other	-	I need more customers
+unclear	other	-	marketing
+local_service	healthcare	-	మా క్లినిక్ కి పేషెంట్స్ కావాలి
+local_service	real_estate	Hyderabad	హైదరాబాద్‌లో ప్లాట్లు అమ్ముతాము
+idea_only	other	-	నేను బిర్యానీ పాయింట్ పెట్టాలనుకుంటున్నాను
+local_service	education	Jaipur	जयपुर में ट्यूशन क्लासेस चलाती हूँ
+product_seller	retail	-	हम ऑर्गेनिक घी ऑनलाइन बेचते हैं
+local_service	services	Kanpur	Kanpur mein gym chalate hai
+product_seller	retail	-	saree ka business hai, whatsapp pe bechte hai
+idea_only	other	-	cafe kholna chahta hu
+local_service	services	Coimbatore	கோவையில் அழகு நிலையம்
+local_service	healthcare	Mysuru	ಮೈಸೂರಿನಲ್ಲಿ ಕ್ಲಿನಿಕ್ ಇದೆ

@@ -1,0 +1,59 @@
+# kind	industry	city	idea  (dev set: used while writing app/idea_sense.py)
+local_service	healthcare	Hyderabad	Dr. Rao's Dental, implants and braces in Kukatpally
+local_service	healthcare	Bengaluru	Multispeciality hospital in Jayanagar, Bengaluru
+local_service	healthcare	Mumbai	Homeopathy clinic in Andheri
+local_service	healthcare	-	Diagnostic lab with home sample collection
+local_service	services	Pune	Beauty parlour and bridal makeup in Pune
+local_service	services	Hyderabad	Car wash and detailing in Kondapur
+local_service	services	Gurugram	Interior designer for homes in Gurgaon
+local_service	services	-	Plumbing and electrician services on call
+local_service	services	Chennai	South Indian restaurant in T Nagar
+local_service	services	Delhi	Cafe in Hauz Khas Village
+local_service	services	Noida	CrossFit gym in Sector 18 Noida
+local_service	education	Hyderabad	IIT JEE coaching in Ameerpet
+local_service	education	-	Music classes for guitar and keyboard
+local_service	education	Chandigarh	IELTS coaching centre in Chandigarh
+local_service	education	-	Driving school
+local_service	real_estate	Visakhapatnam	Open plots for sale near Vizag
+local_service	real_estate	Bengaluru	Villa project in Sarjapur Road
+local_service	real_estate	-	Property dealer for rentals and resale
+product_seller	retail	-	Ayurvedic hair oil brand selling on Amazon and our website
+product_seller	retail	Kolkata	Handloom sarees from Kolkata, we ship worldwide
+product_seller	retail	-	Custom printed t-shirts and hoodies
+product_seller	retail	Mumbai	Cake shop in Bandra with home delivery
+product_seller	retail	-	Dry fruits and gift hampers online
+product_seller	retail	-	Mobile phone accessories shop
+product_seller	retail	Hyderabad	Ethnic wear boutique in Banjara Hills
+personal_brand	other	-	Instagram creator making recipe reels
+personal_brand	other	-	Life coach and mindfulness trainer
+personal_brand	healthcare	-	Nutritionist building my own brand online
+personal_brand	other	-	Independent financial advisor
+personal_brand	other	-	Freelance graphic designer
+personal_brand	other	-	Stand-up comedian looking for show bookings
+b2b	saas	-	CRM software for real estate developers
+b2b	saas	-	Inventory management app for retailers
+b2b	other	Coimbatore	Pump manufacturer in Coimbatore
+b2b	other	-	Corporate gifting company
+b2b	other	Delhi	Digital marketing agency for B2B brands in Delhi
+b2b	other	-	Exporter of spices
+b2b	other	-	Office cleaning contracts for corporates
+idea_only	other	-	I want to start a food truck
+idea_only	retail	-	Planning to sell handmade candles online
+idea_only	other	Chennai	Thinking about opening a co-working space in Chennai
+idea_only	education	-	Idea: an app to teach kids Hindi
+idea_only	services	Bengaluru	Want to start a salon in Bangalore
+unclear	other	-	hi
+unclear	other	-	asdf
+unclear	other	-	my business
+local_service	healthcare	Vijayawada	విజయవాడలో మా హాస్పిటల్
+local_service	education	-	మా కోచింగ్ సెంటర్ కి విద్యార్థులు కావాలి
+product_seller	retail	-	హోమ్ మేడ్ పచ్చళ్లు అమ్ముతాను
+local_service	services	Mumbai	मुंबई में ब्यूटी पार्लर है
+product_seller	retail	-	हम साड़ियाँ ऑनलाइन बेचते हैं
+idea_only	other	Jaipur	जयपुर में रेस्टोरेंट खोलना चाहता हूँ
+local_service	real_estate	Pune	पुणे में फ्लैट बेचते हैं
+local_service	healthcare	Nagpur	Nagpur mein hamara clinic hai
+product_seller	retail	-	kapde bechte hai instagram pe
+idea_only	other	-	ek bakery kholna hai
+local_service	healthcare	Chennai	சென்னையில் பல் மருத்துவமனை
+local_service	services	Bengaluru	ಬೆಂಗಳೂರಿನಲ್ಲಿ ಸಲೂನ್
