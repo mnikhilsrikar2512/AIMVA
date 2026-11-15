@@ -155,4 +155,6 @@ def env_variables() -> list:
     for cap in CAPABILITIES:
         p = _prefix(cap)
         names += [f"{p}_PROVIDER", f"{p}_API_KEY", f"{p}_MODEL"]
-    return names + ["TTS_VOICE", "GEMINI_API_KEY", "GEMINI_MODEL", "FAL_KEY", "SARVAM_API_KEY"]
+    return names + ["TTS_VOICE", "GEMINI_API_KEY", "GEMINI_MODEL", "FAL_KEY", "SARVAM_API_KEY",
+                    "GOOGLE_MEDIA_FALLBACK", "GOOGLE_MEDIA_API_KEY", "GOOGLE_IMAGE_MODEL", "GOOGLE_VIDEO_MODEL",
+                    "GOOGLE_VIDEO_RESOLUTION"]

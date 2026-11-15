@@ -2,6 +2,7 @@
 import contextvars
 import json
 import logging
+import re
 import sys
 import time
 import uuid
@@ -30,6 +31,21 @@ class _RequestIdFilter(logging.Filter):
         return True
 
 
+class _SecretFilter(logging.Filter):
+    """Mask secrets in query strings (?key=..., &api_key=..., access_token=...) in any log line."""
+    _RE = re.compile(r"(?i)([?&](?:key|api_key|apikey|access_token|token|secret)=)[^&\s'\"]+")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:  # noqa: BLE001 - never break logging over a bad format string
+            return True
+        clean = self._RE.sub(r"\1***", msg)
+        if clean != msg:
+            record.msg, record.args = clean, None
+        return True
+
+
 def setup_logging() -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.addFilter(_RequestIdFilter())
@@ -43,6 +59,11 @@ def setup_logging() -> None:
     # uvicorn's own access log would duplicate ours (which carries the request id and duration)
     logging.getLogger("uvicorn.access").disabled = True
     logging.getLogger("alembic.runtime.plugins").setLevel(logging.WARNING)
+    # httpx/httpcore log every outgoing request URL at INFO. Some provider APIs take a key in the query string, so a
+    # request log line can carry a secret: keep them at WARNING, and scrub anything key-shaped that still gets through.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+    handler.addFilter(_SecretFilter())
 
 
 def setup_sentry() -> bool:
