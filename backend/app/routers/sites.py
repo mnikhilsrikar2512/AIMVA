@@ -21,8 +21,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from PIL import Image
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session, object_session
 
 from ..config import settings
 from ..db import get_db
@@ -674,6 +674,13 @@ def site_out(s: Site, with_html: bool = False) -> dict:
          "pages": [{"slug": p["slug"], "title": p["title"], **({"html": p["html"]} if with_html else {})} for p in (s.pages or [])]}
     if with_html:
         d["html"] = s.html
+        # the newest version of each page: the editor sends it back as base_version so a teammate's save isn't overwritten
+        db = object_session(s)
+        latest = dict(db.execute(select(SiteVersion.page, func.max(SiteVersion.number)).where(SiteVersion.site_id == s.id)
+                                 .group_by(SiteVersion.page)).all()) if db is not None and s.id else {}
+        d["version"] = latest.get("", 0)
+        for p in d["pages"]:
+            p["version"] = latest.get(p["slug"], 0)
     return d
 
 
@@ -853,12 +860,39 @@ class SitePatch(BaseModel):
     published: Optional[bool] = None
     note: Literal["Edited HTML", "Edited visually", "Edited with AI"] = "Edited HTML"  # how the version history labels this change
     request: Optional[str] = Field(None, max_length=600)  # for "Edited with AI": what the owner asked for, in their words
+    base_version: Optional[int] = Field(None, ge=0)  # the version the editor started from (site "version"); omit to skip the check
+    force: bool = False  # save even though a teammate saved after base_version (theirs stays in the history)
 
 
 def person_id(req: Request) -> Optional[int]:
     """The signed-in person behind a request (not the project they are working in), for "who made this"."""
     person = getattr(req.state, "person", None)
     return person.id if person else None
+
+
+def _ago(when) -> str:
+    secs = max(int((utcnow() - when.replace(tzinfo=None)).total_seconds()), 0) if when else 0
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        return f"{secs // 60} minute{'s' if secs >= 120 else ''} ago"
+    return f"{secs // 3600} hour{'s' if secs >= 7200 else ''} ago"
+
+
+def check_conflict(db: Session, s: Site, page: str, base: Optional[int], me: Optional[int], force: bool = False) -> None:
+    """Two people on one page: refuse a save (409) when a teammate saved this page after the version the editor
+    started from. Nothing is ever lost either way, since every save is a version; this only makes sure nobody's change
+    is replaced without them knowing."""
+    if base is None or force:
+        return
+    last = db.scalar(select(SiteVersion).where(SiteVersion.site_id == s.id, SiteVersion.page == page)
+                     .order_by(SiteVersion.number.desc()))
+    if last is None or last.number <= base or not last.by_id or last.by_id == me:
+        return
+    who = db.get(User, last.by_id)
+    name = (who.name if who else "") or "A teammate"
+    raise HTTPException(409, f"{name} changed this page {_ago(last.created_at)}. Reload to see their change, or save "
+                             "again to keep yours as the newest version (theirs stays in the history).")
 
 
 MERGE_WINDOW = 180  # seconds: autosaved visual edits within this window update one version instead of piling up new ones
@@ -880,10 +914,12 @@ def _merge_or_add_version(db: Session, s: Site, note: str, by: Optional[int] = N
 @router.patch("/api/sites/{site_id}")
 def update_site(site_id: int, body: SitePatch, req: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     s = _own(db, user, site_id)
-    changes = body.model_dump(exclude_none=True, exclude={"note", "request"})
+    changes = body.model_dump(exclude_none=True, exclude={"note", "request", "base_version", "force"})
     if "html" in changes and len(changes["html"]) > 3_000_000:
         raise HTTPException(400, "The page is too large (over 3 MB). Remove embedded images or video.")
     html_changed = "html" in changes and changes["html"] != s.html
+    if html_changed:
+        check_conflict(db, s, "", body.base_version, person_id(req), body.force)
     if changes.get("published") and not s.published:
         from ..workspaces import require_approved
         require_approved(db, user, "site", s.id)
@@ -1071,6 +1107,8 @@ class PagePatch(BaseModel):
     html: Optional[str] = Field(None, max_length=3_000_000)
     note: Literal["Edited HTML", "Edited visually", "Edited with AI"] = "Edited HTML"
     request: Optional[str] = Field(None, max_length=600)
+    base_version: Optional[int] = Field(None, ge=0)  # the page's "version" the editor started from
+    force: bool = False
 
 
 @router.post("/api/sites/{site_id}/pages")
@@ -1115,7 +1153,9 @@ def update_page(site_id: int, page: str, body: PagePatch, req: Request, user: Us
                 db: Session = Depends(get_db)):
     s = _own(db, user, site_id)
     before = _page(s, page)
-    changes = body.model_dump(exclude_none=True, exclude={"note", "request"})
+    changes = body.model_dump(exclude_none=True, exclude={"note", "request", "base_version", "force"})
+    if "html" in changes and changes["html"] != before.get("html"):
+        check_conflict(db, s, page, body.base_version, person_id(req), body.force)
     s.pages = [{**p, **changes} if p["slug"] == page else p for p in s.pages]
     if "html" in changes and changes["html"] != before.get("html"):  # extra pages keep a history too
         _merge_or_add_version(db, s, body.note, person_id(req), body.request or "", page, changes["html"])

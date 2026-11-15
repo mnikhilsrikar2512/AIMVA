@@ -289,3 +289,38 @@ def test_extra_pages_keep_a_history_with_ai_requests(auth_client, monkeypatch):
     out = auth_client.post(f"/api/sites/{s['id']}/versions/{v[1]['id']}/restore").json()
     assert "Plans" in next(p["html"] for p in out["pages"] if p["slug"] == "pricing") and out["html"] == main_before
     assert auth_client.get(f"/api/sites/{s['id']}/versions/{v[1]['id']}").json()["page"] == "pricing"
+
+
+def test_a_teammates_newer_save_is_never_replaced_silently(auth_client, mails):
+    site, h, ed = _team_site(auth_client, mails)
+    sid = site["id"]
+    loaded = auth_client.get(f"/api/sites/{sid}", headers=h).json()
+    base = loaded["version"]
+    assert base >= 1
+    r = ed.patch(f"/api/sites/{sid}", headers=h, json={"html": loaded["html"] + "<!-- ed -->", "base_version": base})
+    assert r.status_code == 200 and r.json()["version"] == base + 1
+    r = auth_client.patch(f"/api/sites/{sid}", headers=h, json={"html": loaded["html"] + "<!-- owner -->", "base_version": base})
+    assert r.status_code == 409 and r.json()["detail"].startswith("Ed changed this page just now.")
+    assert "<!-- ed -->" in auth_client.get(f"/api/sites/{sid}", headers=h).json()["html"]  # nothing was replaced
+    r = auth_client.patch(f"/api/sites/{sid}", headers=h, json={"html": loaded["html"] + "<!-- owner -->", "base_version": base, "force": True})
+    assert r.status_code == 200
+    mine = r.json()["version"]
+    assert [v["by"] for v in auth_client.get(f"/api/sites/{sid}/versions", headers=h).json()[:2]] == [None, "Ed"]  # both kept
+    # your own newer saves never block you, and an editor that doesn't send base_version saves as before
+    assert auth_client.patch(f"/api/sites/{sid}", headers=h, json={"html": loaded["html"] + "<!-- 2 -->", "base_version": base,
+                                                                    "note": "Edited visually"}).status_code == 200
+    assert ed.patch(f"/api/sites/{sid}", headers=h, json={"html": loaded["html"] + "<!-- 3 -->"}).status_code == 200
+    assert mine > base
+
+
+def test_extra_pages_have_the_same_save_check(auth_client, mails):
+    site, h, ed = _team_site(auth_client, mails)
+    sid = site["id"]
+    auth_client.post(f"/api/sites/{sid}/pages", headers=h, json={"title": "Pricing"})
+    page = next(p for p in auth_client.get(f"/api/sites/{sid}", headers=h).json()["pages"] if p["slug"] == "pricing")
+    base = page["version"]
+    assert ed.patch(f"/api/sites/{sid}/pages/pricing", headers=h, json={"html": page["html"] + "<!-- ed -->", "base_version": base}).status_code == 200
+    r = auth_client.patch(f"/api/sites/{sid}/pages/pricing", headers=h, json={"html": page["html"] + "<!-- me -->", "base_version": base})
+    assert r.status_code == 409 and "Ed changed this page" in r.json()["detail"]
+    # a title change alone never clashes
+    assert auth_client.patch(f"/api/sites/{sid}/pages/pricing", headers=h, json={"title": "Plans", "base_version": base}).status_code == 200
