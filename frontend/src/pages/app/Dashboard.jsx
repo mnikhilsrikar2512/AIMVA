@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, MessageCircle } from "lucide-react";
-import { toast } from "sonner";
+import { Link, useSearchParams } from "react-router-dom";
+import { MessageCircle } from "lucide-react";
 import { Modal } from "../../components/ui";
 import { useOnboarding, useProjectsContext } from "../../components/AppLayout";
-import { moduleHref } from "../../lib/projects";
 import { FirstLeadPath } from "../../components/Onboarding";
 import { post } from "../../lib/api";
 import { useLeadEvents } from "../../lib/live";
@@ -106,34 +104,6 @@ function Today({ t, error, onRetry, isClient }) {
   );
 }
 
-/**
- * Home's prompt (design.md 4.3): a sentence here opens the right module with that sentence as its prompt.
- * It never explains where it went or why.
- */
-function HomePrompt() {
-  const navigate = useNavigate();
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!text.trim() || busy) return;
-    setBusy(true);
-    try {
-      const r = await post("/api/route", { text: text.trim() });
-      navigate(moduleHref(r.module, r.prompt));
-    } catch (err) { toast.error(err.message); setBusy(false); }
-  };
-  return (
-    <form onSubmit={submit} className="mb-10 flex max-w-3xl items-center gap-2 rounded-full bg-surface py-1.5 pl-5 pr-1.5 ring-1 ring-line focus-within:ring-2 focus-within:ring-brand/50">
-      <input className="h-10 min-w-0 flex-1 bg-transparent text-base text-strong placeholder:text-muted focus:outline-none sm:text-[15px]" value={text}
-        onChange={(e) => setText(e.target.value)} maxLength={2000} placeholder="What do you want to do?" aria-label="What do you want to do?" disabled={busy} />
-      <button type="submit" className="grid size-10 shrink-0 place-items-center rounded-full bg-strong text-white disabled:opacity-40" disabled={!text.trim() || busy} aria-label="Go">
-        <ArrowRight className="size-4" />
-      </button>
-    </form>
-  );
-}
-
 export default function Dashboard() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -181,7 +151,6 @@ export default function Dashboard() {
         </>
       ) : (
         <>
-          {!isClient && <HomePrompt />}
           <Today t={data} error={error} onRetry={reload} isClient={isClient} />
           <div className="mt-10 max-w-3xl">
             <RecentWork limit={8} />

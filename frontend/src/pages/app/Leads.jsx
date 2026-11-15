@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { BadgeCheck, Download, FileSpreadsheet, MessageCircle, Phone, Plus, RefreshCw, Search, Users, Cloud } from "lucide-react";
-import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, cx, ListSkeleton, IconButton } from "../../components/ui";
+import { Button, Chip, Empty, Field, Modal, PageHeader, Spinner, cx, ListSkeleton, IconButton } from "../../components/ui";
 import { LoadError, LoadErrorBar } from "../../components/LoadError";
 import { AgentSwitch } from "../../components/Agents";
 import { del, patch, post } from "../../lib/api";
@@ -18,6 +17,7 @@ import { StoryLine } from "../../components/Story";
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
 const STAGE_LABEL = { new: "New", contacted: "Contacted", qualified: "Qualified", won: "Won", lost: "Lost" };
 const SORT_KEY = "aimva:leads-sort";
+const FILTER = "h-8 rounded-md bg-transparent px-2 text-sm text-ink hover:bg-surface-2 focus:bg-surface-2 focus:outline-none";
 const readSort = () => { try { return localStorage.getItem(SORT_KEY) || "needs"; } catch { return "needs"; } };
 
 /** Whether the automatic WhatsApp welcome really reached them. Silent when there was none to send. */
@@ -140,80 +140,97 @@ export default function Leads() {
         <AgentSwitch kind="concierge" title="Lead Concierge"
           text="Welcomes every new lead on WhatsApp within seconds, then follows up on day 2 and day 7 until they reply." />
       </div>}
-      <div className="grid gap-6 2xl:grid-cols-[1fr_340px]">{/* laptops: the full table, sync below it */}
-        <Card className="min-w-0 p-0 sm:p-0">
-          <div className="grid grid-cols-2 gap-2 border-b border-line p-4 sm:flex sm:flex-row">
-            <div className="relative col-span-2 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
-              <input className="input pl-9" aria-label="Search leads" placeholder="Search name, email, phone" value={q} onChange={(e) => setQ(e.target.value)} />
-            </div>
-            <select className="input sm:w-36" aria-label="Filter by source" value={source} onChange={(e) => setSource(e.target.value)}>
-              <option value="">All sources</option>
-              {Object.keys(SOURCE_TONE).map((s) => <option key={s}>{s}</option>)}
-            </select>
-            <select className="input sm:w-36" aria-label="Filter by stage" value={stage} onChange={(e) => setStage(e.target.value)}>
-              <option value="">All stages</option>
-              {STAGES.map((s) => <option key={s}>{s}</option>)}
-            </select>
-            <select className="input col-span-2 sm:w-40" aria-label="Order" value={sort} onChange={(e) => setSort(e.target.value)}>
-              <option value="needs">Waiting first</option>
-              <option value="newest">Newest first</option>
-            </select>
+      {/* After Attio: one edge-to-edge table, no card around it; the row opens the drawer, which has its own URL. */}
+      <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+        <div className="flex flex-wrap items-center gap-2 border-y border-line px-4 py-2 sm:px-6 lg:px-8">
+          <div className="relative min-w-[12rem] flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
+            <input className="h-8 w-full rounded-md bg-transparent pl-8 pr-2 text-sm text-strong placeholder:text-muted focus:bg-surface-2 focus:outline-none" aria-label="Search leads" placeholder="Search name, email, phone" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          {!loading && error && leads.length > 0 && <LoadErrorBar what="the latest leads" onRetry={reload} />}
-          {loading ? <ListSkeleton /> : error && leads.length === 0 ? (
-            <LoadError error={error} what="your leads" onRetry={reload} />
-          ) : leads.length === 0 ? (
-            (q || source || stage) ? (
-              <Empty filtered icon={Users} title="No leads match" text="Try fewer words, or clear the filters."
-                action={<Button variant="ghost" onClick={() => { setQ(""); setSource(""); setStage(""); }}>Clear filters</Button>} />
-            ) : (
-              <Empty icon={Users} title="Your leads will land here" text="Everyone who fills your page form, answers an ad form, messages on WhatsApp or talks to your call assistant shows up here, scored and ready to call."
-                action={<Link to="/app/websites" className="btn-primary">Make a page with a lead form</Link>}
-                secondary={<Button variant="ghost" onClick={() => setAdding(true)}><Plus className="size-4" /> Add one yourself</Button>} />
-            )
-          ) : (
-            <ul>
-              {leads.map((l) => (
-                <motion.li key={l.id} initial={fresh.has(l.id) ? { opacity: 0, x: -24 } : false} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 260, damping: 26 }}
-                  onClick={() => openLead(l.id)}
-                  className={cx("flex cursor-pointer items-start gap-3 border-b border-line px-3 py-3 last:border-0 hover:bg-ink/[0.02] sm:px-4", openId === l.id && "bg-ink/[0.04]", fresh.has(l.id) && "animate-[flash_2s_ease-out]")}>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-x-2">
-                      <button type="button" className="text-left font-semibold text-strong hover:underline" onClick={(e) => { e.stopPropagation(); openLead(l.id); }}>{l.name || l.email || l.phone || "—"}</button>
-                      {fresh.has(l.id) && <span className="rounded-full bg-lavender0/20 px-1.5 py-0.5 text-xs font-bold uppercase text-brand">New</span>}
-                      {l.opted_out && <span className="text-xs font-semibold text-danger" title="They replied STOP: no WhatsApp or calls">Opted out</span>}
-                      {l.needs_reply && <span className="text-xs font-semibold text-warm" title="Nobody has answered them yet">{waited(l.waiting_since)}</span>}
-                      {l.language && l.language !== "en" && <span className="text-xs text-muted" title="They write in this language; replies are drafted in it">{l.language_name}</span>}
-                    </p>
-                    {l.message && <p className="mt-0.5 line-clamp-1 text-sm text-ink">{l.message}</p>}
-                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-                      <Chip tone={SOURCE_TONE[l.source] || "slate"}>{l.source}</Chip>
-                      <span className={cx(l.stage === "won" && "font-semibold text-brand")}>{STAGE_LABEL[l.stage] || l.stage}{l.stage === "won" && l.value ? ` · ₹${Number(l.value).toLocaleString("en-IN")}` : ""}</span>
-                      <span>· {timeAgo(l.created_at)}</span>
-                      {l.score >= 70 && l.stage === "new" && <span className="font-semibold text-warm">· hot</span>}
-                      <WelcomeNote w={l.welcome} />
-                    </p>
-                  </div>
-                  {!isClient && (
-                    <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      {l.phone && !l.opted_out && (l.needs_reply
-                        ? <Button size="sm" className="px-2 sm:px-3" aria-label="Reply" onClick={() => openLead(l.id, true)} title={`Reply on WhatsApp${l.language_name ? ` in ${l.language_name}` : ""}`}><MessageCircle className="size-3.5" /><span className="hidden sm:inline">Reply</span></Button>
-                        : <IconButton label="Message on WhatsApp" onClick={() => openLead(l.id, true)}><MessageCircle className="size-4" /></IconButton>)}
-                      {l.phone && !l.opted_out && <a href={`tel:${l.phone}`} className="btn-subtle btn-sm px-2" aria-label={`Call ${l.name || "them"}`} title="Call"><Phone className="size-4" /></a>}
-                      {!["won", "lost"].includes(l.stage) && <IconButton label="They bought: mark as won" onClick={() => { update(l.id, { stage: "won" }); openLead(l.id); }}><BadgeCheck className="size-4" /></IconButton>}
-                    </div>
-                  )}
-                </motion.li>
-              ))}
-            </ul>
-          )}
-        </Card>
-        <div>
-          {!isClient && <><h2 className="mb-3 font-semibold text-strong">Sync destinations</h2>
-          <SyncPanel /></>}
+          <select className={FILTER} aria-label="Filter by source" value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="">All sources</option>
+            {Object.keys(SOURCE_TONE).map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <select className={FILTER} aria-label="Filter by status" value={stage} onChange={(e) => setStage(e.target.value)}>
+            <option value="">Any status</option>
+            {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
+          </select>
+          <select className={FILTER} aria-label="Order" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <option value="needs">Waiting first</option>
+            <option value="newest">Newest first</option>
+          </select>
         </div>
+        {!loading && error && leads.length > 0 && <LoadErrorBar what="the latest leads" onRetry={reload} />}
+        {loading ? <div className="px-4 sm:px-6 lg:px-8"><ListSkeleton /></div> : error && leads.length === 0 ? (
+          <div className="px-4 sm:px-6 lg:px-8"><LoadError error={error} what="your leads" onRetry={reload} /></div>
+        ) : leads.length === 0 ? (
+          (q || source || stage) ? (
+            <Empty filtered icon={Users} title="No leads match" text="Try fewer words, or clear the filters."
+              action={<Button variant="ghost" onClick={() => { setQ(""); setSource(""); setStage(""); }}>Clear filters</Button>} />
+          ) : (
+            <Empty icon={Users} title="Your leads will land here" text="Everyone who fills your page form, answers an ad form, messages on WhatsApp or talks to your call assistant shows up here, ready to call."
+              action={<Link to="/app/websites" className="btn-primary">Make a page with a lead form</Link>}
+              secondary={<Button variant="ghost" onClick={() => setAdding(true)}><Plus className="size-4" /> Add one yourself</Button>} />
+          )
+        ) : (
+          <>
+            <table className="w-full table-fixed text-sm">
+              <thead className="hidden bg-surface-2 text-left text-xs font-medium text-muted md:table-header-group">
+                <tr className="h-8 border-b border-line">
+                  <th scope="col" className="w-[22%] pl-4 font-medium sm:pl-6 lg:pl-8">Name</th>
+                  <th scope="col" className="w-[11%] font-medium">Source</th>
+                  <th scope="col" className="hidden w-[10%] font-medium lg:table-cell">Language</th>
+                  <th scope="col" className="w-[13%] font-medium">Status</th>
+                  <th scope="col" className="font-medium">Last message</th>
+                  {!isClient && <th scope="col" className="w-[132px] pr-4 sm:pr-6 lg:pr-8"><span className="sr-only">Actions</span></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((l) => (
+                  <tr key={l.id} onClick={() => openLead(l.id)}
+                    className={cx("group flex cursor-pointer flex-wrap items-center gap-x-2 border-b border-line px-4 py-2 hover:bg-surface-2/60 md:table-row md:h-10 md:p-0", openId === l.id && "bg-accent-soft/60 hover:bg-accent-soft/60", fresh.has(l.id) && "bg-accent-soft/40")}>
+                    <td className="min-w-0 flex-1 truncate md:pl-4 sm:md:pl-6 lg:pl-8">
+                      <button type="button" className="max-w-full truncate text-left font-medium text-strong hover:underline" onClick={(e) => { e.stopPropagation(); openLead(l.id); }}>{l.name || l.email || l.phone || "—"}</button>
+                      {l.needs_reply && <span className="ml-2 hidden text-xs font-medium text-warm md:inline" title="Nobody has answered them yet">{waited(l.waiting_since)}</span>}
+                      {l.opted_out && <span className="ml-2 text-xs font-medium text-danger" title="They replied STOP: no WhatsApp or calls">Opted out</span>}
+                    </td>
+                    <td className="hidden truncate text-ink md:table-cell">{l.source}</td>
+                    <td className="hidden truncate text-ink lg:table-cell">{l.language_name || (l.language === "en" ? "English" : "")}</td>
+                    <td className="hidden truncate md:table-cell">
+                      <span className={cx(l.stage === "won" ? "font-medium text-brand" : "text-ink")}>{STAGE_LABEL[l.stage] || l.stage}{l.stage === "won" && l.value ? ` · ₹${Number(l.value).toLocaleString("en-IN")}` : ""}</span>
+                      {l.score >= 70 && l.stage === "new" && <span className="ml-1.5 text-xs font-medium text-warm">hot</span>}
+                    </td>
+                    <td className="order-3 w-full truncate text-xs text-muted md:order-none md:w-auto md:text-sm md:text-ink">
+                      <span className="md:hidden">{l.needs_reply ? <span className="font-medium text-warm">{waited(l.waiting_since)}</span> : STAGE_LABEL[l.stage] || l.stage} · {l.source} · </span>
+                      {l.message || <span className="text-muted">No message</span>}
+                      <span className="ml-2 text-xs text-muted">{timeAgo(l.created_at)}</span>
+                      <span className="ml-1 text-xs text-muted"><WelcomeNote w={l.welcome} /></span>
+                    </td>
+                    {!isClient && (
+                      <td className="order-2 md:order-none md:pr-4 sm:md:pr-6 lg:pr-8" onClick={(e) => e.stopPropagation()}>
+                        <span className="flex items-center justify-end gap-0.5">
+                          {l.phone && !l.opted_out && (l.needs_reply
+                            ? <Button size="sm" className="h-7 px-2.5" onClick={() => openLead(l.id, true)} title={`Reply on WhatsApp${l.language_name ? ` in ${l.language_name}` : ""}`}><MessageCircle className="size-3.5" /> Reply</Button>
+                            : <IconButton label="Message on WhatsApp" onClick={() => openLead(l.id, true)}><MessageCircle className="size-4" /></IconButton>)}
+                          {l.phone && !l.opted_out && <IconButton label={`Call ${l.name || "them"}`} href={`tel:${l.phone}`}><Phone className="size-4" /></IconButton>}
+                          {!["won", "lost"].includes(l.stage) && <IconButton label="They bought: mark as won" onClick={() => { update(l.id, { stage: "won" }); openLead(l.id); }}><BadgeCheck className="size-4" /></IconButton>}
+                        </span>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="px-4 py-3 text-xs text-muted sm:px-6 lg:px-8">{leads.length} {leads.length === 1 ? "lead" : "leads"}{waiting ? ` · ${waiting} waiting` : ""}</p>
+          </>
+        )}
       </div>
+      {!isClient && (
+        <section className="mt-12 max-w-3xl">
+          <h2 className="mb-3 text-base font-semibold text-strong">Send leads somewhere else too</h2>
+          <SyncPanel />
+        </section>
+      )}
       {openId && <LeadPanel leadId={openId} startReply={replying} onClose={closeLead} onChanged={reload} onDelete={(l) => { closeLead(); removeLead(l); }}
         ids={navIds.length ? navIds : leads.map((l) => l.id)} onNavigate={(id, reply) => openLead(id, reply, true)} />}
       <Modal open={adding} onClose={() => setAdding(false)} title="Add lead">

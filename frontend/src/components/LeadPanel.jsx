@@ -260,12 +260,12 @@ export default function LeadPanel({ leadId, onClose, onChanged, onDelete, startR
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Lead details">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] animate-[fade_150ms_ease-out]" onClick={onClose} />
+      <div className="absolute inset-0 bg-strong/15" onClick={onClose} />
       <motion.aside
         ref={panelRef}
         tabIndex={-1}
         initial={{ x: "100%" }} animate={{ x: 0 }} transition={{ type: "spring", stiffness: 340, damping: 34 }}
-        className="relative flex h-full w-full max-w-[520px] flex-col border-l border-line bg-surface shadow-2xl outline-none"
+        className="relative flex h-full w-full max-w-[480px] flex-col border-l border-line bg-surface shadow-xl outline-none"
       >
         {!lead ? (
           <div className="grid flex-1 place-items-center text-muted">{error ? <p className="text-sm">{error}</p> : <Spinner className="size-6" />}</div>

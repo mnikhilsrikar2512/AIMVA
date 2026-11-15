@@ -1,5 +1,5 @@
 import { Component, createContext, useContext, useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 import { ForYou } from "./ForYou";
 import { Compass, LayoutDashboard, LayoutGrid, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, SquareStack, Users, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "./shadcn/dialog";
@@ -12,7 +12,7 @@ import { NAV, visibleNav } from "../lib/modules";
 import { CommandPalette } from "./CommandPalette";
 import { Celebrations } from "./Celebrate";
 import { useProjectGuards, useProjects, MODULE_ROUTES } from "../lib/projects";
-import { cx } from "./ui";
+import { PageTitleContext, cx } from "./ui";
 import { useApi } from "../lib/hooks";
 import { LiveProvider, useLeadEvents, useLive } from "../lib/live";
 
@@ -56,30 +56,23 @@ function usePinned() {
 /** A rail entry: icon always, label when the rail is pinned open. Tooltip only when the label is hidden. */
 function RailLink({ it, expanded, onNavigate, badge }) {
   const { pathname } = useLocation();
+  // Active state is worked out here, not through NavLink's className function: the tooltip wrapper merges classes
+  // as strings, which turned that function into text and left the marker unpositioned (a cyan line down the rail).
+  const isActive = it.match ? pathname.startsWith(it.match) : !!matchPath({ path: it.to, end: !!it.end }, pathname);
   const link = (
-    <NavLink to={it.to} end={it.end} onClick={onNavigate} aria-label={expanded ? undefined : it.label}
-      className={({ isActive: a }) => {
-        const isActive = it.match ? pathname.startsWith(it.match) : a;
-        return cx("relative flex h-10 items-center gap-3 rounded-md px-3.5 text-sm font-medium",
-          isActive ? "bg-white/[0.06] text-bg" : "text-bg/70 hover:bg-white/[0.06] hover:text-bg");
-      }}>
-      {({ isActive: a }) => {
-        const isActive = it.match ? pathname.startsWith(it.match) : a;
-        return (
-          <>
-            {/* Active: a still 3px saffron bar on the left edge (bright saffron is allowed on pine only). */}
-            {isActive && <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-peach" />}
-            <span className="relative shrink-0">
-              <it.icon className={cx("size-[18px]", isActive && "text-brand-on-dark")} />
-              {badge > 0 && !expanded && <span className="absolute -right-1 -top-1 size-2 rounded-full bg-accent-on-dark ring-2 ring-strong" aria-hidden />}
-            </span>
-            {expanded && <span className="flex-1 truncate">{it.label}</span>}
-            {badge > 0 && expanded && <span className="min-w-5 rounded-full bg-accent-on-dark px-1.5 text-center text-xs font-bold leading-5 text-strong" aria-label={`${badge} new`}>{badge > 99 ? "99+" : badge}</span>}
-            {badge > 0 && !expanded && <span className="sr-only">, {badge} new</span>}
-          </>
-        );
-      }}
-    </NavLink>
+    <Link to={it.to} onClick={onNavigate} aria-label={expanded ? undefined : it.label} aria-current={isActive ? "page" : undefined}
+      className={cx("relative flex h-10 items-center gap-3 rounded-md px-3.5 text-sm font-medium",
+        isActive ? "bg-white/[0.06] text-bg" : "text-bg/70 hover:bg-white/[0.06] hover:text-bg")}>
+      {/* Active: a still 3px cyan bar on the left edge (bright cyan is allowed on the dark rail only). */}
+      {isActive && <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-peach" />}
+      <span className="relative shrink-0">
+        <it.icon className={cx("size-[18px]", isActive && "text-brand-on-dark")} />
+        {badge > 0 && !expanded && <span className="absolute -right-1 -top-1 size-2 rounded-full bg-accent-on-dark ring-2 ring-strong" aria-hidden />}
+      </span>
+      {expanded && <span className="flex-1 truncate">{it.label}</span>}
+      {badge > 0 && expanded && <span className="min-w-5 rounded-full bg-accent-on-dark px-1.5 text-center text-xs font-bold leading-5 text-strong" aria-label={`${badge} new`}>{badge > 99 ? "99+" : badge}</span>}
+      {badge > 0 && !expanded && <span className="sr-only">, {badge} new</span>}
+    </Link>
   );
   return expanded ? link : <Tooltip content={it.label} side="right">{link}</Tooltip>;
 }
@@ -298,15 +291,24 @@ function useFocusMode() {
 
 function ProjectGuards() { useProjectGuards(); return null; }
 
-/** "Dr. Rao's Dental" before the page, so you always know which business you're in (design.md 3.5). */
-function ProjectName() {
+/** The section a path belongs to, for the header when a page doesn't name itself. */
+function sectionTitle(pathname) {
+  if (pathname === "/app/projects") return "Projects";
+  const hit = ALL_ITEMS.filter((it) => it.to !== "/app" && pathname.startsWith(it.match || it.to)).sort((a, b) => b.to.length - a.to.length)[0];
+  return hit ? hit.label : pathname === "/app" || pathname === "/app/" ? "Home" : "";
+}
+
+/** "Dr. Rao's Dental / Leads": which business, then which page. The only title on the page (design.md v3 section 4). */
+function HeaderTitle({ title }) {
   const { list, active } = useProjectsContext();
   const { pathname } = useLocation();
-  if (!active || list.length < 2 || pathname === "/app/projects") return null;
+  const page = title || sectionTitle(pathname);
+  const showProject = active && list.length >= 2 && pathname !== "/app/projects";
   return (
-    <Link to="/app/projects" className="min-w-0 truncate text-sm font-medium text-muted hover:text-strong" title="All projects">
-      {active.name}
-    </Link>
+    <h1 className="flex min-w-0 items-baseline gap-2 text-[20px] font-semibold leading-none text-strong">
+      {showProject && <><Link to="/app/projects" className="truncate text-muted hover:text-strong" title="All projects">{active.name}</Link><span className="text-line-strong" aria-hidden>/</span></>}
+      <span className="truncate">{page}</span>
+    </h1>
   );
 }
 
@@ -327,6 +329,7 @@ export default function AppLayout() {
   // Re-check progress whenever the user moves between modules.
   useEffect(() => { reloadOnboarding(); }, [location.pathname, reloadOnboarding]);
   const railW = focus ? "" : pinned ? "md:pl-60" : "md:pl-16";
+  const [pageTitle, setPageTitle] = useState(null);
 
   return (
     <MotionConfig reducedMotion="always">
@@ -355,8 +358,9 @@ export default function AppLayout() {
 
       <div className={cx("relative flex min-w-0 flex-1 flex-col", railW)}>
         {/* Phones: slim top bar (logo, search, bell); navigation lives in the bottom tab bar. */}
-        <header className="z-20 flex h-12 shrink-0 items-center gap-1 border-b border-line bg-bg px-4 md:hidden">
-          <Logo to="/app" />
+        <header className="z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-bg px-4 md:hidden">
+          <img src="/favicon.svg" alt="" className="size-7 shrink-0" />
+          <span className="min-w-0 truncate text-base font-semibold text-strong">{pageTitle || sectionTitle(location.pathname)}</span>
           <button type="button" className="btn-subtle btn-sm ml-auto px-2" aria-label="Search" title="Search"
             onClick={() => window.dispatchEvent(new CustomEvent("aimva:palette"))}>
             <Search className="size-[18px]" />
@@ -365,8 +369,8 @@ export default function AppLayout() {
         </header>
         {/* Desktop: 56px header, no border. Project name left; search, bell and account right. */}
         {!focus && (
-          <header className="z-20 hidden h-14 shrink-0 items-center gap-2 px-8 md:flex">
-            <ProjectName />
+          <header className="z-20 hidden h-14 shrink-0 items-center gap-2 border-b border-line px-8 md:flex">
+            <HeaderTitle title={pageTitle} />
             <div className="ml-auto flex items-center gap-1">
               <Tooltip content="Search (Ctrl/Cmd+K)">
                 <button type="button" className="grid size-9 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-strong" aria-label="Search"
@@ -379,12 +383,14 @@ export default function AppLayout() {
         )}
         <ConnectionBar />
         <div id="app-scroll" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]">
-          <main className={cx("relative mx-auto px-4 pt-5 pb-8 sm:px-6 sm:py-6 lg:px-8 lg:pb-12 lg:pt-4", focus ? "max-w-[96rem]" : "max-w-6xl 2xl:max-w-7xl")}>
+          <main className={cx("relative px-4 pt-5 pb-8 sm:px-6 sm:py-6 lg:px-8 lg:pb-12 lg:pt-8", focus && "mx-auto max-w-[96rem]")}>
+            <PageTitleContext.Provider value={setPageTitle}>
             <StoryProvider>
               <ModuleBoundary path={location.pathname}>
                 <Outlet />
               </ModuleBoundary>
             </StoryProvider>
+            </PageTitleContext.Provider>
           </main>
         </div>
         <MobileTabBar onMore={() => setOpen(true)} />

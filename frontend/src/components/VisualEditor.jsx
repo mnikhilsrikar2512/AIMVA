@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { ArrowUp, Check, CloudOff, ImagePlus, Loader2, Monitor, MessageSquarePlus, MousePointerClick, Palette, Redo2, Smartphone, Sparkles, Undo2, X } from "lucide-react";
+import { ArrowUp, Check, ChevronUp, CloudOff, ImagePlus, Loader2, Monitor, MessageSquarePlus, MousePointerClick, Palette, PanelRightClose, PanelRightOpen, Redo2, Smartphone, Sparkles, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Field, Modal, cx } from "./ui";
 import { post } from "../lib/api";
@@ -250,7 +250,11 @@ function ImageChooser({ value, onChange }) {
  * The full-screen page editor: the page itself is the editor. Edits autosave (and merge into one version while you
  * keep working). `left` and `right` are the host's own top-bar items (back, name, publish…).
  */
-const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSave, onPageReplaced, left, right }, ref) {
+const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSave, onPageReplaced, left, right, changes }, ref) {
+  // The changes panel stays folded or open the way the owner left it (per browser).
+  const [panelOpen, setPanelOpen] = useState(() => { try { return localStorage.getItem("aimva_changes_panel") !== "folded"; } catch { return true; } });
+  const togglePanel = () => setPanelOpen((o) => { try { localStorage.setItem("aimva_changes_panel", o ? "folded" : "open"); } catch { /* private window */ } return !o; });
+  const [sheet, setSheet] = useState(false);  // phones: the changes list as a sheet; the prompt box stays visible
   const frame = useRef(null);
   const askBox = useRef(null);
   const { doc, scripts } = useMemo(() => prepare(html), [html]);
@@ -273,6 +277,8 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
   const waiters = useRef({});  // pending replies from the page, by message type
   const timer = useRef(null);
   const saving = useRef(Promise.resolve());
+  // The owner's words for a section change, sent with the next autosave so Changes shows what they asked.
+  const asked_ = useRef("");
 
   const send = useCallback((m) => frame.current?.contentWindow?.postMessage(m, "*"), []);
   const request = useCallback((m, reply) => new Promise((resolve) => { waiters.current[reply] = resolve; send(m); }), [send]);
@@ -292,7 +298,9 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
       setStatus("saving");
       try {
         const out = await request({ type: "serialize" }, "html");
-        await onSave(out);
+        const asked = asked_.current;
+        await onSave(out, asked);
+        if (asked_.current === asked) asked_.current = "";
         savedN.current = n;
         if (dirtyN.current === n) setStatus("saved");
         else { setStatus("dirty"); schedule(); }
@@ -386,6 +394,7 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
       if (!section) throw new Error("That part of the page is gone. Click it again.");
       const out = await post(`/api/sites/${siteId}/ai-edit`, { instruction: `${n.text.trim()} (This is about ${n.label} in this section.)`, section });
       send({ type: "replace-section", id: n.id, html: out.section });
+      asked_.current = n.text.trim();
       send({ type: "clear-target" });
       setNote(null);
       toast.success("Done. Undo if you don't like it.");
@@ -406,12 +415,12 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
         if (!section) throw new Error("That section is gone. Click a section again.");
         const out = await post(`/api/sites/${siteId}/ai-edit`, { instruction, section });
         send({ type: "replace-section", id: target.id, html: out.section });
+        asked_.current = instruction;
         toast.success("Done. Undo if you don't like it.");
       } else {
         await flush();
         const out = await post(`/api/sites/${siteId}/ai-edit`, { instruction, ...(page ? { page } : {}) });
         onPageReplaced(out.site);
-        toast.success("Page updated. The old one is in Versions.");
       }
       setAsk("");
     } catch (err) {
@@ -424,6 +433,40 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
   const StatusIcon = { saved: Check, dirty: Loader2, saving: Loader2, error: CloudOff }[status];
   const statusText = { saved: "Saved", dirty: "Saving…", saving: "Saving…", error: "Not saved" }[status];
   const hasColors = vars && (isHex(vars.mainValue) || isHex(vars.accentValue));
+
+  const askForm = (inPanel) => (
+    <form onSubmit={runAsk} className={cx("bg-surface", inPanel ? "border-t border-line p-3" : "border-t border-line px-3 py-2.5 sm:px-4")}>
+          <div className={cx("flex flex-col gap-2", !inPanel && "mx-auto max-w-3xl")}>
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <button type="button" onClick={toggleComments} aria-pressed={commenting} title="Click any spot on the page and say what to change"
+                className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold", commenting ? "bg-brand text-white" : "bg-surface-2 text-strong hover:bg-lavender")}>
+                <MessageSquarePlus className="size-3.5" /> {commenting ? "Commenting · click the page" : "Comment"}
+              </button>
+              {commenting ? <span className="truncate">Click any spot, say what should change, press Enter.</span> : target ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-lavender px-2.5 py-1 font-medium text-strong">
+                  Changing: {target.label}
+                  <button type="button" aria-label="Change the whole page instead" onClick={() => send({ type: "clear-target" })} className="text-muted hover:text-strong"><X className="size-3.5" /></button>
+                </span>
+              ) : (
+                <span className={cx("hidden items-center gap-1.5", !inPanel && "sm:flex")}><MousePointerClick className="size-3.5 text-brand" /> Click text to type · click an image to resize, move or swap it · hover a section for colour, order or <b className="text-ink">✨ Ask AI</b></span>
+              )}
+              {!ask && !commenting && !inPanel && <span className="hidden min-w-0 flex-1 gap-1.5 overflow-hidden lg:flex">{AI_IDEAS.slice(0, target ? 3 : 2).map((x) => (
+                <button key={x} type="button" className="shrink-0 whitespace-nowrap rounded-full bg-surface-2 px-2.5 py-1 hover:bg-lavender" onClick={() => { setAsk(x); askBox.current?.focus(); }}>{x}</button>
+              ))}</span>}
+            </div>
+            <div className="flex items-center gap-2 rounded-2xl bg-surface-2 px-3 py-1.5 ring-1 ring-line focus-within:ring-2 focus-within:ring-brand/60">
+              <Sparkles className="size-4 shrink-0 text-brand" />
+              <input ref={askBox} className="h-9 min-w-0 flex-1 bg-transparent text-sm text-strong outline-none placeholder:text-faint" value={ask} maxLength={600}
+                onChange={(e) => setAsk(e.target.value)} disabled={asking} aria-label="Ask AI to change the page"
+                placeholder={target ? `Describe the change to “${target.label}”…` : "Say what to change…"} />
+              <button type="submit" disabled={asking || ask.trim().length < 3} aria-label="Apply"
+                className="grid size-8 shrink-0 place-items-center rounded-full bg-strong text-white transition disabled:opacity-40">
+                {asking ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
+              </button>
+            </div>
+          </div>
+        </form>
+  );
 
   return createPortal(
     <div className="fixed inset-0 z-[45] flex flex-col bg-surface-2" role="region" aria-label="Page editor">
@@ -477,66 +520,59 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
         <div className="flex items-center gap-2">{right}</div>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden p-2 sm:p-3">
-        <iframe ref={frame} title="Page editor" srcDoc={doc} sandbox="allow-scripts" 
-          className={cx("mx-auto block h-full rounded-xl bg-white shadow-sm transition-all", view === "mobile" ? "w-[390px] max-w-full" : "w-full")} />
-        {commenting && note && frame.current && (() => {
-          const fx = frame.current.offsetLeft, fy = frame.current.offsetTop, fw = frame.current.clientWidth;
-          const top = fy + note.y - scrollY;
-          if (top < fy - 4 || top > fy + frame.current.clientHeight) return null;
-          const flip = note.x > fw - 300;
-          return (
-            <div className="absolute z-10" style={{ left: fx + note.x, top }}>
-              <span className={cx("absolute bottom-0 left-0 grid size-6 place-items-center rounded-[50%_50%_50%_2px] text-[11px] font-semibold text-white shadow-md ring-[1.5px] ring-white", note.busy ? "bg-strong" : "bg-brand")}>
-                {note.busy ? <Loader2 className="size-3 animate-spin" /> : 1}
-              </span>
-              <form onSubmit={runNote} className={cx("absolute top-2 w-72 max-w-[80vw] rounded-xl bg-surface shadow-xl ring-1 ring-ink/10", flip ? "right-1" : "left-2")}>
-                <div className="flex items-end gap-1 p-1.5">
-                  <textarea autoFocus rows={1} maxLength={600} value={note.text} disabled={note.busy} placeholder={`Comment on ${note.label.length > 30 ? "this spot" : note.label}…`}
-                    className="min-h-7 flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-5 text-strong outline-none placeholder:text-muted"
-                    onChange={(e) => { setNote({ ...note, text: e.target.value }); e.target.style.height = "auto"; e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`; }}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runNote(); } if (e.key === "Escape") setNote(null); }} />
-                  <button type="submit" aria-label="Apply" disabled={note.busy || note.text.trim().length < 3}
-                    className="grid size-7 shrink-0 place-items-center rounded-full bg-brand text-white disabled:bg-ink/15"><ArrowUp className="size-3.5" /></button>
-                </div>
-                {note.busy && <p className="px-3 pb-2 text-xs text-muted">Changing this part of the page…</p>}
-              </form>
+      <div className="flex min-h-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden p-2 sm:p-3">
+          <iframe ref={frame} title="Page editor" srcDoc={doc} sandbox="allow-scripts" 
+            className={cx("mx-auto block h-full rounded-xl bg-white shadow-sm transition-all", view === "mobile" ? "w-[390px] max-w-full" : "w-full")} />
+          {commenting && note && frame.current && (() => {
+            const fx = frame.current.offsetLeft, fy = frame.current.offsetTop, fw = frame.current.clientWidth;
+            const top = fy + note.y - scrollY;
+            if (top < fy - 4 || top > fy + frame.current.clientHeight) return null;
+            const flip = note.x > fw - 300;
+            return (
+              <div className="absolute z-10" style={{ left: fx + note.x, top }}>
+                <span className={cx("absolute bottom-0 left-0 grid size-6 place-items-center rounded-[50%_50%_50%_2px] text-[11px] font-semibold text-white shadow-md ring-[1.5px] ring-white", note.busy ? "bg-strong" : "bg-brand")}>
+                  {note.busy ? <Loader2 className="size-3 animate-spin" /> : 1}
+                </span>
+                <form onSubmit={runNote} className={cx("absolute top-2 w-72 max-w-[80vw] rounded-xl bg-surface shadow-xl ring-1 ring-ink/10", flip ? "right-1" : "left-2")}>
+                  <div className="flex items-end gap-1 p-1.5">
+                    <textarea autoFocus rows={1} maxLength={600} value={note.text} disabled={note.busy} placeholder={`Comment on ${note.label.length > 30 ? "this spot" : note.label}…`}
+                      className="min-h-7 flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-5 text-strong outline-none placeholder:text-muted"
+                      onChange={(e) => { setNote({ ...note, text: e.target.value }); e.target.style.height = "auto"; e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`; }}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runNote(); } if (e.key === "Escape") setNote(null); }} />
+                    <button type="submit" aria-label="Apply" disabled={note.busy || note.text.trim().length < 3}
+                      className="grid size-7 shrink-0 place-items-center rounded-full bg-brand text-white disabled:bg-ink/15"><ArrowUp className="size-3.5" /></button>
+                  </div>
+                  {note.busy && <p className="px-3 pb-2 text-xs text-muted">Changing this part of the page…</p>}
+                </form>
+              </div>
+            );
+          })()}
+        </div>
+        {changes && (
+          <aside aria-label="Changes" className={cx("hidden shrink-0 flex-col border-l border-line bg-surface lg:flex", panelOpen ? "w-[360px]" : "w-12")}>
+            <div className={cx("flex h-11 shrink-0 items-center border-b border-line", panelOpen ? "justify-between pl-4 pr-2" : "justify-center")}>
+              {panelOpen && <h2 className="text-sm font-semibold text-strong">Changes</h2>}
+              <button type="button" className="btn-subtle btn-sm w-8 px-0" onClick={togglePanel} aria-expanded={panelOpen}
+                aria-label={panelOpen ? "Fold the changes panel" : "Open the changes panel"} title={panelOpen ? "Fold" : "Changes"}>
+                {panelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+              </button>
             </div>
-          );
-        })()}
+            {panelOpen && <div className="min-h-0 flex-1 overflow-y-auto">{changes}</div>}
+            {panelOpen && askForm(true)}
+          </aside>
+        )}
       </div>
 
-      <form onSubmit={runAsk} className="border-t border-line bg-surface px-3 py-2.5 sm:px-4">
-        <div className="mx-auto flex max-w-3xl flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs text-muted">
-            <button type="button" onClick={toggleComments} aria-pressed={commenting} title="Click any spot on the page and say what to change"
-              className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold", commenting ? "bg-brand text-white" : "bg-surface-2 text-strong hover:bg-lavender")}>
-              <MessageSquarePlus className="size-3.5" /> {commenting ? "Commenting · click the page" : "Comment"}
-            </button>
-            {commenting ? <span className="truncate">Click any spot, say what should change, press Enter.</span> : target ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-lavender px-2.5 py-1 font-medium text-strong">
-                Changing: {target.label}
-                <button type="button" aria-label="Change the whole page instead" onClick={() => send({ type: "clear-target" })} className="text-muted hover:text-strong"><X className="size-3.5" /></button>
-              </span>
-            ) : (
-              <span className="hidden items-center gap-1.5 sm:flex"><MousePointerClick className="size-3.5 text-brand" /> Click text to type · click an image to resize, move or swap it · hover a section for colour, order or <b className="text-ink">✨ Ask AI</b></span>
-            )}
-            {!ask && !commenting && <span className="hidden min-w-0 flex-1 gap-1.5 overflow-hidden lg:flex">{AI_IDEAS.slice(0, target ? 3 : 2).map((x) => (
-              <button key={x} type="button" className="shrink-0 whitespace-nowrap rounded-full bg-surface-2 px-2.5 py-1 hover:bg-lavender" onClick={() => { setAsk(x); askBox.current?.focus(); }}>{x}</button>
-            ))}</span>}
-          </div>
-          <div className="flex items-center gap-2 rounded-2xl bg-surface-2 px-3 py-1.5 ring-1 ring-line focus-within:ring-2 focus-within:ring-brand/60">
-            <Sparkles className="size-4 shrink-0 text-brand" />
-            <input ref={askBox} className="h-9 min-w-0 flex-1 bg-transparent text-sm text-strong outline-none placeholder:text-faint" value={ask} maxLength={600}
-              onChange={(e) => setAsk(e.target.value)} disabled={asking} aria-label="Ask AI to change the page"
-              placeholder={target ? `Describe the change to “${target.label}”…` : "Ask AI to change the whole page, or click a section first…"} />
-            <button type="submit" disabled={asking || ask.trim().length < 3} aria-label="Apply"
-              className="grid size-8 shrink-0 place-items-center rounded-full bg-strong text-white transition disabled:opacity-40">
-              {asking ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
-            </button>
-          </div>
-        </div>
-      </form>
+      <div className={cx(changes && panelOpen && "lg:hidden")}>
+        {changes && (
+          <button type="button" className="flex w-full items-center justify-between border-t border-line bg-surface px-4 py-2 text-sm font-medium text-strong lg:hidden" onClick={() => setSheet(true)}>
+            Changes <ChevronUp className="size-4 text-muted" />
+          </button>
+        )}
+        {askForm(false)}
+      </div>
+      {changes && <Modal open={sheet} onClose={() => setSheet(false)} title="Changes"><div className="-mx-6">{changes}</div></Modal>}
 
       <Modal open={!!picking} onClose={() => setPicking(null)} title={picking?.sid ? "Add an image" : "Replace image"} wide>
         <div className="space-y-4">

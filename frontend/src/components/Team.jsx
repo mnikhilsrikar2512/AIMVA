@@ -8,6 +8,7 @@ import { del, post } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { useAuth } from "../lib/auth";
 import { ROLE_HINT, ROLE_LABEL, useWorkspaces } from "../lib/workspaces";
+import { useProjects } from "../lib/projects";
 
 /** Settings → Team. */
 export function TeamPanel() {
@@ -17,19 +18,33 @@ export function TeamPanel() {
   const members = useApi(active && !viewOnly ? `/api/workspaces/${active.id}/members` : null, null);
   const [f, setF] = useState({ email: "", role: "editor" });
   const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState(null);  // project ids; null = just this one
+  const { list: projects } = useProjects(false);
   if (wsError) return <Empty compact icon={UserPlus} title="Teams aren't switched on yet" text={wsError.status === 404 ? "This server doesn't have teams yet. Update the AIMVA backend to invite people." : "The team didn't load."} action={wsError.status === 404 ? null : <Button variant="ghost" size="sm" onClick={reloadWs}>Try again</Button>} />;
   if (!active) return <ListSkeleton rows={3} />;
   const canManage = ["owner", "admin"].includes(active.role);
   const m = members.data?.members || [];
   const inv = members.data?.invites || [];
 
+  // Invite to the projects you pick (owner decision 2026-11-15): this one is ticked, the rest are one click away.
+  const manageable = projects.filter((p) => ["owner", "admin"].includes(p.role));
+  const chosen = picked ?? [active.id];
   const invite = async (e) => {
     e.preventDefault();
+    const email = f.email.trim();
+    const ids = chosen.length ? chosen : [active.id];
     setBusy(true);
     try {
-      await post(`/api/workspaces/${active.id}/invites`, { email: f.email.trim(), role: f.role });
-      toast.success(`Invite sent to ${f.email.trim()}.`);
+      try {
+        await post("/api/projects/invite", { email, role: f.role, project_ids: ids });
+      } catch (err) {
+        if (![404, 405].includes(err.status)) throw err;
+        // A server without project invites yet: one invite per project.
+        for (const id of ids) await post(`/api/workspaces/${id}/invites`, { email, role: f.role });
+      }
+      toast.success(ids.length > 1 ? `Invite sent to ${email} for ${ids.length} projects.` : `Invite sent to ${email}.`);
       setF({ ...f, email: "" });
+      setPicked(null);
       members.reload();
     } catch (err) { toast.error(err.message); } finally { setBusy(false); }
   };
@@ -79,9 +94,23 @@ export function TeamPanel() {
             <select className="input sm:w-36" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })} aria-label="Role">
               <option value="editor">Editor</option><option value="admin">Admin</option>
             </select>
-            <Button type="submit" busy={busy}><UserPlus className="size-4" /> Invite</Button>
+            <Button type="submit" busy={busy} disabled={!chosen.length}><UserPlus className="size-4" /> Invite</Button>
           </form>
           <p className="mt-2 text-xs text-muted">{ROLE_LABEL[f.role]}: {ROLE_HINT[f.role]}</p>
+          {manageable.length > 1 && (
+            <fieldset className="mt-4">
+              <legend className="text-xs font-medium text-muted">Projects they can open</legend>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                {manageable.map((p) => (
+                  <label key={p.id} className="flex items-center gap-2 text-sm text-ink">
+                    <input type="checkbox" className="size-4 accent-[var(--color-strong)]" checked={chosen.includes(p.id)}
+                      onChange={(e) => setPicked(e.target.checked ? [...chosen, p.id] : chosen.filter((x) => x !== p.id))} />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
         </section>
       )}
 

@@ -10,7 +10,7 @@ import { ChartTooltip } from "./Dashboard";
 import { LoadError } from "../../components/LoadError";
 
 // Storm Green to deep cyan steps (flat, no gradients). Each source also has its name in the legend, so colour is never the only signal.
-const COLORS = { website: "#0f282f", meta: "#00696b", google: "#2f8a8c", linkedin: "#5fa9ab", whatsapp: "#00a3a4", voice: "#52656a", manual: "#a9b8bb" };
+const COLORS = { website: "#0f282f", meta: "#00696b", google: "#008b8d", linkedin: "#3e9c9e", whatsapp: "#00a3a4", voice: "#52656a", manual: "#7e9296" };  // design.md v3 chart steps
 const axis = { tick: { fill: "#52656a", fontSize: 12 }, axisLine: false, tickLine: false };
 
 export default function Analytics() {
@@ -68,7 +68,7 @@ export default function Analytics() {
                     <ResponsiveContainer>
                       <PieChart accessibilityLayer={false}>
                         <Pie rootTabIndex={-1} data={data.by_source} dataKey="count" nameKey="source" innerRadius={50} outerRadius={75} paddingAngle={3} stroke="none">
-                          {data.by_source.map((s) => <Cell key={s.source} fill={COLORS[s.source] || "#a9b8bb"} />)}
+                          {data.by_source.map((s) => <Cell key={s.source} fill={COLORS[s.source] || "#7e9296"} />)}
                         </Pie>
                         <Tooltip content={<ChartTooltip />} />
                       </PieChart>

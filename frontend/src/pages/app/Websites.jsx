@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Code2, ExternalLink, Eye, FileText, Globe, History, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Code2, ExternalLink, Eye, FileText, Globe, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, IconButton, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
+import { ChangesList } from "../../components/ChangesPanel";
 import { ModulePrompt } from "../../components/ModulePrompt";
 import { useAgentEvents } from "../../lib/live";
 import { LoadError } from "../../components/LoadError";
@@ -503,34 +504,6 @@ function GalleryPicker({ value, onChange }) {
   );
 }
 
-function Versions({ site, onRestore }) {
-  const [open, setOpen] = useState(false);
-  const { data: versions, reload } = useApi(open ? `/api/sites/${site.id}/versions` : null, []);
-  const [busy, run] = useAction();
-  useEffect(() => { if (open) reload(); }, [open, site.html, reload]);
-  return (
-    <>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}><History className="size-4" /> <span className="hidden sm:inline">Versions</span></Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Version history">
-        <p className="mb-3 text-sm text-muted">Every generation and edit is kept. Restoring creates a new version, so nothing is lost.</p>
-        <ul className="divide-y divide-line">
-          {versions.map((v) => (
-            <li key={v.id} className="flex items-center justify-between gap-3 py-3">
-              <div>
-                <p className="text-sm font-semibold text-strong">Version {v.number} · {v.note}</p>
-                <p className="text-xs text-faint">{timeAgo(v.created_at)}{v.generator ? ` · ${v.generator === "ai" ? "AI" : v.generator}` : ""}</p>
-              </div>
-              {v.current ? <Chip tone="green">Current</Chip> : (
-                <Button size="sm" variant="ghost" busy={busy} onClick={() => run(async () => { onRestore(await post(`/api/sites/${site.id}/versions/${v.id}/restore`)); setOpen(false); }, `Restored version ${v.number}`)}>Restore</Button>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Modal>
-    </>
-  );
-}
-
 function Editor({ site, onClose, onChange, feedback }) {
   const ed = useRef(null);
   const navigate = useNavigate();
@@ -553,8 +526,8 @@ function Editor({ site, onClose, onChange, feedback }) {
 
   // Regenerate, restore, HTML edits and whole-page AI edits replace the page: reload the editor with it.
   const replaced = (s) => { onChange(s); show(s, pageSlug); };
-  const autosave = async (html) => onChange(await patch(pageSlug ? `/api/sites/${site.id}/pages/${pageSlug}` : `/api/sites/${site.id}`,
-    pageSlug ? { html } : { html, note: "Edited visually" }));
+  const autosave = async (html, asked) => onChange(await patch(pageSlug ? `/api/sites/${site.id}/pages/${pageSlug}` : `/api/sites/${site.id}`,
+    asked ? { html, note: "Edited with AI", request: asked.slice(0, 120) } : { html, note: "Edited visually" }));
   const addPage = (e) => { e.preventDefault(); run(async () => {
     await flush();
     const s = await post(`/api/sites/${site.id}/pages`, adding);
@@ -601,14 +574,13 @@ function Editor({ site, onClose, onChange, feedback }) {
           </div>
         )}
       </div>
-      {site.published ? <Chip tone="green">Live</Chip> : <Chip>Draft</Chip>}
+      <span className="hidden sm:inline-flex">{site.published ? <Chip tone="green">Live</Chip> : <Chip>Draft</Chip>}</span>
       <span className="hidden lg:inline-flex"><Rate kind="site" id={site.id} initial={feedback?.[site.id]} /></span>
     </>
   );
   const right = (
     <>
       <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={async () => { await flush(); setChecks(true); }}>Checks</Button>
-      <Versions site={site} onRestore={replaced} />
       <div className="relative">
         <button type="button" className="btn-subtle btn-sm" aria-label="More" aria-expanded={menu} onClick={() => setMenu((m) => !m)}><MoreHorizontal className="size-4" /></button>
         {menu && (
@@ -632,7 +604,8 @@ function Editor({ site, onClose, onChange, feedback }) {
 
   return (
     <>
-      <VisualEditor key={rev} ref={ed} html={base} siteId={site.id} page={pageSlug} onSave={autosave} onPageReplaced={replaced} left={left} right={right} />
+      <VisualEditor key={rev} ref={ed} html={base} siteId={site.id} page={pageSlug} onSave={autosave} onPageReplaced={replaced} left={left} right={right}
+        changes={<ChangesList site={site} page={pageSlug} onRestore={replaced} />} />
       <Modal open={!!adding} onClose={() => setAdding(null)} title="Add a page">
         <form onSubmit={addPage} className="space-y-4">
           <div className="flex flex-wrap gap-1.5">
@@ -665,12 +638,12 @@ function Editor({ site, onClose, onChange, feedback }) {
           }, "Saved as a new version")}>Save code</Button>
         </div>
       </Modal>
-      <Modal open={showBrief} onClose={() => setShowBrief(false)} title="Start over from the brief (your current page is kept in Versions)" wide>
+      <Modal open={showBrief} onClose={() => setShowBrief(false)} title="Start over from the brief (your current page stays in Changes)" wide>
         <BriefForm initial={{ ...BLANK, match_colors: false, ...site.brief }} busy={busy} submitLabel="Rebuild page" coach={false}
           onSubmit={(b) => run(async () => {
             replaced(await post(`/api/sites/${site.id}/regenerate`, b));
             setShowBrief(false);
-          }, "Rebuilt: the previous page is in Versions")} />
+          }, "Rebuilt. The previous page is in Changes.")} />
       </Modal>
       <PublishDialog site={site} open={publishing} onClose={() => setPublishing(false)} beforePublish={flush}
         onPublished={(s) => onChange({ ...site, ...s })} />

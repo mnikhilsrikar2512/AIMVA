@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { createContext, forwardRef, useContext, useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./shadcn/dialog";
 import { Tabs as RTabs, TabsList, TabsTrigger } from "./shadcn/tabs";
 import { Tooltip } from "./shadcn/tooltip";
@@ -129,19 +129,34 @@ export function Card({ className, children, ...props }) {
   );
 }
 
+/**
+ * Inside the app frame the page title lives in the header ("Dr. Rao's Dental / Leads", design.md v3 section 4), so a
+ * page only hands its title up and keeps its actions here. No subtitles. Outside the frame (the team app) it renders
+ * the title itself.
+ */
+export const PageTitleContext = createContext(null);
+
 export function PageHeader({ icon: Icon, title, subtitle, actions, tone = "violet" }) {
+  const setTitle = useContext(PageTitleContext);
   const { pathname } = useLocation();
+  useEffect(() => {
+    if (!setTitle) return undefined;
+    setTitle(typeof title === "string" ? title : null);
+    return () => setTitle(null);
+  }, [setTitle, title]);
+  if (setTitle) {
+    return actions ? <div className="mb-6 flex flex-wrap justify-end gap-2">{actions}</div> : null;
+  }
   const section = NAV.find((g) => g.items.some((it) => it.to !== "/app" && pathname.startsWith(it.to)))?.group;
   return (
     <div className="mb-5 flex flex-col gap-3 sm:mb-8 sm:gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
-        {/* The section label is a desktop nicety; on phones and tablets the title alone says where you are. */}
         {Icon && (
           <p className={cx("mb-2 hidden items-center gap-1.5 text-xs font-semibold uppercase tracking-wider lg:inline-flex", TONES[tone].text)}>
             <Icon className="size-3.5" /> {section || "AIMVA"}
           </p>
         )}
-        <h1 className="text-2xl font-bold leading-tight text-strong sm:text-[30px] lg:text-[34px]">{title}</h1>
+        <h1 className="text-2xl font-bold leading-tight text-strong sm:text-[30px]">{title}</h1>
         {subtitle && <p className="mt-1 max-w-2xl text-sm text-muted sm:mt-1.5 sm:text-[15px] sm:leading-normal">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2 lg:shrink-0 lg:flex-nowrap">{actions}</div>}

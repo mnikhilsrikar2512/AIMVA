@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { ease } from "../components/Motion";
+import { motion } from "framer-motion";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Info, MailCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -10,23 +9,28 @@ import { post } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { rememberSignupHint } from "../lib/signupHint";
 
+/**
+ * Sign-in, sign-up and verify keep their flow and take the new colours (design.md v3). Form on white on the left;
+ * on laptops the one place outside marketing that carries the brand gradient, as a side panel with a single line.
+ */
 function Shell({ title, subtitle, children, footer }) {
   return (
-    <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-bg px-4 py-10">
-      <div className="aura pointer-events-none absolute inset-0" aria-hidden />
-      <motion.div className="relative w-full max-w-md" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease }}>
-        <Logo className="mb-8 justify-center" />
-        <motion.div layout className="card p-7 sm:p-9" transition={{ duration: 0.35, ease }}>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={title} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.25, ease }}>
-              <h1 className="text-2xl font-bold text-strong">{title}</h1>
-              {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
-              <div className="mt-6">{children}</div>
-            </motion.div>
-          </AnimatePresence>
-        </motion.div>
-        {footer && <p className="mt-6 text-center text-sm text-muted">{footer}</p>}
-      </motion.div>
+    <main className="grid min-h-dvh bg-bg lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+      <div className="flex flex-col px-4 py-8 sm:px-10">
+        <Logo />
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
+          <h1 className="text-2xl font-semibold text-strong">{title}</h1>
+          {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
+          <div className="mt-7">{children}</div>
+          {footer && <p className="mt-8 text-sm text-muted">{footer}</p>}
+        </div>
+      </div>
+      <aside aria-hidden className="relative hidden overflow-hidden lg:block" style={{ background: "linear-gradient(160deg, #0F282F 0%, #0F282F 38%, #02EFF0 100%)" }}>
+        <div className="absolute left-12 right-12 top-[18%] max-w-md">
+          <p className="serif-moment text-[34px] leading-tight text-white">Say what you sell. Get a page, ads, and a reply to every lead in their own language.</p>
+          <p className="mt-5 text-sm text-white/70">For clinics, builders, coaching centres and every business that runs on enquiries.</p>
+        </div>
+      </aside>
     </main>
   );
 }

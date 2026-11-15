@@ -12,20 +12,12 @@ import { get, patch, post } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useAgentEvents, LiveProvider } from "../lib/live";
 import { MODULE_LABEL, MODULE_ROUTES } from "../lib/projects";
+import { UI_LANGS, readUiLang, saveUiLang, setupCopy } from "../lib/setupCopy";
 
 const LANGS = [["te-IN", "Telugu"], ["hi-IN", "Hindi"], ["en", "English"], ["hi-Latn", "Hinglish"], ["ta-IN", "Tamil"], ["kn-IN", "Kannada"],
   ["ml-IN", "Malayalam"], ["mr-IN", "Marathi"], ["bn-IN", "Bengali"], ["gu-IN", "Gujarati"], ["pa-IN", "Punjabi"], ["od-IN", "Odia"], ["ur-IN", "Urdu"]];
 const MAX_LANGS = 5;
 const GAP_ORDER = ["customer_languages", "customer_area", "reply_owner", "ads_today"];
-const QUESTION = {
-  customer_languages: "Which languages do your customers speak?",
-  customer_area: "Where are your customers?",
-  reply_owner: "When someone asks about you, who should reply first?",
-  ads_today: "Are you running ads right now?",
-};
-const REPLY = [["aimva", "AIMVA replies, then hands to me"], ["me", "Only me"], ["someone", "My team"]];
-const ADS = [["self", "Yes"], ["none", "Not yet"]];
-
 function Pill({ on, children, onClick, disabled }) {
   return (
     <button type="button" aria-pressed={on} onClick={onClick} disabled={disabled}
@@ -37,7 +29,7 @@ function Pill({ on, children, onClick, disabled }) {
 }
 
 /** One gap question. `value` is the answer so far; Enter or the arrow continues. */
-function GapStep({ gap, value, onChange }) {
+function GapStep({ gap, value, onChange, t }) {
   if (gap === "customer_languages") {
     const picked = value || [];
     return (
@@ -56,14 +48,14 @@ function GapStep({ gap, value, onChange }) {
         <input className="input max-w-md" value={value || ""} onChange={(e) => onChange(e.target.value)} maxLength={200} autoFocus
           placeholder="Kukatpally, Hyderabad" aria-label="City or area" />
         <div className="flex flex-wrap gap-2">
-          {["All of India", "Online only"].map((v) => <Pill key={v} on={value === v} onClick={() => onChange(value === v ? "" : v)}>{v}</Pill>)}
+          {["All of India", "Online only"].map((v) => <Pill key={v} on={value === v} onClick={() => onChange(value === v ? "" : v)}>{t.areas[v]}</Pill>)}
         </div>
       </div>
     );
   }
-  const options = gap === "reply_owner" ? REPLY : ADS;
+  const options = Object.entries(gap === "reply_owner" ? t.reply : t.ads);
   return (
-    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={QUESTION[gap]}>
+    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t[gap]}>
       {options.map(([v, l]) => <Pill key={v} on={value === v} onClick={() => onChange(v)}>{l}</Pill>)}
     </div>
   );
@@ -197,6 +189,9 @@ function StartFlow() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const isNew = params.get("new") === "1";
+  const [lang, setLang] = useState(readUiLang);
+  const t = setupCopy(lang);
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   const [idea, setIdea] = useState("");
   const [link, setLink] = useState("");
   const [showLink, setShowLink] = useState(false);
@@ -255,27 +250,33 @@ function StartFlow() {
       <header className="flex h-14 items-center justify-between px-4 sm:px-8">
         <Logo to="/app" />
         {!revealing && (
-          <span className="text-sm text-muted">
-            {step} of {total}
-            {gapIndex < 0 && <> · <button type="button" className="font-medium text-brand hover:underline" onClick={() => navigate(isNew ? "/app/projects" : "/app", { replace: true })}>{isNew ? "Cancel" : "Skip"}</button></>}
+          <span className="flex items-center gap-3 text-sm text-muted">
+            <select className="h-8 rounded-md bg-transparent px-1 text-sm text-ink hover:bg-surface-2 focus:bg-surface-2 focus:outline-none" aria-label={t.language}
+              value={lang} onChange={(e) => { setLang(e.target.value); saveUiLang(e.target.value); }}>
+              {UI_LANGS.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+            </select>
+            <span>
+              {step} {t.of} {total}
+              {gapIndex < 0 && <> · <button type="button" className="font-medium text-brand hover:underline" onClick={() => navigate(isNew ? "/app/projects" : "/app", { replace: true })}>{isNew ? t.cancel : t.skip}</button></>}
+            </span>
           </span>
         )}
       </header>
       <main className="mx-auto max-w-3xl px-4 pb-16 pt-[12vh] sm:px-8">
         {gapIndex < 0 && (
           <form onSubmit={submit}>
-            <h1 className="serif-moment text-[30px] leading-tight text-strong sm:text-[40px]">What are you building or selling?</h1>
+            <h1 className="serif-moment text-[30px] leading-tight text-strong sm:text-[40px]">{t.idea}</h1>
             <div className="mt-8 rounded-[10px] bg-surface ring-1 ring-line-strong focus-within:ring-2 focus-within:ring-brand/50">
               <textarea ref={field} className="block min-h-[120px] w-full resize-none rounded-t-[10px] bg-transparent px-4 py-3.5 text-base text-strong placeholder:text-muted focus:outline-none"
                 value={idea} onChange={(e) => setIdea(e.target.value)} maxLength={1000} autoFocus disabled={busy} aria-label="Your idea"
                 onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(e); }}
-                placeholder="A dental clinic in Kukatpally. Implants and braces, mostly families nearby." />
+                placeholder={t.ideaPlaceholder} />
               <div className="flex items-center gap-2 px-3 pb-3">
                 {showLink ? (
                   <input className="input h-9 flex-1" value={link} onChange={(e) => setLink(e.target.value)} maxLength={500} disabled={busy} autoFocus
                     placeholder="yourwebsite.com or instagram.com/yourpage" aria-label="Website or Instagram link" inputMode="url" />
                 ) : (
-                  <button type="button" className="btn-subtle btn-sm" onClick={() => setShowLink(true)}><Link2 className="size-4" /> Add your website or Instagram (optional)</button>
+                  <button type="button" className="btn-subtle btn-sm" onClick={() => setShowLink(true)}><Link2 className="size-4" /> {t.addLink}</button>
                 )}
                 <Button type="submit" variant="accent" className="ml-auto w-10 px-0" disabled={busy || (!idea.trim() && !link.trim())} aria-label="Continue">
                   <ArrowRight className="size-4" />
@@ -285,24 +286,24 @@ function StartFlow() {
             {busy ? (
               <div className="mt-3" role="status">
                 <span className="block h-0.5 w-full overflow-hidden rounded-full bg-surface-2"><span className="block h-full w-1/3 animate-pulse bg-brand" /></span>
-                <p className="mt-2 text-sm text-muted">Setting up your workspace…</p>
+                <p className="mt-2 text-sm text-muted">{t.settingUp}</p>
               </div>
             ) : error ? (
               <p role="alert" className="mt-3 text-sm text-danger">{error}</p>
             ) : (
-              <p className="mt-3 text-sm text-muted">Write it the way you'd tell a friend. Any language is fine.</p>
+              <p className="mt-3 text-sm text-muted">{t.ideaHint}</p>
             )}
           </form>
         )}
 
         {start && !revealing && gapIndex >= 0 && (
           <div>
-            <h1 className="serif-moment text-[30px] leading-tight text-strong sm:text-[40px]">{QUESTION[gaps[gapIndex]]}</h1>
-            <div className="mt-8"><GapStep key={gaps[gapIndex]} gap={gaps[gapIndex]} value={answers[gaps[gapIndex]]} onChange={(v) => setAnswers((a) => ({ ...a, [gaps[gapIndex]]: v }))} /></div>
+            <h1 className="serif-moment text-[30px] leading-tight text-strong sm:text-[40px]">{t[gaps[gapIndex]]}</h1>
+            <div className="mt-8"><GapStep key={gaps[gapIndex]} gap={gaps[gapIndex]} value={answers[gaps[gapIndex]]} onChange={(v) => setAnswers((a) => ({ ...a, [gaps[gapIndex]]: v }))} t={t} /></div>
             <div className="mt-10 flex items-center gap-3">
-              {gapIndex > 0 && <button type="button" className="btn-subtle" onClick={() => setGapIndex((i) => i - 1)}><ArrowLeft className="size-4" /> Back</button>}
-              <button type="button" className="btn-subtle ml-auto" onClick={() => next(true)}>Skip</button>
-              <Button busy={saving} onClick={() => next()}>Continue <ArrowRight className="size-4" /></Button>
+              {gapIndex > 0 && <button type="button" className="btn-subtle" onClick={() => setGapIndex((i) => i - 1)}><ArrowLeft className="size-4" /> {t.back}</button>}
+              <button type="button" className="btn-subtle ml-auto" onClick={() => next(true)}>{t.skip}</button>
+              <Button busy={saving} onClick={() => next()}>{t.continue} <ArrowRight className="size-4" /></Button>
             </div>
           </div>
         )}
