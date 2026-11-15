@@ -5,7 +5,7 @@ import clsx from "clsx";
 export function Logo({ className, to = "/" }) {
   return (
     <Link to={to} className={clsx("flex items-center gap-2.5", className)} aria-label="AIMVA home">
-      <img src="/favicon.svg" alt="" className="size-8" />
+      <img src="/logo.svg" alt="" className="size-8" />
       <span className="font-display text-lg font-bold tracking-tight text-strong">AIMVA</span>
     </Link>
   );

@@ -7,7 +7,6 @@ import { del, get, patch, post } from "../../lib/api";
 import { useAction, useApi } from "../../lib/hooks";
 import { useAuth } from "../../lib/auth";
 import AdPlacements from "../../components/AdPlacements";
-import { ApprovalGate } from "../../components/Approval";
 import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
 import { StoryLine, Outcome } from "../../components/Story";
 
@@ -218,7 +217,7 @@ export default function Ads() {
               <div className="flex items-center justify-between"><h2 className="font-semibold text-strong">{selected.name}</h2><Chip tone={STATUS_TONE[selected.status]}>{selected.status}</Chip></div>
               <AdPlacements creative={selected.creative} platform={platform} {...preview} />
               <div className="flex flex-wrap gap-2">
-                {!selected.external_id && <ApprovalGate kind="campaign" refId={selected.id}><Button size="sm" busy={busy} onClick={() => run(async () => replace(await post(`/api/campaigns/${selected.id}/publish`)), "Published (paused) to Meta")}><Send className="size-3.5" /> Publish</Button></ApprovalGate>}
+                {!selected.external_id && <Button size="sm" variant="accent" busy={busy} onClick={() => run(async () => replace(await post(`/api/campaigns/${selected.id}/publish`)), "Published (paused) to Meta")}><Send className="size-3.5" /> Publish</Button>}
                 {selected.external_id && <IconButton label="Sync results from the platform" busy={busy} onClick={() => run(async () => { const r = await post(`/api/campaigns/${selected.id}/sync`); replace(r); return r; }, "Synced")}><RefreshCw className="size-4" /></IconButton>}
                 {selected.status !== "draft" && (
                   <Button size="sm" variant="ghost" onClick={() => run(async () => replace(await patch(`/api/campaigns/${selected.id}`, { status: selected.status === "active" ? "paused" : "active" })))}>

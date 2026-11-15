@@ -1,11 +1,11 @@
 /* Public site only: depth, motion and small interactions for the marketing pages. Colours come from index.css. */
 
-/* Hero glow: teal and saffron light behind the stage instead of a box. */
+/* Hero glow: Vivid Cyan and Storm Green light behind the stage instead of a box (the brand gradient's two ends). */
 .mk-aura {
   background:
-    radial-gradient(42% 52% at 18% 8%, rgb(94 184 172 / 0.32), transparent 70%),
-    radial-gradient(36% 46% at 88% 2%, rgb(244 162 28 / 0.26), transparent 70%),
-    radial-gradient(46% 40% at 62% 62%, rgb(160 220 210 / 0.22), transparent 70%);
+    radial-gradient(42% 52% at 18% 8%, rgb(2 239 240 / 0.24), transparent 70%),
+    radial-gradient(36% 46% at 88% 2%, rgb(15 40 47 / 0.14), transparent 70%),
+    radial-gradient(46% 40% at 62% 62%, rgb(2 239 240 / 0.12), transparent 70%);
 }
 
 /* 3D stage: depth comes from transforms the GPU composites, not from WebGL. */
@@ -16,8 +16,8 @@
 .mk-phone {
   border-radius: 34px;
   padding: 7px;
-  background: linear-gradient(160deg, #1d4346, #0f2b2d 55%, #0a1f20);
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06) inset, 0 30px 60px -24px rgb(10 40 42 / 0.55), 0 12px 24px -12px rgb(10 40 42 / 0.35);
+  background: linear-gradient(160deg, #1d3d45, #0f282f 55%, #0a1c21);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06) inset, 0 30px 60px -24px rgb(15 40 47 / 0.55), 0 12px 24px -12px rgb(15 40 47 / 0.35);
 }
 .mk-phone > .mk-screen { border-radius: 28px; overflow: hidden; background: #fff; position: relative; height: 100%; }
 

@@ -37,17 +37,13 @@ function MockSignup() {
 
 function MockWelcome() {
   return (
-    <Frame title="aimva · Welcome">
-      <p className="text-xs text-muted">1 of 7</p>
-      <p className="serif-moment mt-2 text-2xl leading-tight text-strong">Who are you setting AIMVA up for?</p>
-      <div className="mt-4 space-y-2">
-        {[["My company", true], ["Just me", false], ["My clients", false]].map(([t, on]) => (
-          <div key={t} className={cx("flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm", on ? "bg-strong text-white" : "bg-surface-2/70 text-strong")}>
-            <span className={cx("grid size-4 place-items-center rounded-full", on ? "bg-white text-strong" : "ring-1 ring-line-strong")}>{on && <Check className="size-3" />}</span>{t}
-          </div>
-        ))}
+    <Frame title="aimva · Start">
+      <p className="text-xs text-muted">1 of 3</p>
+      <p className="serif-moment mt-2 text-2xl leading-tight text-strong">What are you building or selling?</p>
+      <div className="mt-4 rounded-xl bg-surface px-3.5 py-3 text-sm text-strong ring-1 ring-line-strong">
+        A dental clinic in Kukatpally. Implants and braces, mostly families nearby.
       </div>
-      <p className="mt-4 text-xs text-faint">Every question can be skipped. Back keeps what you typed.</p>
+      <p className="mt-4 text-xs text-faint">Write it the way you'd tell a friend. Any language is fine.</p>
     </Frame>
   );
 }
@@ -145,8 +141,8 @@ function MockResults() {
 /* ---- steps ---------------------------------------------------------------------------------------- */
 const STEPS = [
   { id: "signup", tab: "Sign up", title: "Sign up in a minute", text: "Name, email, password. A 6-digit code proves the email is yours. No card.", Mock: MockSignup },
-  { id: "welcome", tab: "A few questions", title: "Answer a few questions, skip any", text: "Who it's for, what you sell, your website, where you're online, how customers find you. Each answer changes what AIMVA writes for you.", Mock: MockWelcome },
-  { id: "page", tab: "Your first page", title: "Your first page is already written", text: "The page, its offer and lead form come from your answers. Ad pictures and copy for Meta, Google and LinkedIn are drafted alongside. Publish on AIMVA or your own domain.", Mock: MockPage },
+  { id: "welcome", tab: "Your idea", title: "Tell us your idea in one sentence", text: "What you sell and where, in any language, with your website or Instagram if you have one. At most two short questions follow, and every one can be skipped.", Mock: MockWelcome },
+  { id: "page", tab: "Your first page", title: "Your first page is already written", text: "The page, its offer and lead form come from your sentence. Pictures, WhatsApp replies and campaigns are ready to start from one prompt each. Publish on AIMVA or your own domain.", Mock: MockPage },
   { id: "lead", tab: "First lead", title: "The first lead arrives", text: "From the page form, a WhatsApp chat, a call, or a Meta lead form when you sync it: one list, scored so the serious ones are on top. Home celebrates the first one.", Mock: MockLead },
   { id: "reply", tab: "AI reply", title: "A reply in seconds", text: "With your WhatsApp number connected, the welcome goes out in seconds (without it, AIMVA drafts it for a one-tap send). Connect Twilio and the call assistant rings back and asks your questions. Follow-ups go out on day 2 and day 7.", Mock: MockReply },
   { id: "pipeline", tab: "Pipeline", title: "Move them along", text: "New, contacted, qualified, won. Add the deal value, notes and the next step on each lead. Hot leads still waiting come first in Results' next steps.", Mock: MockPipeline },

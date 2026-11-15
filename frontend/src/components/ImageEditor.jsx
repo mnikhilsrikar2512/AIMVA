@@ -126,7 +126,7 @@ export default function ImageEditor({ asset, open, onClose, onEdited }) {
             {busy && (
               <div className="absolute inset-0 grid place-items-center rounded-2xl bg-strong/30 backdrop-blur-[2px]">
                 <div className="rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-strong shadow-lg">
-                  <Wand2 className="mr-1.5 inline size-4 animate-pulse text-violet-600" /> Working on it… up to a minute
+                  <Wand2 className="mr-1.5 inline size-4 animate-pulse text-brand" /> Working on it… up to a minute
                 </div>
               </div>
             )}
@@ -193,7 +193,7 @@ function PinMark({ pin: p, n, open, canSelect, busy, onOpen, onClose, update, on
     <div className="group absolute" style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} onClick={(e) => e.stopPropagation()}>
       <button type="button" aria-label={p.text ? `Comment ${n}: ${p.text}` : `Comment ${n}`} onClick={open ? onClose : onOpen}
         className={cx("absolute bottom-0 left-0 grid size-6 place-items-center rounded-[50%_50%_50%_2px] text-[11px] font-semibold text-white shadow-md ring-[1.5px] ring-white transition",
-          open ? "bg-violet-600" : hasText(p) ? "bg-strong" : "bg-strong/60")}>
+          open ? "bg-brand" : hasText(p) ? "bg-strong" : "bg-strong/60")}>
         {n}
       </button>
       {!open && hasText(p) && (
@@ -247,20 +247,20 @@ function Composer({ composer, text, setText, style, setStyle, styles, pins, remo
           <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-faint">Styles</p>
           {matches.map((s, i) => (
             <button key={s.id} type="button" onMouseEnter={() => setHi(i)} onMouseDown={(e) => { e.preventDefault(); pick(s); }}
-              className={cx("flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm", i === hi && "bg-violet-50")}>
+              className={cx("flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm", i === hi && "bg-lavender/50")}>
               <b className="text-strong">/{s.id}</b><span className="truncate text-xs text-muted">{s.hint}</span>
             </button>
           ))}
         </div>
       )}
       {menu && <StyleMenu styles={styles} current={style} onPick={pick} onClose={() => setMenu(false)} />}
-      <div className={cx("rounded-3xl border bg-surface p-2 shadow-sm transition focus-within:border-violet-400 focus-within:shadow-md", busy ? "opacity-60" : "border-ink/15")}>
+      <div className={cx("rounded-3xl border bg-surface p-2 shadow-sm transition focus-within:border-brand focus-within:shadow-md", busy ? "opacity-60" : "border-ink/15")}>
         {(style || pins.length > 0) && (
           <div className="flex flex-wrap gap-1.5 px-1.5 pb-1.5 pt-0.5">
             {style && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 py-0.5 pl-2.5 pr-1 text-xs font-semibold text-violet-800" title={style.prompt}>
+              <span className="inline-flex items-center gap-1 rounded-full bg-lavender py-0.5 pl-2.5 pr-1 text-xs font-semibold text-brand" title={style.prompt}>
                 <Palette className="size-3.5" /> {style.name}
-                <button type="button" aria-label="Remove style" className="rounded-full p-0.5 hover:bg-violet-200" onClick={() => setStyle(null)}><X className="size-3" /></button>
+                <button type="button" aria-label="Remove style" className="rounded-full p-0.5 hover:bg-lavender" onClick={() => setStyle(null)}><X className="size-3" /></button>
               </span>
             )}
             {pins.map((p, i) => (
@@ -286,7 +286,7 @@ function Composer({ composer, text, setText, style, setStyle, styles, pins, remo
           }} />
         <div className="flex items-center justify-between gap-2 px-1 pt-1">
           <button type="button" data-style-toggle onClick={() => setMenu((m) => !m)} disabled={busy}
-            className={cx("inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold", style ? "bg-violet-100 text-violet-800" : "bg-ink/[0.05] text-muted hover:text-strong")}>
+            className={cx("inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold", style ? "bg-lavender text-brand" : "bg-ink/[0.05] text-muted hover:text-strong")}>
             <Palette className="size-3.5" /> {style ? style.name : "Style"} <ChevronDown className="size-3" />
           </button>
           <SendBtn disabled={!ready} busy={busy} onClick={send} big />
@@ -324,7 +324,7 @@ function StyleMenu({ styles, current, onPick, onClose }) {
             <div className="grid grid-cols-2 gap-1.5">
               {shown.filter((s) => s.group === g).map((s) => (
                 <button key={s.id} type="button" onClick={() => onPick(s)}
-                  className={cx("rounded-xl border px-2.5 py-1.5 text-left hover:border-violet-400", current?.id === s.id ? "border-violet-500 bg-violet-50" : "border-ink/10")}>
+                  className={cx("rounded-xl border px-2.5 py-1.5 text-left hover:border-brand", current?.id === s.id ? "border-brand bg-lavender/50" : "border-ink/10")}>
                   <span className="block text-sm font-semibold text-strong">{s.name}</span>
                   <span className="block text-xs leading-snug text-muted">{s.hint}</span>
                 </button>
@@ -346,7 +346,7 @@ function Versions({ versions, at, busy, onPick, onClose }) {
         {versions.map((v, i) => (
           <li key={v.id}>
             <button type="button" disabled={busy} onClick={() => onPick(i)} title={label(v, i)}
-              className={cx("block w-full overflow-hidden rounded-xl ring-2", i === at ? "ring-violet-500" : "ring-transparent hover:ring-ink/20")}>
+              className={cx("block w-full overflow-hidden rounded-xl ring-2", i === at ? "ring-brand" : "ring-transparent hover:ring-ink/20")}>
               <img src={v.url} alt="" loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
             </button>
             <p className="mt-0.5 truncate text-xs text-muted">{label(v, i)}</p>
@@ -365,7 +365,7 @@ const label = (v, i) => (i === 0 ? "Original" : v.params?.restyle && !v.params?.
 function Chip({ children, on, small, ...props }) {
   return (
     <button type="button" {...props} className={cx("rounded-full font-semibold", small ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-xs",
-      on ? "bg-violet-600 text-white" : "bg-ink/[0.05] text-muted hover:text-strong")}>{children}</button>
+      on ? "bg-brand text-white" : "bg-ink/[0.05] text-muted hover:text-strong")}>{children}</button>
   );
 }
 
@@ -376,7 +376,7 @@ function IconBtn({ label: l, children, ...props }) {
 function SendBtn({ disabled, busy, onClick, big }) {
   return (
     <button type="button" aria-label="Apply" title="Apply (Enter)" disabled={disabled} onClick={onClick}
-      className={cx("grid place-items-center rounded-full bg-violet-600 text-white transition hover:bg-violet-700 disabled:bg-ink/15 disabled:text-white", big ? "size-9" : "size-7")}>
+      className={cx("grid place-items-center rounded-full bg-brand text-white transition hover:bg-strong disabled:bg-ink/15 disabled:text-white", big ? "size-9" : "size-7")}>
       {busy ? <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <ArrowUp className={big ? "size-4" : "size-3.5"} />}
     </button>
   );
@@ -393,7 +393,7 @@ function EngineSelect({ engines, engine, setEngine, chosen }) {
         </select>
       </Field>
       {chosen && !chosen.precise && (
-        <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+        <p className="rounded-xl bg-warm-soft p-3 text-xs text-warm">
           The free model can't repaint one spot, so it redraws the picture and AIMVA keeps only the parts you marked.
           Quick edits can look patched. Precise edits and object selection aren't switched on for your account yet.
         </p>
@@ -416,13 +416,13 @@ function MorePanel({ busy, chosen, info, source, onExtend, onBackground, onUpsca
             const same = Math.abs(ratio - a / b) < 0.02;
             return (
               <button key={k} type="button" disabled={busy || same} onClick={() => onExtend(k)}
-                className="rounded-xl border border-ink/10 px-3 py-2 text-left text-xs hover:border-violet-400 disabled:opacity-40">
+                className="rounded-xl border border-ink/10 px-3 py-2 text-left text-xs hover:border-brand disabled:opacity-40">
                 <b className="text-strong">{k}</b><br /><span className="text-muted">{same ? "Current size" : label}</span>
               </button>
             );
           })}
         </div>
-        {chosen && !chosen.precise && <p className="mt-2 text-xs text-amber-700">Free model: the edges are redrawn separately and may not match perfectly.</p>}
+        {chosen && !chosen.precise && <p className="mt-2 text-xs text-warm">Free model: the edges are redrawn separately and may not match perfectly.</p>}
       </section>
       <section>
         <p className="flex items-center gap-1.5 text-sm font-semibold text-strong"><ImageUp className="size-4" /> New background</p>
@@ -494,7 +494,7 @@ function TextPanel({ layers, setLayers, busy, onApply }) {
             <span className="ml-auto flex gap-1">
               {TEXT_COLOURS.map((c) => (
                 <button key={c} type="button" aria-label={`Colour ${c}`} title={c} onClick={() => patch(l.id, { color: c })}
-                  className={cx("size-5 rounded-full border border-ink/20", l.color === c && "ring-2 ring-violet-500 ring-offset-1")} style={{ background: c }} />
+                  className={cx("size-5 rounded-full border border-ink/20", l.color === c && "ring-2 ring-brand ring-offset-1")} style={{ background: c }} />
               ))}
             </span>
           </div>

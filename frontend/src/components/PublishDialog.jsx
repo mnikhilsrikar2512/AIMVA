@@ -63,7 +63,7 @@ export default function PublishDialog({ site, open, onClose, onPublished, before
     <Modal open={open} onClose={onClose} title={done ? "Your page is live" : "Publish your page"} wide>
       {done ? (
         <div className="space-y-5 text-center">
-          <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600"><PartyPopper className="size-7" /></div>
+          <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-lavender text-brand"><PartyPopper className="size-7" /></div>
           <div>
             <p className="font-semibold text-strong">{done.name} is published</p>
             <a href={done.deploy_url || done.url} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 break-all text-sm text-brand hover:underline">
@@ -113,17 +113,17 @@ export default function PublishDialog({ site, open, onClose, onPublished, before
               <ul className="space-y-1.5 text-sm">
                 {checks.map((c) => (
                   <li key={c.key} className="flex items-center gap-2">
-                    {c.ok ? <CheckCircle2 className="size-4 text-emerald-500" /> : c.level === "blocker" ? <XCircle className="size-4 text-rose-500" /> : <AlertTriangle className="size-4 text-amber-500" />}
-                    <span className={cx(c.ok ? "text-ink" : c.level === "blocker" ? "font-medium text-rose-700" : "text-amber-700")}>{c.message}</span>
+                    {c.ok ? <CheckCircle2 className="size-4 text-brand" /> : c.level === "blocker" ? <XCircle className="size-4 text-danger" /> : <AlertTriangle className="size-4 text-warm" />}
+                    <span className={cx(c.ok ? "text-ink" : c.level === "blocker" ? "font-medium text-danger" : "text-warm")}>{c.message}</span>
                     {!c.ok && c.key === "title" && f.seo_title && <span className="text-xs text-faint">(fixed by the SEO title above)</span>}
                     {!c.ok && c.key === "description" && f.seo_description && <span className="text-xs text-faint">(fixed by the description above)</span>}
                   </li>
                 ))}
               </ul>
             )}
-            {blockers.length > 0 && <p className="mt-2 text-xs text-rose-700">Fix the red items (e.g. add a lead form with a phone or email field) before publishing.</p>}
+            {blockers.length > 0 && <p className="mt-2 text-xs text-danger">Fix the red items (e.g. add a lead form with a phone or email field) before publishing.</p>}
           </div>
-          {error && <p className="rounded-xl bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>}
+          {error && <p className="rounded-xl bg-danger/10 px-4 py-2 text-sm text-danger">{error}</p>}
           <div className="flex justify-end">
             <Button type="submit" busy={busy} disabled={!checks || blockers.length > 0}><Rocket className="size-4" /> {site.published ? "Republish" : "Publish now"}</Button>
           </div>

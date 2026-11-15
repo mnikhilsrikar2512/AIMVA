@@ -1,22 +1,24 @@
-// Ctrl/Cmd+K: go anywhere, make anything, find a lead by name, switch client. The power-user way around the rail.
+// Ctrl/Cmd+K: go anywhere, make anything, find a lead by name, jump to a project. Also "All tools" in the rail.
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Building2, Compass, Eye, Keyboard, LogOut, Plus, Rocket, UserPlus, UserRound } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowRight, Bell, Building2, Compass, Eye, Keyboard, LogOut, Plus, Rocket, SquareStack, UserPlus, UserRound } from "lucide-react";
 import { CommandDialog, CommandGroup, CommandItem } from "./shadcn/command";
-import { AddClientDialog } from "./Team";
 import { useAuth } from "../lib/auth";
 import { get } from "../lib/api";
 import { visibleNav } from "../lib/modules";
-import { switchWorkspace, useWorkspaces } from "../lib/workspaces";
+import { moduleHref, openProject, useProjects } from "../lib/projects";
+import { post } from "../lib/api";
 
 
 export function CommandPalette({ onToggleFocus }) {
   const [open, setOpen] = useState(false);
   const [leads, setLeads] = useState(null);
-  const [adding, setAdding] = useState(false);
+  const [search, setSearch] = useState("");
+  useEffect(() => { if (!open) setSearch(""); }, [open]);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { list } = useWorkspaces();
+  const { list } = useProjects();
   const isClient = user?.workspace?.role === "client";
 
   useEffect(() => {
@@ -32,11 +34,22 @@ export function CommandPalette({ onToggleFocus }) {
   useEffect(() => { if (open && !leads) get("/api/leads").then((l) => setLeads(l.slice(0, 200))).catch(() => setLeads([])); }, [open, leads]);
 
   const go = (to) => { setOpen(false); navigate(to); };
-  const run = (fn) => { setOpen(false); setTimeout(fn, 50); };
+  // The search doubles as the general prompt (design.md v3 7.1): a request opens the module it belongs to, with the
+  // request as that module's prompt. It never says where or why; the page title shows it.
+  const q = search.trim();
+  const ask = () => run(async () => { const r = await post("/api/route", { text: q }); navigate(moduleHref(r.module, r.prompt)); });
+  const askItem = q && !isClient && (
+    <CommandGroup heading="Make it" value="make-it">
+      <CommandItem value={`ask ${q}`} onSelect={ask}><ArrowRight /> <span className="flex-1 truncate">{q}</span></CommandItem>
+    </CommandGroup>
+  );
+  const sentence = q.split(/\s+/).length >= 3;  // a request, not a name: offer it first so Enter runs it
+  const run = (fn) => { setOpen(false); setTimeout(() => Promise.resolve().then(fn).catch((e) => toast.error(e.message)), 50); };
 
   return (
     <>
-      <CommandDialog open={open} onOpenChange={setOpen} placeholder="Go to, make, or find a lead…">
+      <CommandDialog open={open} onOpenChange={setOpen} search={search} onSearch={setSearch} placeholder="Ask for something, go to a page, or find a lead…">
+        {sentence && askItem}
         {!isClient && (
           <CommandGroup heading="Make" value="make">
             <CommandItem value="launch from a link do it for me" onSelect={() => go("/app?launch=1")}><Rocket /> Launch from a link or a sentence</CommandItem>
@@ -62,15 +75,17 @@ export function CommandPalette({ onToggleFocus }) {
             ))}
           </CommandGroup>
         )}
-        <CommandGroup heading="Workspace" value="workspace">
-          {list.length > 1 && list.filter((w) => !w.active).map((w) => (
-            <CommandItem key={w.id} value={`switch to ${w.own ? "my business own account" : w.name}`} onSelect={() => run(() => switchWorkspace(w.id, w.own ? "your own account" : w.name))}>
-              <Building2 /> Switch to {w.own ? "my business" : w.name}
+        <CommandGroup heading="Projects" value="projects">
+          {list.length > 1 && <CommandItem value="all projects window businesses" onSelect={() => go("/app/projects")}><SquareStack /> All projects</CommandItem>}
+          {list.length > 1 && list.filter((p) => !p.active).map((p) => (
+            <CommandItem key={p.id} value={`open project ${p.name}`} onSelect={() => run(() => openProject(p))}>
+              <Building2 /> {p.name}
             </CommandItem>
           ))}
-          {!isClient && <CommandItem value="add a client agency workspace" onSelect={() => run(() => setAdding(true))}><Plus /> Add a client</CommandItem>}
+          <CommandItem value="new project business idea start" onSelect={() => run(async () => { await post("/api/projects", {}); window.location.assign("/start?new=1"); })}><Plus /> New project</CommandItem>
           {!isClient && <CommandItem value="invite someone team member colleague" onSelect={() => go("/app/settings?tab=team")}><UserPlus /> Invite someone</CommandItem>}
         </CommandGroup>
+        {!sentence && askItem}
         <CommandGroup heading="View" value="view">
           <CommandItem value="next steps updates notifications bell" onSelect={() => run(() => window.dispatchEvent(new CustomEvent("aimva:foryou")))}><Bell /> <span className="flex-1">Next steps and updates</span><kbd className="text-xs text-muted">N</kbd></CommandItem>
           <CommandItem value="focus mode hide menu full width" onSelect={() => run(onToggleFocus)}><Eye /> <span className="flex-1">Focus mode</span><kbd className="text-xs text-muted">\</kbd></CommandItem>
@@ -82,7 +97,6 @@ export function CommandPalette({ onToggleFocus }) {
           <CommandItem value="sign out log out" onSelect={() => run(async () => { await logout(); navigate("/"); })}><LogOut /> Sign out</CommandItem>
         </CommandGroup>
       </CommandDialog>
-      <AddClientDialog open={adding} onClose={() => setAdding(false)} />
     </>
   );
 }

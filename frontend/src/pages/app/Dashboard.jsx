@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { MessageCircle, Rocket } from "lucide-react";
-import { CountUp } from "../../components/Motion";
+import { MessageCircle } from "lucide-react";
 import { Modal } from "../../components/ui";
-import { useOnboarding } from "../../components/AppLayout";
+import { useOnboarding, useProjectsContext } from "../../components/AppLayout";
 import { FirstLeadPath } from "../../components/Onboarding";
 import { post } from "../../lib/api";
 import { useLeadEvents } from "../../lib/live";
@@ -64,8 +63,8 @@ function Today({ t, error, onRetry, isClient }) {
     <div className="max-w-3xl space-y-6">
       <p className="text-[15px] leading-relaxed text-ink">
         <span className="text-muted">{sinceWords(t.since + "Z", firstVisit)}: </span>
-        {n ? <><b className="font-semibold text-strong"><CountUp value={n} /> new lead{n === 1 ? "" : "s"}</b>{sources.length > 1 || n > 1 ? ` (${sources.join(", ")})` : ` from ${SOURCE_WORD[Object.keys(t.new.by_source)[0]] || "somewhere"}`}.</> : "no new leads."}
-        {t.won.count > 0 && <> <b className="font-semibold text-emerald-700">{plural(t.won.count, "sale")}{t.won.value ? ` worth ${inr(t.won.value)}` : ""}</b>.</>}
+        {n ? <><b className="font-semibold tabular-nums text-strong">{n} new lead{n === 1 ? "" : "s"}</b>{sources.length > 1 || n > 1 ? ` (${sources.join(", ")})` : ` from ${SOURCE_WORD[Object.keys(t.new.by_source)[0]] || "somewhere"}`}.</> : "no new leads."}
+        {t.won.count > 0 && <> <b className="font-semibold text-brand">{plural(t.won.count, "sale")}{t.won.value ? ` worth ${inr(t.won.value)}` : ""}</b>.</>}
         {t.calls > 0 && <> {plural(t.calls, "call")} answered for you.</>}
       </p>
 
@@ -111,11 +110,13 @@ export default function Dashboard() {
   const onboarding = useOnboarding();
   const ob = onboarding?.data;
   const steps = Object.fromEntries((ob?.steps || []).map((s) => [s.key, s.done]));
+  // The 4-step path is only for accounts from before /start (design.md 3.3: new projects get the reveal instead).
   // Getting started until the first lead exists or the person skips the guide. Data decides, not a setting.
-  const starting = !!ob && !ob.dismissed && !steps.lead;
+  const { active, loading: projectsLoading } = useProjectsContext();
+  const starting = !!ob && !projectsLoading && !ob.dismissed && !steps.lead && !active?.set_up;
   const isClient = user?.workspace?.role === "client";
   const since = useLastVisit(user.id);
-  const { data, reload, error } = useApi(starting || !ob ? null : `/api/today?since=${encodeURIComponent(since)}`);
+  const { data, reload, error } = useApi(starting || !ob || projectsLoading ? null : `/api/today?since=${encodeURIComponent(since)}`);
   const sites = useApi(starting ? "/api/sites" : null, []);
   useLeadEvents(() => { reload(); });
   const [launch, setLaunch] = useState(false);
@@ -123,23 +124,20 @@ export default function Dashboard() {
 
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const first = user.name.split(" ")[0];
+  const first = (user.name || "").split(" ")[0];
 
   return (
     <div>
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4 pr-10 md:pr-12">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm text-muted">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
-          <h1 className="serif-moment mt-1 text-3xl text-strong">{starting ? `Welcome, ` : `${greet}, `}<em className="text-warm">{first}</em></h1>
+          <h1 className="mt-1 text-[28px] font-semibold leading-tight text-strong">{starting ? `Welcome, ${first}` : `${greet}, ${first}`}</h1>
         </div>
-        {!starting && !isClient && ob && (
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setLaunch(true)}><Rocket className="size-4" /> Launch something new</button>
-        )}
       </div>
 
       {!ob && onboarding?.error ? (
         <LoadErrorBar what="your home page" onRetry={onboarding.reload} className="max-w-3xl" />
-      ) : !ob ? (
+      ) : !ob || projectsLoading ? (
         <div className="space-y-3" aria-label="Loading">{[0, 1, 2].map((i) => <div key={i} className="h-10 max-w-3xl animate-pulse rounded-lg bg-surface-2" style={{ opacity: 1 - i * 0.25 }} />)}</div>
       ) : starting ? (
         <>

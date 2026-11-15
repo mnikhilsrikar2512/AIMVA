@@ -9,8 +9,9 @@ import { useAuth } from "../../lib/auth";
 import { ChartTooltip } from "./Dashboard";
 import { LoadError } from "../../components/LoadError";
 
-const COLORS = { website: "#f472b6", meta: "#38bdf8", google: "#34d399", linkedin: "#22d3ee", whatsapp: "#4ade80", voice: "#a78bfa", manual: "#94a3b8" };
-const axis = { tick: { fill: "#675d52", fontSize: 12 }, axisLine: false, tickLine: false };
+// Storm Green to deep cyan steps (flat, no gradients). Each source also has its name in the legend, so colour is never the only signal.
+const COLORS = { website: "#0f282f", meta: "#00696b", google: "#008b8d", linkedin: "#3e9c9e", whatsapp: "#00a3a4", voice: "#52656a", manual: "#7e9296" };  // design.md v3 chart steps
+const axis = { tick: { fill: "#52656a", fontSize: 12 }, axisLine: false, tickLine: false };
 
 export default function Analytics() {
   const { user } = useAuth();
@@ -50,11 +51,10 @@ export default function Analytics() {
               <div className="h-64">
                 <ResponsiveContainer>
                   <AreaChart data={data.series} margin={{ left: -20, right: 8, top: 4 }}>
-                    <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#22d3ee" stopOpacity={0.4} /><stop offset="1" stopColor="#22d3ee" stopOpacity={0} /></linearGradient></defs>
-                    <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} minTickGap={24} {...axis} />
+                                        <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} minTickGap={24} {...axis} />
                     <YAxis allowDecimals={false} {...axis} />
                     <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="leads" name="leads" stroke="#22d3ee" strokeWidth={2} fill="url(#ag)" />
+                    <Area type="monotone" dataKey="leads" name="leads" stroke="#00696b" strokeWidth={2} fill="#dafafa" fillOpacity={0.6} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -68,7 +68,7 @@ export default function Analytics() {
                     <ResponsiveContainer>
                       <PieChart accessibilityLayer={false}>
                         <Pie rootTabIndex={-1} data={data.by_source} dataKey="count" nameKey="source" innerRadius={50} outerRadius={75} paddingAngle={3} stroke="none">
-                          {data.by_source.map((s) => <Cell key={s.source} fill={COLORS[s.source] || "#94a3b8"} />)}
+                          {data.by_source.map((s) => <Cell key={s.source} fill={COLORS[s.source] || "#7e9296"} />)}
                         </Pie>
                         <Tooltip content={<ChartTooltip />} />
                       </PieChart>
@@ -96,7 +96,7 @@ export default function Analytics() {
                     <XAxis type="number" hide allowDecimals={false} />
                     <YAxis type="category" dataKey="stage" width={72} {...axis} />
                     <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                    <Bar dataKey="count" name="leads" radius={[0, 6, 6, 0]} fill="#0b6b67" />
+                    <Bar dataKey="count" name="leads" radius={[0, 6, 6, 0]} fill="#00696b" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -110,17 +110,17 @@ export default function Analytics() {
                       <XAxis dataKey="name" {...axis} />
                       <YAxis {...axis} tickFormatter={(v) => (v >= 1000 ? `${+(v / 1000).toFixed(1)}k` : v)} />
                       <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                      <Bar dataKey="spend" name="Spend (₹)" radius={[6, 6, 0, 0]} fill="#34d399" />
+                      <Bar dataKey="spend" name="Spend (₹)" radius={[6, 6, 0, 0]} fill="#0f282f" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               )}
             </Card>
             <Card>
-              <div className="mb-4 flex items-center gap-2"><Lightbulb className="size-4 text-amber-600" /><h2 className="font-semibold text-strong">AI recommendations</h2></div>
+              <div className="mb-4 flex items-center gap-2"><Lightbulb className="size-4 text-warm" /><h2 className="font-semibold text-strong">AI recommendations</h2></div>
               <ol className="space-y-3">
                 {(insights?.items || []).map((t, i) => (
-                  <li key={i} className="flex gap-3 text-sm text-ink"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-amber-500/15 text-xs font-bold text-amber-600">{i + 1}</span>{t}</li>
+                  <li key={i} className="flex gap-3 text-sm text-ink"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-warm-soft0/15 text-xs font-bold text-warm">{i + 1}</span>{t}</li>
                 ))}
               </ol>
               <p className="mt-4 text-xs text-faint">Source: {insights?.source === "ai" ? "your AI writer" : "rule engine"}</p>

@@ -110,7 +110,7 @@ function YourData() {
             {preview.workspaces_kept.length > 0 && <p className="text-sm text-muted">Kept, because someone else also owns them: {preview.workspaces_kept.map((w) => w.name).join(", ")}. You just lose access.</p>}
             <Field label={`Type ${preview.email} to confirm`}><input className="input" autoComplete="off" value={f.confirm_email} onChange={(e) => setF({ ...f, confirm_email: e.target.value })} required /></Field>
             <Field label="Password"><input className="input" type="password" autoComplete="current-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required /></Field>
-            <Button type="submit" busy={busy} disabled={f.confirm_email.trim().toLowerCase() !== preview.email.toLowerCase()} className="!bg-rose-600 hover:!bg-rose-700">Delete everything</Button>
+            <Button type="submit" busy={busy} disabled={f.confirm_email.trim().toLowerCase() !== preview.email.toLowerCase()} className="!bg-danger hover:!bg-danger">Delete everything</Button>
           </form>
         )}
       </Modal>
@@ -148,12 +148,12 @@ function Integrations() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-strong">{i.label}</p>
-                    {i.connected && <CheckCircle2 className="size-4 text-emerald-600" />}
+                    {i.connected && <CheckCircle2 className="size-4 text-brand" />}
                   </div>
                   <p className="mt-0.5 text-xs text-muted">
                     {i.connected ? `Connected${i.meta?.phone_number_id ? ` · number ${i.meta.phone_number_id}` : ""}` :
                       i.app_configured ? (i.type === "oauth" ? "Sign in with OAuth" : "Paste an API key") :
-                        <span className="text-amber-600/80">Not available yet</span>}
+                        <span className="text-warm">Not available yet</span>}
                   </p>
                   <a href={i.docs} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-brand-2 hover:underline">Setup guide <ExternalLink className="size-3" /></a>
                 </div>

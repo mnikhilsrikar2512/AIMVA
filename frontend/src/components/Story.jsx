@@ -130,7 +130,7 @@ export function UsedIn({ assetId, className }) {
   const where = uses.map((u) => (u.kind === "page" ? "your page" : `the ${u.platform === "meta" ? "Meta" : u.platform === "google" ? "Google" : "LinkedIn"} ad`));
   const label = [...new Set(where)].join(" and ");
   return (
-    <p className={cx("truncate text-xs font-medium text-emerald-700", className)} title={uses.map((u) => u.name).join(", ")}>
+    <p className={cx("truncate text-xs font-medium text-brand", className)} title={uses.map((u) => u.name).join(", ")}>
       In {label} · {plural(leads, "lead")}{won ? ` · ${plural(won, "sale")}` : ""}
     </p>
   );
@@ -142,7 +142,7 @@ export function Outcome({ kind, id, className }) {
   const o = d?.[kind === "page" ? "per_page" : "per_campaign"]?.[String(id)];
   if (!o) return null;
   return (
-    <span className={cx("text-xs", o.won ? "text-emerald-700" : "text-muted", className)}>
+    <span className={cx("text-xs", o.won ? "text-brand" : "text-muted", className)}>
       {plural(o.leads, "lead")}{o.won ? ` · ${plural(o.won, "sale")} · ${inr(o.value)}` : ""}
     </span>
   );

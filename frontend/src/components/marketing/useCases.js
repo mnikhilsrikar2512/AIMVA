@@ -45,24 +45,6 @@ export const USE_CASES = [
     ],
     signup: "&for=personal",
   },
-  {
-    slug: "agencies",
-    short: "Agencies",
-    title: "For agencies and freelancers running clients",
-    lede: "One login for every client, with their data kept apart, and clients who can see results without asking you for screenshots.",
-    problem: [
-      "Each client has its own ad accounts, sheets and WhatsApp number, and you switch tabs all day.",
-      "Approvals happen in chat threads, and things go live before the client said yes.",
-      "Monthly reports take an afternoon to put together by hand.",
-    ],
-    how: [
-      ["A workspace per client", "Each client gets their own pages, campaigns, leads and results. Switch with ⌘K or the client switcher."],
-      ["People and roles", "Invite your team as admins or editors, and the client as a viewer who can approve."],
-      ["Approvals before anything goes live", "Turn approval on and Publish becomes “Send for approval”. The client approves or asks for changes from their bell."],
-      ["Reports in one click", "Leads, Results and Analytics download as clear PDF reports with the numbers that matter and what to do next."],
-    ],
-    signup: "&for=clients",
-  },
 ];
 
 export const useCase = (slug) => USE_CASES.find((u) => u.slug === slug);

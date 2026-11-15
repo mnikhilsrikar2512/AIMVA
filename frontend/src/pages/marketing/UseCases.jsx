@@ -7,7 +7,7 @@ import { useAuth } from "../../lib/auth";
 import SampleGallery from "../../components/marketing/SampleGallery";
 
 export function UseCasesIndex() {
-  useSeo("Use cases", "How clinics, builders, coaches, restaurants, solo founders and agencies use AIMVA to get leads and reply to every one of them.");
+  useSeo("Use cases", "How clinics, builders, coaches, restaurants and solo founders use AIMVA to get leads and reply to every one of them.");
   return (
     <MarketingLayout from="use-cases">
       <section className="mx-auto max-w-6xl px-4 pb-10 pt-8 sm:px-6 sm:pt-14 lg:pt-20">

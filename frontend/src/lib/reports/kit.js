@@ -4,9 +4,9 @@
 import { downloadBlob } from "../exporters";
 import { parseServerDate } from "../hooks";
 
-export const BRAND = [163, 77, 34];
-const INK = [30, 25, 19], BODY = [56, 48, 42], MUTED = [103, 93, 82], LINE = [226, 218, 207], PANEL = [249, 245, 239];
-const TINT = [236, 214, 200]; // pale brand, for chart tracks and second series
+export const BRAND = [0, 105, 107];  // deep cyan #00696B (Vivid Cyan is too light for print on white)
+const INK = [15, 40, 47], BODY = [30, 54, 61], MUTED = [82, 101, 106], LINE = [215, 225, 227], PANEL = [238, 243, 244];
+const TINT = [218, 250, 250]; // pale brand, for chart tracks and second series
 
 /* ---- numbers and dates, in the app's Indian format --------------------------------------------------- */
 export const num = (v) => (v === null || v === undefined || Number.isNaN(Number(v)) ? "—" : Math.round(Number(v)).toLocaleString("en-IN"));
@@ -96,7 +96,7 @@ export async function createReport({ title, business, period, landscape = false 
       const x = M + 16 + i * cw;
       font("bold", 17, INK); doc.text(String(k.value), x, r.y + 24, { maxWidth: cw - 20 });
       font("normal", 8.5, MUTED); doc.text(k.label, x, r.y + 39, { maxWidth: cw - 20 });
-      if (k.note) { font("normal", 8, k.tone === "bad" ? [176, 48, 48] : k.tone === "good" ? [33, 120, 74] : MUTED); doc.text(k.note, x, r.y + 52, { maxWidth: cw - 20 }); }
+      if (k.note) { font("normal", 8, k.tone === "bad" ? [180, 35, 24] : k.tone === "good" ? [0, 105, 107] : MUTED); doc.text(k.note, x, r.y + 52, { maxWidth: cw - 20 }); }
     });
     r.y += h + 18;
   };
@@ -185,7 +185,7 @@ export async function createReport({ title, business, period, landscape = false 
     const heights = list.map((c) => 30 + doc.splitTextToSize(c.text, w - 26).length * 13);
     const h = Math.max(...heights); r.ensure(h + 10);
     list.forEach((c, i) => {
-      const x = M + i * (w + 16), accent = c.tone === "bad" ? [176, 48, 48] : [33, 120, 74];
+      const x = M + i * (w + 16), accent = c.tone === "bad" ? [180, 35, 24] : [0, 105, 107];
       doc.setFillColor(...PANEL); doc.roundedRect(x, r.y, w, h, 6, 6, "F");
       doc.setFillColor(...accent); doc.rect(x, r.y + 8, 3, h - 16, "F");
       font("bold", 8.5, accent); doc.text(c.title.toUpperCase(), x + 14, r.y + 18);

@@ -15,7 +15,7 @@ import { ease } from "./Motion";
  * the Launch card and activity feed on the Dashboard, the Concierge switch in Leads, Autopilot in Command Center.
  */
 
-const STEP_ICON = { done: [Check, "bg-emerald-500 text-white"], skipped: [Minus, "bg-surface-2 text-muted"], failed: [X, "bg-rose-500 text-white"] };
+const STEP_ICON = { done: [Check, "bg-lavender0 text-white"], skipped: [Minus, "bg-surface-2 text-muted"], failed: [X, "bg-danger/100 text-white"] };
 
 function Steps({ steps, running }) {
   return (
@@ -36,7 +36,7 @@ function Steps({ steps, running }) {
       </AnimatePresence>
       {running && (
         <li className="flex items-center gap-3 text-sm text-muted">
-          <CircleDashed className="size-5 animate-spin text-brand [animation-duration:2.4s]" /> Working on the next step…
+          <CircleDashed className="size-5 text-brand" /> Working on the next step…
         </li>
       )}
     </ol>
@@ -80,11 +80,10 @@ export function LaunchCard({ initialWhat = "" } = {}) {
 
   return (
     <Card className="relative overflow-hidden">
-      <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full bg-[radial-gradient(circle,rgba(109,93,252,.18),transparent_65%)]" />
       <div className="relative flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-white"><Rocket className="size-5" /></span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-2 text-strong"><Rocket className="size-5" /></span>
         <div className="min-w-0">
-          <h2 className="font-semibold text-strong">Launch with AIMVA</h2>
+          <h2 className="font-semibold text-strong">Launch from a link or a sentence</h2>
           <p className="text-sm text-muted">Paste your website or describe what you sell. AIMVA builds the landing page, ad drafts, call-back assistant and follow-ups for you.</p>
         </div>
       </div>
@@ -147,7 +146,7 @@ export function LaunchCard({ initialWhat = "" } = {}) {
   );
 }
 
-const KIND_TONE = { launch: "bg-violet-500", concierge: "bg-emerald-500", autopilot: "bg-sky-500", weekly_report: "bg-amber-500", page_fixer: "bg-pink-500", lead_alerts: "bg-rose-500" };
+const KIND_TONE = { launch: "bg-lavender0", concierge: "bg-lavender0", autopilot: "bg-lavender0", weekly_report: "bg-warm-soft0", page_fixer: "bg-lavender0", lead_alerts: "bg-danger/100" };
 
 /** On/off (and suggest/auto) for one agent, shown on the page whose work it does. */
 export function AgentSwitch({ kind, title, text, modes }) {
@@ -168,7 +167,7 @@ export function AgentSwitch({ kind, title, text, modes }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-soft)] max-sm:-mx-4 max-sm:rounded-none max-sm:shadow-[0_-1px_0_var(--color-line),0_1px_0_var(--color-line)]">
       <div className="flex min-w-0 items-center gap-3">
-        <span className={cx("grid size-9 shrink-0 place-items-center rounded-xl", a.enabled ? "bg-emerald-500/15 text-emerald-600" : "bg-surface-2 text-faint")}>
+        <span className={cx("grid size-9 shrink-0 place-items-center rounded-xl", a.enabled ? "bg-lavender0/15 text-brand" : "bg-surface-2 text-faint")}>
           <Bot className="size-4" />
         </span>
         <span className="min-w-0">
@@ -202,7 +201,7 @@ export function FollowUps({ leadId }) {
           <li key={f.step} className="flex justify-between gap-2">
             <span>{label[f.step]}</span>
             <span title={f.step === "welcome" ? f.note || undefined : undefined}
-              className={cx(f.status === "sent" && "text-emerald-600", ["drafted", "failed"].includes(f.status) && "text-warm", f.status === "skipped" && "text-faint")}>
+              className={cx(f.status === "sent" && "text-brand", ["drafted", "failed"].includes(f.status) && "text-warm", f.status === "skipped" && "text-faint")}>
               {f.status === "pending" ? parseServerDate(f.due_at).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
                 : done[f.status] ? done[f.status] + (f.status !== "sent" && f.note ? `: ${f.note}` : "") : f.note || "Skipped"}
             </span>

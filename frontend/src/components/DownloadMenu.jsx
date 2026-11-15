@@ -21,7 +21,7 @@ export function DownloadMenu({ name, excel, pdf, csvHref, disabled, reason }) {
   ].filter(Boolean);
   if (!formats.length) return null;
   const tip = disabled ? (reason || "Nothing to download yet") : formats.length === 1 ? `Download ${formats[0].label}` : "Download";
-  const cls = cx("btn-ghost w-9 px-0", (disabled || busy) && "pointer-events-none");
+  const cls = cx("btn-subtle w-9 px-0", (disabled || busy) && "pointer-events-none");
   const icon = busy ? <Spinner className="size-4" /> : <Download className="size-4" />;
 
   // Nothing to export (no rows, or still loading): a muted, disabled icon whose tooltip says why. Never hidden.

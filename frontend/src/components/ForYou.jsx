@@ -11,9 +11,8 @@ import { post } from "../lib/api";
 import { timeAgo, useApi } from "../lib/hooks";
 import { useAgentEvents, useLeadEvents } from "../lib/live";
 import { useIsClient } from "../lib/auth";
-import { ApprovalInbox, useApprovalInbox } from "./Approval";
 
-const DOT = { high: "bg-warm", medium: "bg-amber-500", low: "bg-line-strong" };
+const DOT = { high: "bg-warm", medium: "bg-warm-soft0", low: "bg-line-strong" };
 const SEEN_KEY = "aimva_updates_seen_at";
 const readSeen = () => { try { return localStorage.getItem(SEEN_KEY) || ""; } catch { return ""; } };
 const writeSeen = (v) => { try { localStorage.setItem(SEEN_KEY, v); } catch { /* storage blocked */ } };
@@ -77,7 +76,7 @@ function NextSteps({ recs, onGo }) {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-strong">{r.title}</p>
               {r.why && <p className="mt-0.5 line-clamp-2 text-xs text-muted">{r.why}</p>}
-              {r.impact && <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><TrendingUp className="size-3.5" />{r.impact}</p>}
+              {r.impact && <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand"><TrendingUp className="size-3.5" />{r.impact}</p>}
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {runs
                   ? <button type="button" className={primary} disabled={busy === r.key} onClick={() => accept(r)}>{busy === r.key && <Spinner />}{label}</button>
@@ -105,7 +104,7 @@ function Updates({ jobs, seenAt }) {
     <ul className="border-t border-line">
       {data.map((j) => (
         <li key={j.id} className="flex gap-3 border-b border-line py-3">
-          <Bot className={cx("mt-0.5 size-4 shrink-0", j.status === "failed" ? "text-rose-600" : "text-muted")} aria-hidden />
+          <Bot className={cx("mt-0.5 size-4 shrink-0", j.status === "failed" ? "text-danger" : "text-muted")} aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="text-sm text-strong">{j.title}</p>
             <p className="mt-0.5 text-xs text-muted">{j.status === "failed" ? "Didn't finish" : j.agent} · {timeAgo(j.created_at)}</p>
@@ -124,7 +123,6 @@ export function ForYou({ className }) {
   const [seenAt, setSeenAt] = useState(readSeen);
   const { recs, jobs } = useForYou();
   const isClient = useIsClient();
-  const inbox = useApprovalInbox(isClient);  // the client approves or asks for changes from here
   const location = useLocation();
   useEffect(() => { setOpen(false); }, [location.pathname]);
   // N opens the panel from anywhere, unless the person is typing.
@@ -142,10 +140,9 @@ export function ForYou({ className }) {
     window.addEventListener("aimva:foryou", onOpen);
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("aimva:foryou", onOpen); };
   }, [open]);
-  const nNext = isClient ? 0 : recs.data?.recommendations?.length || 0;  // suggestions are for the agency: they run things
+  const nNext = isClient ? 0 : recs.data?.recommendations?.length || 0;  // a view-only member can't run suggestions
   const nNew = (jobs.data || []).filter((j) => seenAt < j.created_at).length;
-  const nApprove = Array.isArray(inbox.data) ? inbox.data.length : 0;
-  const count = nNext + nNew + nApprove;
+  const count = nNext + nNew;
   const onOpenChange = (v) => {
     setOpen(v);
     if (!v && tab === "updates") { const now = new Date().toISOString(); writeSeen(now); setSeenAt(now); }
@@ -156,9 +153,9 @@ export function ForYou({ className }) {
         aria-label={`Next steps and updates${count ? `, ${count} new` : ""}`}
         className={cx("relative grid size-9 place-items-center rounded-lg text-muted transition hover:bg-surface-2 hover:text-strong", className)}>
         <Bell className="size-[18px]" />
-        {count > 0 && <span aria-hidden className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-brand px-1 text-center text-xs font-semibold leading-[18px] text-white ring-2 ring-bg">{count > 9 ? "9+" : count}</span>}
+        {count > 0 && <span aria-hidden className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-strong px-1 text-center text-xs font-semibold leading-[18px] text-white ring-2 ring-bg">{count > 9 ? "9+" : count}</span>}
       </button>
-      <SheetContent className="max-w-[360px]">
+      <SheetContent className="max-w-[400px]">
         <div className="border-b border-line px-4 py-3 pr-12">
           <SheetTitle>For you</SheetTitle>
           <SheetDescription className="sr-only">What needs you and what AIMVA did for you.</SheetDescription>
@@ -166,16 +163,14 @@ export function ForYou({ className }) {
         <Tabs value={tab} onValueChange={(v) => { setTab(v); if (v !== "updates") { const now = new Date().toISOString(); writeSeen(now); setSeenAt(now); } }} className="flex min-h-0 flex-1 flex-col">
           <div className="px-4 pt-3">
             <TabsList className="w-full">
-              <TabsTrigger value="next" className="flex-1">Next steps{nNext + nApprove ? <span className="ml-1 text-faint">{nNext + nApprove}</span> : null}</TabsTrigger>
+              <TabsTrigger value="next" className="flex-1">Next steps{nNext ? <span className="ml-1 text-faint">{nNext}</span> : null}</TabsTrigger>
               <TabsTrigger value="updates" className="flex-1">Updates{nNew ? <span className="ml-1 text-faint">{nNew}</span> : null}</TabsTrigger>
             </TabsList>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2">
-            <TabsContent value="next"><ApprovalInbox inbox={inbox} />{isClient ? (!nApprove && !inbox.error && (
-              <div className="px-1 py-8 text-center">
-                <p className="font-medium text-strong">You're all caught up</p>
-                <p className="mt-1 text-sm text-muted">When your agency sends a page or campaign for your OK, it shows up here.</p>
-              </div>)) : <NextSteps recs={recs} onGo={() => setOpen(false)} />}</TabsContent>
+            <TabsContent value="next">{isClient ? (
+              <p className="px-1 py-8 text-center text-sm text-muted">You can view this project. Next steps go to the people who run it.</p>
+            ) : <NextSteps recs={recs} onGo={() => setOpen(false)} />}</TabsContent>
             <TabsContent value="updates"><Updates jobs={jobs} seenAt={seenAt} /></TabsContent>
           </div>
         </Tabs>

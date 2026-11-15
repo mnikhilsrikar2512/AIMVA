@@ -1,7 +1,7 @@
 // A visitor who signs up from a use-case page (/signup?for=clients&industry=healthcare&from=…) starts onboarding
 // with those answers already picked. Kept in sessionStorage for this tab only; every read is optional.
 const KEY = "aimva_signup_hint";
-const FOR = ["own", "personal", "clients", "employer"];
+const FOR = ["own", "personal", "employer"];
 const INDUSTRY = ["real_estate", "healthcare", "education", "saas", "retail", "services", "other"];
 
 export function rememberSignupHint(search) {

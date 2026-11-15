@@ -45,7 +45,7 @@ function TemplateReview() {
             return (
               <Card key={t.id} className="p-4">
                 <div className="flex items-start justify-between gap-2"><p className="font-semibold text-strong">{t.name}</p><Chip tone="violet">{MODULE[t.module]}</Chip></div>
-                <p className="mt-2 rounded-xl bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900"><Sparkles className="mr-1 inline size-3" />{t.reason}</p>
+                <p className="mt-2 rounded-xl bg-warm-soft px-2.5 py-1.5 text-xs text-warm"><Sparkles className="mr-1 inline size-3" />{t.reason}</p>
                 <p className="mt-2 text-xs italic text-ink">{line}</p>{meta && <p className="text-xs text-faint">{meta}</p>}
                 <div className="mt-3 flex gap-2">
                   <Button size="sm" busy={deciding === t.id} onClick={() => decide(t, "publish")}><Check className="size-3.5" /> Publish to everyone</Button>
@@ -140,13 +140,13 @@ export default function Owner() {
             <Card>
               <h2 className="mb-4 text-lg font-bold">Why results miss</h2>
               {fb.reasons.length === 0 ? <p className="text-sm text-muted">No thumbs-down in this period.</p> : (
-                <div className="space-y-3">{fb.reasons.map((r) => <Bar key={r.reason} label={r.reason} value={r.count} max={maxReason} tone="bg-rose-400" />)}</div>
+                <div className="space-y-3">{fb.reasons.map((r) => <Bar key={r.reason} label={r.reason} value={r.count} max={maxReason} tone="bg-danger" />)}</div>
               )}
               {fb.recent_negative.length > 0 && (
                 <ul className="mt-5 divide-y divide-line">
                   {fb.recent_negative.map((r, i) => (
                     <li key={i} className="flex gap-3 py-2.5 text-sm">
-                      <ThumbsDown className="mt-0.5 size-3.5 shrink-0 text-rose-500" />
+                      <ThumbsDown className="mt-0.5 size-3.5 shrink-0 text-danger" />
                       <span className="min-w-0"><b className="text-strong">{r.reason}</b> <span className="text-muted">on a {r.kind}{r.note ? `: “${r.note}”` : ""}</span>
                         <span className="block text-xs text-faint">{timeAgo(r.at)}</span></span>
                     </li>

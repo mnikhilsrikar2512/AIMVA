@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { rise, stagger } from "../../components/Motion";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Code2, ExternalLink, Eye, FileText, Globe, History, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
-import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
+import { ArrowLeft, ChevronDown, Code2, ExternalLink, Eye, FileText, Globe, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
+import { Button, Card, Chip, Empty, Field, IconButton, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
+import { ChangesList } from "../../components/ChangesPanel";
+import { ModulePrompt } from "../../components/ModulePrompt";
+import { useAgentEvents } from "../../lib/live";
 import { LoadError } from "../../components/LoadError";
 import { del, get, patch, post } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
@@ -12,7 +13,6 @@ import { useAuth, useIsClient } from "../../lib/auth";
 import { useOnboarding } from "../../components/AppLayout";
 import { LibraryImagePicker } from "../../components/GenControls";
 import PublishDialog from "../../components/PublishDialog";
-import { ApprovalGate } from "../../components/Approval";
 import { ACCEPT_IMAGES, DocumentPicker, ReferenceDropzone, UploadTile } from "../../components/References";
 import { BriefCoach, ImportBar, Rate, ReadinessPanel, useBriefReview } from "../../components/Quality";
 import { DECORS, DirectionsButton, LayoutPicker } from "../../components/Designs";
@@ -68,7 +68,7 @@ function ListEditor({ items, onChange, blank, render, addLabel, max }) {
         <div key={i} className="relative rounded-2xl bg-surface-2/60 p-3 pr-10">
           {render(it, (patch) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x))))}
           <button type="button" aria-label="Remove" onClick={() => onChange(items.filter((_, j) => j !== i))}
-            className="absolute right-2 top-2 grid size-7 place-items-center rounded-full text-muted hover:bg-white hover:text-rose-600"><Trash2 className="size-3.5" /></button>
+            className="absolute right-2 top-2 grid size-7 place-items-center rounded-full text-muted hover:bg-white hover:text-danger"><Trash2 className="size-3.5" /></button>
         </div>
       ))}
       {items.length < max && <button type="button" className="btn-ghost btn-sm" onClick={() => onChange([...items, { ...blank }])}><Plus className="size-3.5" /> {addLabel}</button>}
@@ -79,12 +79,12 @@ function ListEditor({ items, onChange, blank, render, addLabel, max }) {
 function AiStatus({ ai, writer, writers }) {
   // Neutral wording only: which supplier or key writes the page stays on the server.
   if (writer && writer !== "auto" && writer !== "builtin:writer") {
-    return <span className="text-emerald-600">Written by {writers.find((w) => w.ref === writer)?.name || "your chosen AI"}.</span>;
+    return <span className="text-brand">Written by {writers.find((w) => w.ref === writer)?.name || "your chosen AI"}.</span>;
   }
-  if (ai?.full) return <span className="text-emerald-600">Written by the AIMVA writer.</span>;
+  if (ai?.full) return <span className="text-brand">Written by the AIMVA writer.</span>;
   if (ai?.free) return (
     <span>
-      <span className="text-emerald-600">Written by the AIMVA writer.</span> When it's busy, the built-in template is used.
+      <span className="text-brand">Written by the AIMVA writer.</span> When it's busy, the built-in template is used.
     </span>
   );
   return <span>The built-in template is used for now; the AI writer isn't switched on for your account yet.</span>;
@@ -426,7 +426,7 @@ function BriefForm({ initial = BLANK, onSubmit, busy, submitLabel, coach = true 
           <Button type="submit" busy={busy}>{submitLabel}</Button>
         </div>
       </div>
-      {busy && <JobProgress className="mt-4" seconds={35} steps={["Reading your brief…", "Writing the headline and offer…", "Laying out the sections…", "Picking colours and pictures…", "Adding the lead form…", "Checking it on phones…"]} />}
+      {busy && <JobProgress className="mt-4" seconds={35} label="Making your page…" />}
 
       <Modal open={!!gate} onClose={() => setGate(null)} title="Two seconds before we generate">
         <p className="mb-4 text-sm text-muted">These details change the page the most. Add them now and you won't need to fix the page later.</p>
@@ -472,7 +472,7 @@ function ContactChoice({ b, val, set }) {
             </Field>
             <Field label="Country code" hint="For local numbers"><input className="input" value={b.country_code} onChange={set("country_code")} maxLength={5} pattern="\+\d{1,4}" /></Field>
           </div>
-          {!twilio && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Call backs are logged on each lead now. <Link to="/app/settings" className="font-semibold underline">Connect Twilio</Link> so the agent dials them automatically.</p>}
+          {!twilio && <p className="rounded-xl bg-warm-soft px-3 py-2 text-xs text-warm">Call backs are logged on each lead now. <Link to="/app/settings" className="font-semibold underline">Connect Twilio</Link> so the agent dials them automatically.</p>}
         </div>
       )}
     </div>
@@ -504,34 +504,6 @@ function GalleryPicker({ value, onChange }) {
   );
 }
 
-function Versions({ site, onRestore }) {
-  const [open, setOpen] = useState(false);
-  const { data: versions, reload } = useApi(open ? `/api/sites/${site.id}/versions` : null, []);
-  const [busy, run] = useAction();
-  useEffect(() => { if (open) reload(); }, [open, site.html, reload]);
-  return (
-    <>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}><History className="size-4" /> <span className="hidden sm:inline">Versions</span></Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Version history">
-        <p className="mb-3 text-sm text-muted">Every generation and edit is kept. Restoring creates a new version, so nothing is lost.</p>
-        <ul className="divide-y divide-line">
-          {versions.map((v) => (
-            <li key={v.id} className="flex items-center justify-between gap-3 py-3">
-              <div>
-                <p className="text-sm font-semibold text-strong">Version {v.number} · {v.note}</p>
-                <p className="text-xs text-faint">{timeAgo(v.created_at)}{v.generator ? ` · ${v.generator === "ai" ? "AI" : v.generator}` : ""}</p>
-              </div>
-              {v.current ? <Chip tone="green">Current</Chip> : (
-                <Button size="sm" variant="ghost" busy={busy} onClick={() => run(async () => { onRestore(await post(`/api/sites/${site.id}/versions/${v.id}/restore`)); setOpen(false); }, `Restored version ${v.number}`)}>Restore</Button>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Modal>
-    </>
-  );
-}
-
 function Editor({ site, onClose, onChange, feedback }) {
   const ed = useRef(null);
   const navigate = useNavigate();
@@ -554,8 +526,24 @@ function Editor({ site, onClose, onChange, feedback }) {
 
   // Regenerate, restore, HTML edits and whole-page AI edits replace the page: reload the editor with it.
   const replaced = (s) => { onChange(s); show(s, pageSlug); };
-  const autosave = async (html) => onChange(await patch(pageSlug ? `/api/sites/${site.id}/pages/${pageSlug}` : `/api/sites/${site.id}`,
-    pageSlug ? { html } : { html, note: "Edited visually" }));
+  // Same-page save check: send the version this editor started from; if a teammate saved after it, the server says
+  // who in a 409 and the owner picks Reload or Keep mine (the next save goes through with force).
+  const force = useRef(false);
+  const baseVersion = (pageSlug ? site.pages?.find((p) => p.slug === pageSlug)?.version : site.version) ?? undefined;
+  const autosave = async (html, asked) => {
+    const body = { ...(asked ? { html, note: "Edited with AI", request: asked.slice(0, 120) } : { html, note: "Edited visually" }),
+      ...(baseVersion !== undefined ? { base_version: baseVersion } : {}), ...(force.current ? { force: true } : {}) };
+    try {
+      onChange(await patch(pageSlug ? `/api/sites/${site.id}/pages/${pageSlug}` : `/api/sites/${site.id}`, body));
+      force.current = false;
+    } catch (err) {
+      if (err.status === 409) {
+        toast(err.message, { duration: Infinity, action: { label: "Keep mine", onClick: () => { force.current = true; ed.current?.flush().catch(() => {}); } },
+          cancel: { label: "Reload", onClick: async () => { try { replaced(await get(`/api/sites/${site.id}`)); } catch (e) { toast.error(e.message); } } } });
+      }
+      throw err;
+    }
+  };
   const addPage = (e) => { e.preventDefault(); run(async () => {
     await flush();
     const s = await post(`/api/sites/${site.id}/pages`, adding);
@@ -596,20 +584,19 @@ function Editor({ site, onClose, onChange, feedback }) {
             {current && (
               <>
                 <button type="button" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-ink hover:bg-surface-2" onClick={() => { setPagesOpen(false); renamePage(); }}>Rename “{current.title}”</button>
-                <button type="button" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-rose-600 hover:bg-surface-2" onClick={() => { setPagesOpen(false); removePage(); }}><Trash2 className="size-4" /> Delete this page</button>
+                <button type="button" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-danger hover:bg-surface-2" onClick={() => { setPagesOpen(false); removePage(); }}><Trash2 className="size-4" /> Delete this page</button>
               </>
             )}
           </div>
         )}
       </div>
-      {site.published ? <Chip tone="green">Live</Chip> : <Chip>Draft</Chip>}
+      <span className="hidden sm:inline-flex">{site.published ? <Chip tone="green">Live</Chip> : <Chip>Draft</Chip>}</span>
       <span className="hidden lg:inline-flex"><Rate kind="site" id={site.id} initial={feedback?.[site.id]} /></span>
     </>
   );
   const right = (
     <>
       <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={async () => { await flush(); setChecks(true); }}>Checks</Button>
-      <Versions site={site} onRestore={replaced} />
       <div className="relative">
         <button type="button" className="btn-subtle btn-sm" aria-label="More" aria-expanded={menu} onClick={() => setMenu((m) => !m)}><MoreHorizontal className="size-4" /></button>
         {menu && (
@@ -627,15 +614,14 @@ function Editor({ site, onClose, onChange, feedback }) {
           </div>
         )}
       </div>
-      <ApprovalGate kind="site" refId={site.id} beforeSend={flush}>
-        <Button size="sm" onClick={() => setPublishing(true)}><Rocket className="size-4" /> {site.published ? "Republish" : "Publish"}</Button>
-      </ApprovalGate>
+      <Button size="sm" variant="accent" onClick={() => setPublishing(true)}><Rocket className="size-4" /> {site.published ? "Republish" : "Publish"}</Button>
     </>
   );
 
   return (
     <>
-      <VisualEditor key={rev} ref={ed} html={base} siteId={site.id} page={pageSlug} onSave={autosave} onPageReplaced={replaced} left={left} right={right} />
+      <VisualEditor key={rev} ref={ed} html={base} siteId={site.id} page={pageSlug} onSave={autosave} onPageReplaced={replaced} left={left} right={right}
+        changes={<ChangesList site={site} page={pageSlug} onRestore={replaced} />} />
       <Modal open={!!adding} onClose={() => setAdding(null)} title="Add a page">
         <form onSubmit={addPage} className="space-y-4">
           <div className="flex flex-wrap gap-1.5">
@@ -668,12 +654,12 @@ function Editor({ site, onClose, onChange, feedback }) {
           }, "Saved as a new version")}>Save code</Button>
         </div>
       </Modal>
-      <Modal open={showBrief} onClose={() => setShowBrief(false)} title="Start over from the brief (your current page is kept in Versions)" wide>
+      <Modal open={showBrief} onClose={() => setShowBrief(false)} title="Start over from the brief (your current page stays in Changes)" wide>
         <BriefForm initial={{ ...BLANK, match_colors: false, ...site.brief }} busy={busy} submitLabel="Rebuild page" coach={false}
           onSubmit={(b) => run(async () => {
             replaced(await post(`/api/sites/${site.id}/regenerate`, b));
             setShowBrief(false);
-          }, "Rebuilt: the previous page is in Versions")} />
+          }, "Rebuilt. The previous page is in Changes.")} />
       </Modal>
       <PublishDialog site={site} open={publishing} onClose={() => setPublishing(false)} beforePublish={flush}
         onPublished={(s) => onChange({ ...site, ...s })} />
@@ -702,28 +688,64 @@ function Thumb({ s }) {
   );
 }
 
-function SiteCard({ s, onOpen, onDelete, viewOnly }) {
-  // A client's view: open the page to look at it (a draft opens as a preview), nothing to edit or delete.
+/** One page in History: a list row with a small live thumbnail (lists, not card grids: design.md section 8). */
+function SiteRow({ s, onOpen, onDelete, viewOnly }) {
+  // A view-only member opens the page to look at it (a draft opens as a preview), nothing to edit or delete.
   if (viewOnly) onOpen = () => window.open(`/api/sites/${s.id}/preview`, "_blank", "noopener");
   return (
-    <motion.div variants={rise} whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 300, damping: 24 }} className="card flex flex-col overflow-hidden hover:shadow-[var(--shadow-lift)]">
-      <button className="relative block h-44 overflow-hidden bg-white text-left" onClick={onOpen} aria-label={`Open ${s.name}`}>
+    <li className="flex items-center gap-4 border-b border-line py-3">
+      <button className="relative block h-[72px] w-[116px] shrink-0 overflow-hidden rounded-md bg-white ring-1 ring-line" onClick={onOpen} aria-label={`Open ${s.name}`}>
         <Thumb s={s} />
       </button>
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-center justify-between gap-2">
-          <p className="truncate font-semibold text-strong">{s.name}</p>
-          {s.published ? <Chip tone="green">Live</Chip> : <Chip>Draft</Chip>}
-        </div>
-        <p className="mt-1 text-xs text-faint">Updated {timeAgo(s.updated_at)} · {s.visits} visits{s.published ? " · " : ""}{s.published && <Outcome kind="page" id={s.id} />}</p>
-        <div className="mt-auto flex gap-2 pt-4">
-          {viewOnly ? <Button variant="ghost" size="sm" onClick={onOpen}><Eye className="size-3.5" /> Preview</Button>
-            : <Button variant="ghost" size="sm" onClick={onOpen}><Code2 className="size-3.5" /> Edit</Button>}
-          {s.published && <a className="btn-ghost btn-sm" href={s.deploy_url || s.url} target="_blank" rel="noreferrer"><ExternalLink className="size-3.5" /> Live</a>}
-          {!viewOnly && <Button variant="danger" size="sm" className="ml-auto" aria-label={`Delete ${s.name}`} onClick={onDelete}><Trash2 className="size-3.5" /></Button>}
-        </div>
-      </div>
-    </motion.div>
+      <button type="button" className="min-w-0 flex-1 text-left" onClick={onOpen}>
+        <span className="flex items-center gap-2">
+          <span className="truncate text-[15px] font-medium text-strong">{s.name}</span>
+          {s.published ? <span className="rounded bg-accent-soft px-1.5 text-xs font-medium leading-5 text-strong">Live</span> : <span className="text-xs text-muted">Draft</span>}
+        </span>
+        <span className="mt-0.5 block text-xs text-muted">Updated {timeAgo(s.updated_at)} · {s.visits} visits{s.published ? " · " : ""}{s.published && <Outcome kind="page" id={s.id} />}</span>
+      </button>
+      <span className="flex shrink-0 items-center gap-1">
+        {s.published && <IconButton label="Open the live page" href={s.deploy_url || s.url} target="_blank" rel="noreferrer"><ExternalLink className="size-4" /></IconButton>}
+        {viewOnly ? <IconButton label="Preview" onClick={onOpen}><Eye className="size-4" /></IconButton>
+          : <IconButton label="Delete" danger onClick={onDelete}><Trash2 className="size-4" /></IconButton>}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * A page from one sentence (design.md 5.2, Page row). It runs the same page maker as the first-run setup, with no
+ * campaigns attached, and opens the page in the editor when it's ready.
+ */
+function PageFromPrompt({ given, onReady, onDetails }) {
+  const [job, setJob] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useAgentEvents((d) => { if (job && d.job?.id === job.id) setJob(d.job); });
+  const running = job && (job.status === "queued" || job.status === "running");
+  useEffect(() => {
+    if (!running) return undefined;
+    const t = setInterval(() => get(`/api/agents/jobs/${job.id}`).then(setJob).catch(() => {}), 3000);
+    return () => clearInterval(t);
+  }, [running, job?.id]);
+  useEffect(() => {
+    if (job?.status === "done" && job.result?.site_id) onReady(job.result.site_id);
+  }, [job?.status, job?.result?.site_id]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const make = async (prompt) => {
+    setBusy(true);
+    try {
+      const isUrl = /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(prompt);
+      setJob(await post("/api/agents/launch", { url: isUrl ? prompt : "", description: isUrl ? "" : prompt, platforms: [], publish: false }));
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  };
+  if (running) return <div className="max-w-3xl"><JobProgress startedAt={job.created_at} seconds={45} canLeave label="Making your page…" /></div>;
+  return (
+    <div>
+      {job?.status === "failed" && <p role="alert" className="mb-4 max-w-3xl text-sm text-danger">Your page didn't finish. Try again.</p>}
+      {job?.status === "done" && !job.result?.site_id && <p role="alert" className="mb-4 max-w-3xl text-sm text-danger">The page wasn't made. Try again, or fill in the details yourself.</p>}
+      <ModulePrompt moduleKey="page" given={given} busy={busy} submitLabel="Make my page" onSubmit={make}
+        outcome="You'll get a page with a lead form, ready to publish. Nothing goes live until you press Publish."
+        secondary={<button type="button" className="font-medium text-brand hover:underline" onClick={onDetails}>Fill in the details yourself</button>} />
+    </div>
   );
 }
 
@@ -731,7 +753,22 @@ export default function Websites() {
   const { data: sites, reload, loading, error: sitesError } = useApi("/api/sites", []);
   const { data: feedback } = useApi("/api/feedback?kind=site", {});
   const isClient = useIsClient();  // view-only: the client sees their pages, never the builder
+  const [params, setParams] = useSearchParams();
+  const givenPrompt = useRef(params.get("prompt") || "");
+  // First visit: the one prompt. With pages already made, History comes first and "New page" opens the prompt.
   const [tab, setTab] = useState(isClient ? "history" : "create");
+  const [details, setDetails] = useState(false);  // the full brief form, behind "Fill in the details yourself"
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (loading || settled) return;
+    setSettled(true);
+    if (sites.length && !givenPrompt.current && !params.get("site")) setTab("history");
+  }, [loading, settled, sites.length, params]);
+  useEffect(() => {  // opened from the reveal (?site=) or Home (?prompt=): use it once, then tidy the address
+    const site = params.get("site");
+    if (site) get(`/api/sites/${site}`).then(setCurrent).catch((e) => toast.error(e.message));
+    if (site || params.get("prompt")) setParams((p) => { const n = new URLSearchParams(p); n.delete("site"); n.delete("prompt"); return n; }, { replace: true });
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
   const [current, setCurrent] = useState(null);  // the page being worked on in Create
   const [formKey, setFormKey] = useState(0);
   const [q, setQ] = useState("");
@@ -746,20 +783,24 @@ export default function Websites() {
   } : {};
   const starter = { ...BLANK, business: user.workspace?.name || user.company || "", industry: onboarding?.template?.label || "", ...(onboarding?.industry && tpl ? tpl : {}), ...fromBrand };
 
-  const startNew = () => { setCurrent(null); setFormKey((k) => k + 1); setTab("create"); };
+  const startNew = () => { setCurrent(null); setDetails(false); setFormKey((k) => k + 1); setTab("create"); };
   const open = (id) => run(async () => { setCurrent(await get(`/api/sites/${id}`)); });
   const filtered = sites.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div>
-      <PageHeader title="Pages" subtitle={isClient ? "The landing pages your agency made for you." : undefined}
+      <PageHeader title="Pages"
         actions={!isClient && <Button onClick={startNew}><Plus className="size-4" /> New page</Button>} />
       <StoryLine module="pages" />
       {!isClient && <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${sites.length ? ` (${sites.length})` : ""}` }]} /></div>}
 
       {current && !isClient && <Editor key={current.id} site={current} feedback={feedback} onChange={(s) => { setCurrent(s); reload(); }}
         onClose={() => { setCurrent(null); setTab("history"); }} />}
-      {tab === "create" && !isClient && (
+      {tab === "create" && !isClient && !current && !details && (
+        <PageFromPrompt given={givenPrompt.current} onDetails={() => setDetails(true)}
+          onReady={(id) => { reload(); get(`/api/sites/${id}`).then(setCurrent).catch((e) => toast.error(e.message)); }} />
+      )}
+      {tab === "create" && !isClient && details && (
         <Card className="mx-auto max-w-4xl">
           <h2 className="mb-1 text-lg font-bold text-strong">New landing page</h2>
           <p className="mb-5 text-sm text-muted">Fill in what you know. Your earlier pages stay safe in History.</p>
@@ -776,15 +817,15 @@ export default function Websites() {
         loading ? <ListSkeleton /> : sitesError && sites.length === 0 ? (
           <LoadError error={sitesError} what="your pages" onRetry={reload} />
         ) : sites.length === 0 ? (
-          isClient ? <Empty icon={Globe} title="No pages yet" text="Pages your agency makes for you show up here." />
+          isClient ? <Empty icon={Globe} title="No pages yet" text="Pages made in this project show up here." />
           : <Empty icon={Globe} title="Your pages will live here" text="A landing page with a lead form is the fastest way to your first lead. It takes about a minute."
             action={<Button onClick={startNew}><Plus className="size-4" /> Make your first page</Button>} />
         ) : (
           <>
             <input className="input mb-4 max-w-sm" placeholder="Search pages" value={q} onChange={(e) => setQ(e.target.value)} />
-            <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="max-w-4xl border-t border-line">
               {filtered.map((s) => (
-                <SiteCard key={s.id} s={s} viewOnly={isClient} onOpen={() => open(s.id)} onDelete={() => {
+                <SiteRow key={s.id} s={s} viewOnly={isClient} onOpen={() => open(s.id)} onDelete={() => {
                   if (confirm(`Delete "${s.name}" and all its versions? This removes the live page too.`)) run(async () => {
                     await del(`/api/sites/${s.id}`);
                     if (current?.id === s.id) setCurrent(null);
@@ -792,7 +833,7 @@ export default function Websites() {
                   }, "Deleted");
                 }} />
               ))}
-            </motion.div>
+            </ul>
           </>
         )
       )}

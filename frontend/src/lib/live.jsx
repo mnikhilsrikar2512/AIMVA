@@ -48,6 +48,8 @@ export function LiveProvider({ children }) {
   viewOnly.current = isClient;
   const onLeadsPage = useRef(false);
   onLeadsPage.current = location.pathname === "/app/leads";
+  const path = useRef(location.pathname);
+  path.current = location.pathname;
 
   // Visiting the Leads page marks everything as seen.
   useEffect(() => {
@@ -82,24 +84,13 @@ export function LiveProvider({ children }) {
         toast(`${name} messaged on WhatsApp`, { action: { label: "Open", onClick: open } });
       }
     });
-    // Client sign-off: refresh Publish buttons and the client's bell, and say what happened.
-    es.addEventListener("approval", (e) => {
-      const d = JSON.parse(e.data);
-      window.dispatchEvent(new CustomEvent("aimva:approval", { detail: d }));
-      const a = d.approval || {};
-      if (d.type === "requested" && viewOnly.current) {
-        toast(`Waiting for your OK: ${a.title}`, { action: { label: "Review", onClick: () => window.dispatchEvent(new Event("aimva:foryou")) }, duration: 10000 });
-      } else if (d.type === "decided" && !viewOnly.current) {
-        if (a.status === "approved") toast.success(`Your client approved ${a.title}. You can publish it now.`, { duration: 10000 });
-        else if (a.status === "changes") toast(`Your client asked for changes on ${a.title}`, { description: a.comment, duration: 12000 });
-      }
-    });
     es.addEventListener("agent", (e) => {
       const d = JSON.parse(e.data);
       window.dispatchEvent(new CustomEvent("aimva:agent", { detail: d }));
       // Big jobs announce themselves wherever you are; small ones only show in the activity feed.
-      if (d.type === "finished" && d.job.kind === "launch") {
-        (d.job.status === "done" ? toast.success : toast.error)(d.job.title, { action: { label: "Open", onClick: () => navigate("/app") } });
+      // Not on /start or Pages, where the page being made is already on screen.
+      if (d.type === "finished" && d.job.kind === "launch" && !/^\/(start|app\/websites)/.test(path.current)) {
+        (d.job.status === "done" ? toast.success : toast.error)(d.job.title, { action: { label: "Open", onClick: () => navigate(d.job.result?.site_id ? `/app/websites?site=${d.job.result.site_id}` : "/app") } });
       }
     });
     return () => es.close();

@@ -30,7 +30,7 @@ function StillOrb() {
   return (
     <div className="relative grid size-full place-items-center" aria-hidden>
       <span className="absolute size-[58%] rounded-full border border-brand/30" style={{ animation: "mk-ring 3.2s ease-out infinite" }} />
-      <span className="size-[52%] rounded-full" style={{ background: "radial-gradient(circle at 34% 30%, #ffffff, #5eb8ac 42%, #0b6b67 78%, #0f2b2d)", boxShadow: "0 24px 60px -18px rgb(11 107 103 / 0.55)" }} />
+      <span className="size-[52%] rounded-full" style={{ background: "radial-gradient(circle at 34% 30%, #ffffff, #02eff0 42%, #00696b 78%, #0f282f)", boxShadow: "0 24px 60px -18px rgb(11 107 103 / 0.55)" }} />
     </div>
   );
 }
