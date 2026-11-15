@@ -100,7 +100,7 @@ function Sidebar({ onNavigate, expanded = true, pinned, onPin }) {
     <div className="flex h-full flex-col bg-strong px-2 text-bg [&_:focus-visible]:outline-brand-on-dark">
       <div className="flex h-14 shrink-0 items-center px-2.5">
         <Link to="/app" className="flex items-center gap-2.5" aria-label="AIMVA home" onClick={onNavigate}>
-          <img src="/favicon.svg" alt="" className="size-7 shrink-0" />
+          <img src="/logo-on-dark.svg" alt="" className="size-7 shrink-0" />
           {expanded && <span className="font-display text-base font-bold tracking-tight text-bg">AIMVA</span>}
         </Link>
       </div>
@@ -359,7 +359,7 @@ export default function AppLayout() {
       <div className={cx("relative flex min-w-0 flex-1 flex-col", railW)}>
         {/* Phones: slim top bar (logo, search, bell); navigation lives in the bottom tab bar. */}
         <header className="z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-bg px-4 md:hidden">
-          <img src="/favicon.svg" alt="" className="size-7 shrink-0" />
+          <img src="/logo.svg" alt="" className="size-7 shrink-0" />
           <span className="min-w-0 truncate text-base font-semibold text-strong">{pageTitle || sectionTitle(location.pathname)}</span>
           <button type="button" className="btn-subtle btn-sm ml-auto px-2" aria-label="Search" title="Search"
             onClick={() => window.dispatchEvent(new CustomEvent("aimva:palette"))}>
