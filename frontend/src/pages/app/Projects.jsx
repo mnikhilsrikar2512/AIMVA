@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Field, Modal, cx } from "../../components/ui";
+import { Button, Field, Modal, PageHeader, cx } from "../../components/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../../components/shadcn/dropdown-menu";
 import { Tooltip } from "../../components/shadcn/tooltip";
 import { LoadError } from "../../components/LoadError";
@@ -155,10 +155,9 @@ export default function Projects() {
 
   return (
     <div>
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold text-strong">{showArchived ? "Archived projects" : "Projects"}</h1>
-        {!showArchived && <Button variant="accent" busy={creating} onClick={create}><Plus className="size-4" /> New project</Button>}
-      </div>
+      {/* The title lives in the app header; only the one action stays on the page. */}
+      <PageHeader title={showArchived ? "Archived projects" : "Projects"}
+        actions={!showArchived && <Button variant="accent" busy={creating} onClick={create}><Plus className="size-4" /> New project</Button>} />
 
       {error && !list.length ? <LoadError error={error} what="your projects" onRetry={reload} />
         : loading ? (
