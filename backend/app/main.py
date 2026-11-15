@@ -51,6 +51,8 @@ from .console import router as console_router  # noqa: E402
 app.include_router(console_router)
 from .projects import router as projects_router  # noqa: E402
 app.include_router(projects_router)
+from .made import router as made_router  # noqa: E402
+app.include_router(made_router)
 
 
 @app.on_event("startup")

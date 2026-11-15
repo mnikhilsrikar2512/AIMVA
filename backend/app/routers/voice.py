@@ -9,7 +9,7 @@ from typing import List, Optional
 from xml.sax.saxutils import escape
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -45,7 +45,7 @@ class AgentIn(BaseModel):
 def agent_out(a: VoiceAgent) -> dict:
     return {"id": a.id, "name": a.name, "language": a.language, "greeting": a.greeting,
             "instructions": a.instructions, "questions": a.questions, "handoff_number": a.handoff_number,
-            "created_at": a.created_at.isoformat()}
+            "enabled": a.enabled is not False, "created_at": a.created_at.isoformat()}
 
 
 def call_out(c: Call) -> dict:
@@ -87,10 +87,14 @@ def create_agent(body: AgentIn, user: User = Depends(current_user), db: Session 
 
 
 @router.put("/api/voice/agents/{aid}")
-def update_agent(aid: int, body: AgentIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_agent(aid: int, body: AgentIn, user: User = Depends(current_user), db: Session = Depends(get_db), req: Request = None):
+    from .. import made
     a = _agent(db, user, aid)
+    before = made.snapshot("call_script", a)
     for k, v in body.model_dump().items():
         setattr(a, k, v)
+    if made.snapshot("call_script", a) != before:  # a hand edit is a version in the changes panel too
+        made.record(db, "call_script", a, getattr(getattr(getattr(req, "state", None), "person", None), "id", None), note="Edited by hand")
     db.commit()
     return agent_out(a)
 

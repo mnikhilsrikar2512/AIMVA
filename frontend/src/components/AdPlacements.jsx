@@ -358,8 +358,10 @@ function StatusBar({ dark }) {
  * @param platform  the campaign's own platform; its placements are shown even before connecting
  * @param logo      the brand's logo (Brand Kit), used as the profile picture
  */
-export default function AdPlacements({ creative = {}, brand, domain, logo, connected, platform }) {
-  const reduceMotion = useMemo(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches, []);
+export default function AdPlacements({ creative = {}, brand, domain, logo, connected, platform, still }) {
+  // `still`: inside the app nothing moves on its own (design.md v3 9); the marketing pages keep the motion.
+  const prefersStill = useMemo(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches, []);
+  const reduceMotion = prefersStill || !!still;
   const available = PLACEMENTS.filter((p) => connected.has(p.provider) || p.provider === platform);
   const missing = Object.keys(PROVIDER_LABEL).filter((k) => !connected.has(k));
   const [index, setIndex] = useState(0);

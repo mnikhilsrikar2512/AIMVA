@@ -1,320 +1,304 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
-import { AudioLines, Bot, Mic, MicOff, Phone, PhoneOff, Plus, Save, Send, Trash2, User as UserIcon } from "lucide-react";
-import { Button, Card, Chip, Empty, Field, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton } from "../../components/ui";
+// Calls (design.md v3 7.3): one prompt writes the call assistant's script for this business; the script fills the
+// canvas as the call it will make, and the changes panel takes every change after that. Lines can also be edited in
+// place. "Turn on" lets the assistant call back anyone who leaves a number.
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { Mic, MicOff, MoreHorizontal, Phone, PhoneOff, Plus, Send, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/shadcn/dropdown-menu";
+import { Tooltip } from "../../components/shadcn/tooltip";
+import { Button, Field, ListSkeleton, Modal, PageHeader, cx } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
-import { del, get, post, put } from "../../lib/api";
+import { ModulePrompt } from "../../components/ModulePrompt";
+import { ChangesPanel, CompareText, ModuleFrame, ToolbarTitle, usePanelOpen } from "../../components/ModuleChanges";
+import { get, patch, post, put } from "../../lib/api";
 import { timeAgo, useAction, useApi } from "../../lib/hooks";
 import { speakWithPulse, useMicLevel } from "../../lib/audio";
 
-const VoiceOrb = lazy(() => import("../../components/VoiceOrb"));
-
 const SpeechRecognition = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+const SCRIPT = ["name", "language", "greeting", "instructions", "questions", "handoff_number"];
+const STATUS = { completed: "Finished", handoff: "Handed to you", active: "On the call", scheduled: "Waiting for 9 am", failed: "Didn't connect" };
 
-function sentimentTone(s) {
-  if (s == null) return "slate";
-  return s > 0.2 ? "green" : s < -0.2 ? "rose" : "amber";
-}
-
-function AgentEditor({ agent, languages, onSaved, onDelete }) {
-  const [a, setA] = useState(agent);
-  const [busy, run] = useAction();
-  useEffect(() => { setA(agent); }, [agent]);
-  const set = (k) => (e) => setA((x) => ({ ...x, [k]: e.target.value }));
-  const tpl = useTemplateTracker("voice");
-  const script = () => ({ language: a.language, greeting: a.greeting, instructions: a.instructions, questions: a.questions.map((q) => q.trim()).filter(Boolean) });
+/** A line of the script that becomes a text box when clicked (edit directly, design.md 7.3). */
+function EditLine({ value, onSave, label, multiline, className, onRemove }) {
+  const [draft, setDraft] = useState(null);
+  const save = () => { const v = (draft ?? "").trim(); setDraft(null); if (v && v !== value) onSave(v); };
+  if (draft !== null) {
+    const Tag = multiline ? "textarea" : "input";
+    return (
+      <Tag autoFocus aria-label={label} value={draft} rows={multiline ? 3 : undefined} onChange={(e) => setDraft(e.target.value)} onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); } if (e.key === "Escape") setDraft(null); }}
+        className={cx("block w-full resize-y rounded-md bg-surface px-2 py-1 text-strong ring-2 ring-brand/40 focus:outline-none", className)} />
+    );
+  }
   return (
-    <div className="space-y-4">
-      <TemplateStrip module="voice" title="Start from a call script" onApply={(t) => {
-        tpl.apply(t);
-        const p = t.payload;
-        setA((x) => ({ ...x, greeting: p.greeting, instructions: p.instructions, questions: p.questions, language: languages?.[p.language] ? p.language : x.language }));
-      }} />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Agent name"><input className="input" value={a.name} onChange={set("name")} /></Field>
-        <Field label="Language">
-          <select className="input" value={a.language} onChange={set("language")}>
-            {Object.entries(languages || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </Field>
-      </div>
-      <Field label="Greeting"><textarea className="input" rows={2} value={a.greeting} onChange={set("greeting")} /></Field>
-      <Field label="Personality & instructions" hint="How the assistant should sound and behave when it writes its replies.">
-        <textarea className="input" rows={3} value={a.instructions} onChange={set("instructions")} />
-      </Field>
-      <Field label="Qualification questions" hint="One per line, asked in order. Include name and phone/email so a lead can be created.">
-        <textarea className="input" rows={5} value={a.questions.join("\n")} onChange={(e) => setA((x) => ({ ...x, questions: e.target.value.split("\n") }))} />
-      </Field>
-      <Field label="Human handoff number" hint="Phone calls transfer here when the caller asks for a person or sounds upset.">
-        <input className="input" value={a.handoff_number} onChange={set("handoff_number")} placeholder="+91…" />
-      </Field>
-      <div className="flex gap-2">
-        <Button busy={busy} onClick={() => run(async () => { const out = await put(`/api/voice/agents/${a.id}`, { ...a, questions: a.questions.map((q) => q.trim()).filter(Boolean) }); tpl.track(script()); onSaved(out); }, "Agent saved")}>
-          <Save className="size-4" /> Save
-        </Button>
-        <SaveTemplateButton module="voice" getPayload={script} label="Save script as template" className="h-10" />
-        <Button variant="danger" onClick={() => confirm("Delete this agent and its call history?") && onDelete()}><Trash2 className="size-4" /></Button>
-      </div>
-    </div>
+    <span className="group flex items-start gap-1">
+      <button type="button" onClick={() => setDraft(value || "")} title="Click to edit"
+        className={cx("min-w-0 flex-1 rounded-md px-2 py-1 text-left hover:bg-surface-2", !value && "text-muted", className)}>{value || "Add…"}</button>
+      {onRemove && (
+        <Tooltip content="Remove"><button type="button" aria-label={`Remove: ${value}`} onClick={onRemove}
+          className="mt-1 grid size-6 shrink-0 place-items-center rounded text-muted opacity-0 hover:text-danger focus:opacity-100 group-hover:opacity-100"><X className="size-3.5" /></button></Tooltip>
+      )}
+    </span>
   );
 }
 
-const PHASE_LABEL = {
-  idle: "Ready", listening: "Listening to you…", thinking: "Thinking…", speaking: "Agent speaking", ended: "Call ended",
-};
-
-function SentimentMeter({ value, average }) {
-  // -1..1 mapped onto a red → amber → green track
-  const pct = value == null ? 50 : Math.round(((Math.max(-1, Math.min(1, value)) + 1) / 2) * 100);
-  const label = value == null ? "Waiting for the caller" : value > 0.2 ? "Calm / positive" : value < -0.2 ? "Upset" : "Neutral";
-  return (
-    <div className="w-full max-w-[220px]">
-      <div className="relative h-1.5 rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-brand">
-        <span className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-bg shadow transition-[left] duration-700"
-          style={{ left: `${pct}%` }} />
-      </div>
-      <p className="mt-2 text-center text-xs text-muted">
-        Caller mood: <span className="font-semibold text-ink">{label}</span>
-        {value != null && <span className="text-faint"> ({value > 0 ? "+" : ""}{value})</span>}
-      </p>
-      {average != null && value != null && <p className="text-center text-xs text-faint">Call average {average > 0 ? "+" : ""}{average}</p>}
-    </div>
-  );
-}
-
-function OrbStage({ level, phase, sentiment, size = "h-56" }) {
-  return (
-    <Suspense fallback={<div className={cx(size, "w-full")} />}>
-      <VoiceOrb level={level} state={phase} sentiment={sentiment} className={cx(size, "w-full")} />
-    </Suspense>
-  );
-}
-
+/** A practice call in the browser: talk with the microphone or type. Nothing is dialled. */
 function TestCall({ agent, onEnded }) {
   const [call, setCall] = useState(null);
   const [messages, setMessages] = useState([]);
   const [listening, setListening] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
   const [text, setText] = useState("");
-  const [voiceOn, setVoiceOn] = useState(true);
   const [busy, run] = useAction();
   const recRef = useRef(null);
   const endRef = useRef(null);
   const level = useRef(0);
   const stopSpeech = useRef(null);
   useMicLevel(listening, level);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages]);
   useEffect(() => () => { recRef.current?.abort(); stopSpeech.current?.(); }, []);
-
-  const lastUser = [...messages].reverse().find((m) => m.role === "user" && m.sentiment != null);
-  // The orb shows how the caller feels right now (latest reply); the call average is shown alongside.
-  const sentiment = lastUser ? lastUser.sentiment : null;
   const active = call?.status === "active";
-  const phase = !call ? "idle" : !active && !speaking ? "ended" : listening ? "listening" : busy ? "thinking" : speaking ? "speaking" : "idle";
-
-  const speak = (t) => {
-    stopSpeech.current?.();
-    stopSpeech.current = speakWithPulse(t, {
-      voiceOn, lang: agent.language, levelRef: level,
-      onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false),
-    });
-  };
-
-  const start = () => run(async () => {
-    const d = await post(`/api/voice/agents/${agent.id}/calls`);
-    setCall(d.call);
-    setMessages([{ role: "agent", text: d.reply }]);
-    speak(d.reply);
-  });
-
+  const speak = (t) => { stopSpeech.current?.(); stopSpeech.current = speakWithPulse(t, { voiceOn: true, lang: agent.language, levelRef: level }); };
+  const start = () => run(async () => { const d = await post(`/api/voice/agents/${agent.id}/calls`); setCall(d.call); setMessages([{ role: "agent", text: d.reply }]); speak(d.reply); });
   const send = (t) => {
     if (!t.trim() || !call) return;
-    setText("");
-    stopSpeech.current?.();
+    setText(""); stopSpeech.current?.();
     setMessages((m) => [...m, { role: "user", text: t }]);
     run(async () => {
       const d = await post(`/api/voice/calls/${call.id}/turn`, { text: t });
-      setMessages((m) => {
-        const copy = [...m];
-        copy[copy.length - 1] = { ...copy[copy.length - 1], sentiment: d.sentiment };
-        return [...copy, { role: "agent", text: d.reply }];
-      });
-      setCall(d.call);
-      speak(d.reply);
+      setMessages((m) => [...m, { role: "agent", text: d.reply }]);
+      setCall(d.call); speak(d.reply);
       if (d.status !== "active") onEnded?.();
     });
   };
-
   const listen = () => {
     if (!SpeechRecognition) return;
     if (listening) { recRef.current?.stop(); return; }
     stopSpeech.current?.();
     const rec = new SpeechRecognition();
-    rec.lang = agent.language;
-    rec.interimResults = false;
+    rec.lang = agent.language; rec.interimResults = false;
     rec.onresult = (e) => send(e.results[0][0].transcript);
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recRef.current = rec;
-    rec.start();
-    setListening(true);
+    rec.onend = () => setListening(false); rec.onerror = () => setListening(false);
+    recRef.current = rec; rec.start(); setListening(true);
   };
-
   const end = () => run(async () => { stopSpeech.current?.(); setCall(await post(`/api/voice/calls/${call.id}/end`)); onEnded?.(); });
-
   if (!call) {
     return (
-      <div className="flex flex-col items-center pb-8 text-center">
-        <OrbStage level={level} phase="idle" sentiment={null} size="h-52" />
-        <p className="font-semibold text-strong">Test {agent.name} in your browser</p>
-        <p className="mt-1 max-w-sm text-sm text-muted">{SpeechRecognition ? "Talk with your microphone or type." : "This browser can't listen to your microphone (Firefox), so type your replies, or open AIMVA in Chrome, Edge or Safari to talk."} The orb moves with whoever is speaking and changes colour with the caller's mood.</p>
-        <label className="mt-4 flex items-center gap-2 text-sm text-muted"><input type="checkbox" className="accent-brand" checked={voiceOn} onChange={(e) => setVoiceOn(e.target.checked)} /> Speak replies aloud</label>
-        <Button className="mt-5" busy={busy} onClick={start}><Phone className="size-4" /> Start test call</Button>
+      <div>
+        <p className="text-sm text-muted">{SpeechRecognition ? "Talk with your microphone or type your answers." : "This browser can't listen to the microphone, so type your answers."} Nothing is dialled.</p>
+        <Button className="mt-4" variant="ghost" busy={busy} onClick={start}><Phone className="size-4" /> Start the practice call</Button>
       </div>
     );
   }
-
   return (
-    <div className="grid gap-4 md:grid-cols-[minmax(0,240px)_1fr]">
-      <div className="flex flex-col items-center rounded-2xl border border-line bg-bg/40 p-3 md:h-[520px] md:justify-center">
-        <OrbStage level={level} phase={phase} sentiment={sentiment} size="h-48 md:h-64" />
-        <p className="mb-3 flex items-center gap-2 text-sm font-medium text-strong" aria-live="polite">
-          <span className={cx("size-2 rounded-full", phase === "listening" ? "animate-pulse bg-danger" : phase === "speaking" ? "animate-pulse bg-brand" : phase === "thinking" ? "animate-pulse bg-brand" : phase === "ended" ? "bg-surface-2" : "bg-brand")} />
-          {PHASE_LABEL[phase]}
-        </p>
-        <SentimentMeter value={sentiment} average={call.sentiment} />
+    <div className="flex h-[min(60vh,520px)] flex-col">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-md bg-surface-2/60 p-3">
+        {messages.map((m, i) => (
+          <div key={i} className={cx("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+            <p className={cx("max-w-[80%] rounded-2xl px-3.5 py-2 text-sm", m.role === "agent" ? "rounded-bl-sm bg-surface text-ink" : "rounded-br-sm bg-accent-soft text-strong")}>{m.text}</p>
+          </div>
+        ))}
+        {!active && call.lead_id && <p className="text-center text-xs text-muted">This call made a lead.</p>}
+        <div ref={endRef} />
       </div>
-
-      <div className="flex h-[520px] min-w-0 flex-col">
-        <div className="mb-3 flex items-center justify-between">
-          <Chip tone={active ? "green" : call.status === "handoff" ? "amber" : "slate"}>{active ? "Live" : call.status}</Chip>
-          {active ? <Button size="sm" variant="danger" onClick={end}><PhoneOff className="size-3.5" /> End</Button>
-            : <Button size="sm" variant="ghost" onClick={() => { setCall(null); setMessages([]); }}>New call</Button>}
-        </div>
-        <div className="flex-1 space-y-3 overflow-y-auto rounded-2xl bg-surface-2/60 p-4">
-          {messages.map((m, i) => (
-            <motion.div key={i} className={cx("flex gap-2", m.role === "user" && "flex-row-reverse")}
-              initial={{ opacity: 0, y: 8, x: m.role === "user" ? 14 : -14 }} animate={{ opacity: 1, y: 0, x: 0 }} transition={{ type: "spring", stiffness: 320, damping: 26 }}>
-              <div className={cx("grid size-7 shrink-0 place-items-center rounded-full", m.role === "agent" ? "bg-lavender0/15 text-brand" : "bg-lavender0/15 text-brand")}>
-                {m.role === "agent" ? <Bot className="size-4" /> : <UserIcon className="size-4" />}
-              </div>
-              <div className={cx("max-w-[80%] rounded-2xl px-3.5 py-2 text-sm", m.role === "agent" ? "bg-surface-2 text-ink" : "bg-brand/25 text-strong")}>
-                {m.text}
-                {m.sentiment != null && <span className={cx("ml-2 text-xs", m.sentiment > 0.2 ? "text-brand" : m.sentiment < -0.2 ? "text-danger" : "text-faint")}>{m.sentiment > 0 ? "+" : ""}{m.sentiment}</span>}
-              </div>
-            </motion.div>
-          ))}
-          {!active && call.lead_id && <p className="text-center text-xs text-brand">Lead #{call.lead_id} created from this call.</p>}
-          <div ref={endRef} />
-        </div>
-        {active && (
-          <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); send(text); }}>
-            {SpeechRecognition && (
-              <Button type="button" variant={listening ? "primary" : "ghost"} onClick={listen} aria-label={listening ? "Stop talking" : "Talk"}>
-                {listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
-              </Button>
-            )}
-            <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : "Type a reply…"} />
-            <Button type="submit" disabled={!text.trim() || busy}><Send className="size-4" /></Button>
-          </form>
-        )}
-      </div>
+      {active ? (
+        <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); send(text); }}>
+          {SpeechRecognition && <Button type="button" variant="ghost" onClick={listen} aria-label={listening ? "Stop talking" : "Talk"}>{listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}</Button>}
+          <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : "Type your answer"} aria-label="Your answer" />
+          <Button type="submit" variant="ghost" disabled={!text.trim() || busy} aria-label="Send"><Send className="size-4" /></Button>
+          <Button type="button" variant="danger" onClick={end} aria-label="End the call"><PhoneOff className="size-4" /></Button>
+        </form>
+      ) : <Button className="mt-3 self-start" variant="ghost" onClick={() => { setCall(null); setMessages([]); }}>Practise again</Button>}
     </div>
   );
 }
 
 export default function VoiceAgent() {
-  const { data: agents, setData: setAgents, loading, error: agentsError, reload: reloadAgents } = useApi("/api/voice/agents", []);
-  const { data: languages } = useApi("/api/voice/languages");
+  const { data: agents, setData: setAgents, loading, error, reload } = useApi("/api/voice/agents", []);
+  const { data: languages } = useApi("/api/voice/languages", {});
   const { data: calls, reload: reloadCalls } = useApi("/api/voice/calls", []);
+  const { data: integrations } = useApi("/api/integrations", []);
+  const [params, setParams] = useSearchParams();
+  const given = useRef(params.get("prompt") || "");
   const [selId, setSelId] = useState(null);
-  const [tab, setTab] = useState("test");
-  const [dialTo, setDialTo] = useState("");
+  const agent = agents.find((a) => a.id === selId) || agents[0] || null;
+  const { data: versions, setData: setVersions, reload: reloadVersions, loading: vLoading } = useApi(agent ? `/api/versions/call_script/${agent.id}` : null, []);
+  const [view, setView] = useState(null);  // prompt | work
+  const [busy, setBusy] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [panelOpen, togglePanel] = usePanelOpen();
+  const [comparing, setComparing] = useState(null);
+  const [practice, setPractice] = useState(false);
+  const [dial, setDial] = useState(null);
   const [viewCall, setViewCall] = useState(null);
-  const [busy, run] = useAction();
-  const agent = agents.find((a) => a.id === selId) || agents[0];
+  const phoneLine = integrations.find((i) => i.provider === "twilio")?.connected;
 
-  const create = () => run(async () => {
-    const a = await post("/api/voice/agents", { name: `Agent ${agents.length + 1}` });
-    setAgents((x) => [...x, a]);
-    setSelId(a.id);
-    setTab("configure");
-  }, "Agent created");
+  useEffect(() => {  // first visit: the prompt; once a script was written from one, the script
+    if (loading || view || (agent && vLoading)) return;
+    setView(given.current || !agent || !versions.length ? "prompt" : "work");
+    if (params.get("prompt")) setParams((p) => { const n = new URLSearchParams(p); n.delete("prompt"); return n; }, { replace: true });
+  }, [loading, vLoading, agent?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const replaced = (a) => { setAgents((all) => (all.some((x) => x.id === a.id) ? all.map((x) => (x.id === a.id ? a : x)) : [...all, a])); setSelId(a.id); reloadVersions(); };
+  const write = async (prompt) => {
+    setBusy(true);
+    try { replaced(await post("/api/calls/script", { prompt, agent_id: agent?.id ?? null })); setView("work"); }
+    catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  };
+  const change = async (request) => {
+    setBusy(true);
+    try { replaced(await post(`/api/calls/script/change${agent ? `?agent_id=${agent.id}` : ""}`, { request })); return true; }
+    catch (e) { toast.error(e.message); return false; } finally { setBusy(false); }
+  };
+  const save = async (fields) => {
+    try { replaced(await put(`/api/voice/agents/${agent.id}`, { ...Object.fromEntries(SCRIPT.map((k) => [k, agent[k]])), ...fields })); }
+    catch (e) { toast.error(e.message); }
+  };
+  const restore = async (v) => { try { replaced(await post(`/api/versions/${v.id}/restore`)); toast(`Back to v${v.number}.`); } catch (e) { toast.error(e.message); } };
+  const compare = async (v) => {
+    setComparing({ v, before: null });
+    try { const d = await get(`/api/versions/${v.id}`); setComparing({ v, before: d.data }); } catch (e) { toast.error(e.message); setComparing(null); }
+  };
+  const plain = (s) => s && ({ Speaks: languages[s.language] || s.language, "First words": s.greeting, Questions: (s.questions || []).map((q, i) => `${i + 1}. ${q}`).join("\n"),
+    "How it talks": s.instructions, "Hands over to": s.handoff_number || "Nobody yet" });
+  const setEnabled = async (enabled) => {
+    setSwitching(true);
+    try { const a = await patch(`/api/voice/agents/${agent.id}/enabled`, { enabled }); setAgents((all) => all.map((x) => (x.id === a.id ? a : x))); toast(enabled ? "Call-backs are on." : "Call-backs are off."); }
+    catch (e) { toast.error(e.message); } finally { setSwitching(false); }
+  };
+
+  if (view === null) return <><PageHeader title="Calls" /><ListSkeleton /></>;
+  if (error && !agents.length) return <><PageHeader title="Calls" /><LoadError error={error} what="your call assistant" onRetry={reload} /></>;
+
+  if (view === "prompt") {
+    return (
+      <div>
+        <PageHeader title="Calls" />
+        <ModulePrompt moduleKey="calls" given={given.current} busy={busy} submitLabel="Write the call" onSubmit={write}
+          outcome="You'll get the call your assistant makes to every new lead: what it says first and what it asks. Nobody is called until you turn it on."
+          secondary={agent && <button type="button" className="font-medium text-brand hover:underline" onClick={() => setView("work")}>Use the current script instead</button>} />
+      </div>
+    );
+  }
+
+  const mine = calls.filter((c) => c.agent_id === agent?.id);
+  const toolbar = (
+    <>
+      <ToolbarTitle status={agent?.enabled ? "On" : "Off"}>
+        {agents.length > 1 ? (
+          <select className="rounded-md bg-transparent pr-6 text-sm font-medium text-strong hover:bg-surface-2" value={agent?.id} onChange={(e) => setSelId(Number(e.target.value))} aria-label="Assistant">
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        ) : agent?.name}
+      </ToolbarTitle>
+      <Button variant="ghost" size="sm" onClick={() => setPractice(true)}><Phone className="size-3.5" /> Practise a call</Button>
+      <DropdownMenu>
+        <Tooltip content="More"><DropdownMenuTrigger asChild><button type="button" className="btn-subtle btn-sm w-8 px-0" aria-label="More"><MoreHorizontal className="size-4" /></button></DropdownMenuTrigger></Tooltip>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setDial("")}><Phone className="size-4" /> Call a number now</DropdownMenuItem>
+          {agent?.enabled && <DropdownMenuItem onSelect={() => setEnabled(false)}>Turn call-backs off</DropdownMenuItem>}
+          <DropdownMenuItem onSelect={() => setView("prompt")}><Plus className="size-4" /> Write it again from one line</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {agent && !agent.enabled && <Button variant="accent" size="sm" busy={switching} onClick={() => setEnabled(true)}>Turn on</Button>}
+    </>
+  );
 
   return (
-    <div>
-      <PageHeader icon={AudioLines} tone="cyan" title="Calls" subtitle="Your call assistant greets every lead, asks your questions and hands over to you when it matters."
-        actions={<Button variant="ghost" onClick={create} busy={busy}><Plus className="size-4" /> New agent</Button>} />
-      {loading ? <ListSkeleton /> : agentsError && !agents.length ? (
-        <LoadError error={agentsError} what="your call assistant" onRetry={reloadAgents} />
-      ) : !agent ? (
-        <Empty icon={AudioLines} preview="chat" title="Your call assistant starts here" text="It greets every new lead, asks your questions and books the visit. Try it in your browser first, no phone needed."
-          action={<Button onClick={create}><Plus className="size-4" /> Set up the assistant</Button>} />
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-          <div className="space-y-2">
-            {agents.map((a) => (
-              <button key={a.id} onClick={() => setSelId(a.id)} className={cx("flex w-full items-center gap-3 rounded-2xl p-3 text-left transition", agent.id === a.id ? "bg-surface shadow-[var(--shadow-soft)]" : "hover:bg-ink/[0.04]")}>
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-lavender text-brand"><Bot className="size-4" /></span>
-                <div className="min-w-0"><p className="truncate text-sm font-semibold text-strong">{a.name}</p><p className="text-xs text-faint">{languages?.[a.language] || a.language}</p></div>
-              </button>
-            ))}
+    <>
+      <PageHeader title="Calls" />
+      <ModuleFrame toolbar={toolbar} panel={
+        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={versions} loading={vLoading} onSend={agent ? change : null} sending={busy}
+          placeholder="Change anything: “ask for their budget”, “speak Hindi first”" onRestore={restore} onCompare={compare} />
+      }>
+        {agent && (
+          <div className="max-w-2xl">
+            {!phoneLine && (
+              <p className="mb-6 text-sm text-muted">
+                <span className="mr-2 inline-block size-1.5 rounded-full bg-warm align-middle" aria-hidden />
+                Real calls go out once your phone line is connected. Until then, practise in the browser.{" "}
+                <Link to="/app/settings?tab=integrations" className="font-medium text-brand hover:underline">Connect a phone line</Link>
+              </p>
+            )}
+            <dl className="mb-6 grid grid-cols-[8rem_1fr] items-center gap-y-1 text-sm">
+              <dt className="text-muted">Speaks</dt>
+              <dd>
+                <select className="rounded-md bg-transparent px-2 py-1 text-strong hover:bg-surface-2" value={agent.language} aria-label="Language"
+                  onChange={(e) => save({ language: e.target.value })}>
+                  {Object.entries(languages).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  {!languages[agent.language] && <option value={agent.language}>{agent.language}</option>}
+                </select>
+                <span className="text-xs text-muted">and switches to the caller's language</span>
+              </dd>
+              <dt className="text-muted">Hands over to</dt>
+              <dd><EditLine label="Phone number to hand over to" value={agent.handoff_number} onSave={(v) => save({ handoff_number: v })} /></dd>
+            </dl>
+
+            <h2 className="mb-2 text-xs font-medium text-muted">The call</h2>
+            <ol className="space-y-1 border-l-2 border-line pl-3 text-[15px] leading-relaxed">
+              <li><EditLine label="What it says first" value={agent.greeting} multiline onSave={(v) => save({ greeting: v })} className="text-strong" /></li>
+              {agent.questions.map((q, i) => (
+                <li key={`${i}-${q}`} className="flex items-start gap-1">
+                  <span className="w-5 shrink-0 pt-1 text-right text-xs tabular-nums text-muted">{i + 1}</span>
+                  <span className="min-w-0 flex-1"><EditLine label={`Question ${i + 1}`} value={q}
+                    onSave={(v) => save({ questions: agent.questions.map((x, j) => (j === i ? v : x)) })}
+                    onRemove={agent.questions.length > 1 ? () => save({ questions: agent.questions.filter((_, j) => j !== i) }) : undefined} /></span>
+                </li>
+              ))}
+            </ol>
+            <button type="button" className="mt-2 pl-9 text-sm font-medium text-brand hover:underline" onClick={() => save({ questions: [...agent.questions, "Is there anything else we should know?"] })}>Add a question</button>
+
+            <h2 className="mb-2 mt-8 text-xs font-medium text-muted">How it talks</h2>
+            <EditLine label="How it talks" value={agent.instructions} multiline onSave={(v) => save({ instructions: v })} className="text-sm text-ink" />
+
+            <h2 className="mb-1 mt-10 text-xs font-medium text-muted">Recent calls</h2>
+            {mine.length === 0 ? <p className="text-sm text-muted">No calls yet. Practise one to hear how it sounds.</p> : (
+              <ul className="border-t border-line text-sm">
+                {mine.slice(0, 20).map((c) => (
+                  <li key={c.id}>
+                    <button type="button" onClick={() => setViewCall(c)} className="flex w-full items-center gap-3 border-b border-line py-2.5 text-left hover:bg-surface-2/60">
+                      <span className="flex-1 truncate text-strong">{c.to_number || "Practice call"}</span>
+                      <span className="text-xs text-muted">{STATUS[c.status] || c.status}</span>
+                      <span className="w-16 text-right text-xs tabular-nums text-muted">{timeAgo(c.created_at)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          <div className="space-y-6">
-            <Card>
-              <div className="mb-5"><Tabs value={tab} onChange={setTab} tabs={[{ value: "test", label: "Test call" }, { value: "configure", label: "Configure" }, { value: "phone", label: "Phone call" }]} /></div>
-              {tab === "test" && <TestCall key={agent.id} agent={agent} onEnded={reloadCalls} />}
-              {tab === "configure" && <AgentEditor agent={agent} languages={languages}
-                onSaved={(a) => setAgents((x) => x.map((y) => (y.id === a.id ? a : y)))}
-                onDelete={() => run(async () => { await del(`/api/voice/agents/${agent.id}`); setAgents((x) => x.filter((y) => y.id !== agent.id)); setSelId(null); })} />}
-              {tab === "phone" && (
-                <div className="max-w-md space-y-4">
-                  <p className="text-sm text-muted">Place a real outbound call from your Twilio number. Connect it in Settings → Accounts first. Calls only go out 9 am to 9 pm in the lead's time; outside that they wait and go out at 9 am.</p>
-                  <Field label="Phone number (E.164)"><input className="input" value={dialTo} onChange={(e) => setDialTo(e.target.value)} placeholder="+919876543210" /></Field>
-                  <Button busy={busy} onClick={() => run(async () => { const c = await post(`/api/voice/agents/${agent.id}/dial`, { to: dialTo }); reloadCalls(); return c; },
-                    (c) => c?.scheduled_for ? `Outside calling hours. It goes out at ${new Date(c.scheduled_for + "Z").toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} your time.` : "Calling…")}><Phone className="size-4" /> Call now</Button>
-                </div>
-              )}
-            </Card>
-            <Card className="p-0 sm:p-0">
-              <h2 className="border-b border-line px-5 py-4 font-semibold text-strong">Call history</h2>
-              {calls.filter((c) => c.agent_id === agent.id).length === 0 ? <p className="px-5 py-6 text-sm text-muted">No calls yet.</p> : (
-                <ul>
-                  {calls.filter((c) => c.agent_id === agent.id).map((c) => (
-                    <li key={c.id}>
-                      <button onClick={() => setViewCall(c)} className="flex w-full items-center gap-3 border-b border-line px-5 py-3 text-left text-sm last:border-0 hover:bg-ink/[0.03]">
-                        {c.channel === "phone" ? <Phone className="size-4 text-faint" /> : <AudioLines className="size-4 text-faint" />}
-                        <span className="flex-1 text-ink">{c.to_number || "Browser test"} · {c.transcript.length} turns</span>
-                        <Chip tone={sentimentTone(c.sentiment)}>{c.sentiment > 0 ? "+" : ""}{c.sentiment}</Chip>
-                        <span title={c.scheduled_for ? `Goes out ${new Date(c.scheduled_for + "Z").toLocaleString()} (calls only 9 am to 9 pm their time)` : undefined}>
-                          <Chip tone={c.status === "completed" ? "green" : c.status === "handoff" || c.status === "scheduled" ? "amber" : "slate"}>{c.status === "scheduled" ? "waiting for 9 am" : c.status}</Chip>
-                        </span>
-                        <span className="hidden w-16 text-right text-xs text-faint sm:block">{timeAgo(c.created_at)}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          </div>
-        </div>
-      )}
-      <Modal open={!!viewCall} onClose={() => setViewCall(null)} title="Call transcript">
+        )}
+      </ModuleFrame>
+      <CompareText open={!!comparing} onClose={() => setComparing(null)} title={comparing ? `v${comparing.v.number} and now` : ""}
+        before={plain(comparing?.before)} after={plain(agent)} />
+      <Modal open={practice} onClose={() => setPractice(false)} title="Practise a call">
+        {agent && practice && <TestCall agent={agent} onEnded={reloadCalls} />}
+      </Modal>
+      <Modal open={dial !== null} onClose={() => setDial(null)} title="Call a number now">
+        <form className="space-y-4" onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            const c = await post(`/api/voice/agents/${agent.id}/dial`, { to: dial });
+            reloadCalls(); setDial(null);
+            toast(c?.scheduled_for ? "Outside calling hours. It goes out at 9 am their time." : "Calling…");
+          } catch (err) { toast.error(err.message); }
+        }}>
+          <p className="text-sm text-muted">Calls only go out 9 am to 9 pm in the other person's time.</p>
+          <Field label="Phone number with country code"><input className="input" type="tel" inputMode="tel" value={dial || ""} onChange={(e) => setDial(e.target.value)} placeholder="+919876543210" required /></Field>
+          <Button type="submit" variant="ghost">Call now</Button>
+        </form>
+      </Modal>
+      <Modal open={!!viewCall} onClose={() => setViewCall(null)} title="Call">
         {viewCall && (
           <div className="space-y-2 text-sm">
-            {viewCall.transcript.map((t, i) => (
-              <p key={i}><b className={t.role === "agent" ? "text-brand" : "text-brand"}>{t.role === "agent" ? "Agent" : "Caller"}:</b> <span className="text-ink">{t.text}</span></p>
-            ))}
-            {Object.keys(viewCall.answers).length > 0 && (
-              <div className="mt-4 rounded-2xl bg-surface-2/60 p-3">
-                <p className="mb-2 font-semibold text-strong">Captured answers</p>
-                {Object.entries(viewCall.answers).map(([q, a]) => <p key={q} className="text-muted">{q} <span className="text-ink">{a}</span></p>)}
-              </div>
+            {viewCall.transcript.map((t, i) => <p key={i}><span className="font-medium text-strong">{t.role === "agent" ? "Assistant" : "Caller"}:</span> <span className="text-ink">{t.text}</span></p>)}
+            {Object.keys(viewCall.answers || {}).length > 0 && (
+              <dl className="mt-4 border-t border-line pt-3">
+                {Object.entries(viewCall.answers).map(([q, a]) => <div key={q} className="py-1"><dt className="text-muted">{q}</dt><dd className="text-strong">{a}</dd></div>)}
+              </dl>
             )}
           </div>
         )}
       </Modal>
-    </div>
+    </>
   );
 }

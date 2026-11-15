@@ -120,7 +120,7 @@ export default function VideoStudio({ video, versions = [], open, onClose, onCre
               ) : <p className="text-sm text-muted">Pause the video and click the frame to say what should change.</p>}
             </div>
             <Button className="w-full" busy={busy} disabled={!ready.length} onClick={make}>Make new version{ready.length ? ` (${ready.length} change${ready.length === 1 ? "" : "s"})` : ""}</Button>
-            <p className="text-xs text-muted">AI video redraws the whole clip with your changes, so other parts can shift a little. Your original stays as it is.</p>
+            <p className="text-xs text-muted">A new version redraws the whole clip, so other parts can shift a little. This one stays as it is.</p>
             {versions.length > 1 && (
               <div>
                 <h3 className="mb-2 text-sm font-semibold text-strong">Versions</h3>

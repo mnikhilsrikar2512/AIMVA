@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 import httpx
 from PIL import Image
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -265,8 +265,14 @@ def _snap(v: int) -> int:
     return max(256, min(2048, int(round(v / 16) * 16)))  # most models want multiples of 16
 
 
+def _by(req: Optional[Request]) -> Optional[int]:
+    """The person who asked (not the project), so a teammate's work can say who made it."""
+    person = getattr(getattr(req, "state", None), "person", None)
+    return person.id if person else None
+
+
 @router.post("/image")
-def generate_image(body: ImageIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def generate_image(body: ImageIn, user: User = Depends(current_user), db: Session = Depends(get_db), req: Request = None):
     rate_limit(f"img:{user.id}", 30, 300)
     # Read quietly, never announced (owner rule 2026-11-08): words meant for the picture ("poster saying 'Diwali
     # Sale'") are kept off the image model, which misspells them, and typeset on afterwards; a prompt that names a
@@ -347,6 +353,7 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
                           "logo": bool(logo), "provider": ref, "style": body.style, "seed": seed,
                           "negative_prompt": body.negative_prompt, "reference": bool(reference), "batch": batch,
                           "kept_product": body.keep_product, "brief": brief, "prompt_sent": sent, "words": sense["words"],
+                          "by_id": _by(req),
                           **({"text_layers": layers, "text_plain_url": plain} if u != plain else {}),
                           "provider_label": "Your product, new scene" if body.keep_product
                           else "Free FLUX" if ref == "builtin:pollinations" else model_label})
@@ -410,6 +417,8 @@ class VideoIn(BaseModel):
     # the version keeps its parent's prompt as its title and remembers the comments.
     parent_id: Optional[int] = None
     changes: List[VideoChange] = Field(default_factory=list, max_length=12)
+    request: str = Field("", max_length=300)  # with parent_id: a change to the whole clip, in the owner's words
+    aspect_auto: bool = False  # the owner never picked a shape: take it from the prompt ("for Reels" -> 9:16)
 
 
 # Image-to-video endpoints for each text-to-video model, used when starting from a brand image.
@@ -479,8 +488,14 @@ def _start_image(db: Session, user: User, body: VideoIn) -> Optional[str]:
 
 
 @router.post("/video")
-def generate_video(body: VideoIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def generate_video(body: VideoIn, user: User = Depends(current_user), db: Session = Depends(get_db), req: Request = None):
     rate_limit(f"vid:{user.id}", 10, 600)
+    if body.aspect_auto and not body.parent_id:  # read quietly, never announced (owner rule 2026-11-08)
+        fmt = read_prompt(body.prompt)["format"]
+        if fmt in ("9:16", "16:9", "1:1"):
+            body = body.model_copy(update={"aspect_ratio": fmt})
+        elif fmt == "4:5":
+            body = body.model_copy(update={"aspect_ratio": "9:16"})
     ref = body.provider or "builtin:fal"
     if ref == "builtin:fal" and not body.model:
         body.model = VIDEO_MODELS[0]["id"]
@@ -491,10 +506,13 @@ def generate_video(body: VideoIn, user: User = Depends(current_user), db: Sessio
         if not parent or parent.user_id != user.id or parent.kind != "video":
             raise HTTPException(404, "That video isn't in your account.")
     title = parent.prompt if parent else body.prompt
-    lineage = {"parent": parent.id, "changes": [c.model_dump() for c in body.changes]} if parent else {}
-    if parent and body.changes:
+    asked = body.request.strip() if parent else ""
+    lineage = {"parent": parent.id, "changes": [c.model_dump() for c in body.changes], "request": asked} if parent else {}
+    lineage["by_id"] = _by(req)
+    if parent and (body.changes or asked):
         prompt += "\n\nKeep everything else the same, but make these changes:\n" + "\n".join(
-            f"- At {int(c.t // 60)}:{int(c.t % 60):02d}, {_where(c.x, c.y)}: {c.text.strip()}" for c in body.changes)
+            [f"- At {int(c.t // 60)}:{int(c.t % 60):02d}, {_where(c.x, c.y)}: {c.text.strip()}" for c in body.changes]
+            + ([f"- {asked}"] if asked else []))
     start = _start_image(db, user, body)
     spec = VIDEO_BY_ID.get(body.model) if ref == "builtin:fal" else None
 
@@ -654,11 +672,17 @@ def add_sound(asset_id: int, body: SoundIn, user: User = Depends(current_user), 
 
 
 @router.get("/assets")
-def list_assets(kind: Optional[str] = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def list_assets(kind: Optional[str] = None, user: User = Depends(current_user), db: Session = Depends(get_db),
+                req: Request = None):
+    """`by` names the teammate who made each one, or is null when it was the viewer."""
     q = select(Asset).where(Asset.user_id == user.id).order_by(Asset.created_at.desc()).limit(100)
     if kind:
         q = q.where(Asset.kind == kind)
-    return [asset_out(a) for a in db.scalars(q)]
+    rows = list(db.scalars(q))
+    me = _by(req)
+    ids = {(a.params or {}).get("by_id") for a in rows} - {None, me}
+    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(ids))).all()) if ids else {}
+    return [{**asset_out(a), "by": names.get((a.params or {}).get("by_id")) or None} for a in rows]
 
 
 @router.delete("/assets/{asset_id}")
@@ -959,7 +983,7 @@ def _edit_error(e) -> HTTPException:
 
 
 @router.post("/image/{asset_id}/edit")
-def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), db: Session = Depends(get_db), req: Request = None):
     """Apply pinned comments to an image. Saves a new version linked to the original; the original is never changed."""
     from .. import image_edit as IE
     rate_limit(f"imgedit:{user.id}", 20, 300)
@@ -1006,7 +1030,8 @@ def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), 
     edits = [{**p.model_dump(), "action": pin.does, "selected": r["selected"]} for p, pin, r in zip(body.pins, pins, resolved)]
     a = _save_version(db, user, src, out, {"edits": edits, "instruction": typed, "restyle": style["name"] if style else None,
                                            "edit_engine": engine["name"],
-                                           "edit_precise": engine["precise"], "edit_kind": "style" if style and not pins else "comments"},
+                                           "edit_precise": engine["precise"], "edit_kind": "style" if style and not pins else "comments",
+                                           "by_id": _by(req)},
                        f"{style['name']} style" if style and not pins else f"Edited · {engine['name']}")
     return asset_out(a)
 

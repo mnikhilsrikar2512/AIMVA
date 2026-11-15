@@ -1,244 +1,295 @@
-import { useState } from "react";
-import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
-import { motion } from "framer-motion";
-import { ease, rise, stagger } from "../../components/Motion";
-import { Download, Image as ImageIcon, LayoutGrid, MessageSquarePlus, Plus, RotateCcw, Sparkles, Trash2, Upload, Wand2 } from "lucide-react";
-import { Button, Card, Empty, Field, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
+// Pictures (design.md v3 7.3): one prompt, written from the business profile, makes the pictures; the result fills
+// the canvas and the changes panel takes every change after that. Owners change a picture three ways: type in the
+// panel, point at a spot (C opens the comment editor), or edit directly (words, crop, colour in the same editor).
+// Engine, count, style and seed are hidden from owners; the platform admin finds them under ⋯ → Advanced.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { Download, Image as ImageIcon, LayoutGrid, MessageSquarePlus, MoreHorizontal, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/shadcn/dropdown-menu";
+import { Tooltip } from "../../components/shadcn/tooltip";
+import { Button, Empty, Field, IconButton, JobProgress, ListSkeleton, Modal, PageHeader, cx } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
-import { api, del, get, post } from "../../lib/api";
-import { useAction, useApi } from "../../lib/hooks";
-import BrandControls from "../../components/BrandControls";
-import { useAuth } from "../../lib/auth";
-import { Advanced, LibraryImagePicker, ProviderPicker, SeedField, STYLES } from "../../components/GenControls";
+import { ModulePrompt } from "../../components/ModulePrompt";
+import { ChangesPanel, CompareSplit, ModuleFrame, ToolbarTitle, usePanelOpen } from "../../components/ModuleChanges";
+import { Rate } from "../../components/Quality";
+import { ProviderPicker, SeedField, STYLES } from "../../components/GenControls";
 import AdSetDialog from "../../components/AdSet";
 import ImageEditor from "../../components/ImageEditor";
-import { EnhanceButton, Rate } from "../../components/Quality";
-import { StoryLine, UsedIn } from "../../components/Story";
+import { api, del, post } from "../../lib/api";
+import { useApi } from "../../lib/hooks";
+import { useAuth } from "../../lib/auth";
 
+const rootId = (a) => a?.params?.edit_root || a?.id;
+const isAdSize = (a) => !!a?.params?.parent;  // ad-set placements hang off a picture; they are not versions of it
 
-const SIZE_OPTIONS = [["1:1", "Square 1:1"], ["4:5", "Portrait 4:5"], ["9:16", "Story 9:16"], ["16:9", "Wide 16:9"], ["1.91:1", "Link ad 1.91:1"], ["custom", "Custom size…"]];
+/** The words a picture version shows in the panel. */
+function said(a, first) {
+  const p = a.params || {};
+  if (first) return a.prompt;
+  if (p.instruction) return p.instruction;
+  if (p.restyle) return `${p.restyle} style`;
+  if (p.text_layers) return "Words on the picture";
+  if (p.edits?.length) return p.edits.map((e) => e.text).filter(Boolean).join("; ") || "Comments on the picture";
+  return "Edited";
+}
+
+/** Typing "c" anywhere but a text field opens comment mode (design.md 4: single-key shortcuts outside text fields). */
+function useKey(key, fn, on) {
+  const ref = useRef(fn);
+  ref.current = fn;
+  useEffect(() => {
+    if (!on) return undefined;
+    const k = (e) => {
+      if (e.key.toLowerCase() !== key || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+      if (document.querySelector("[role=dialog]")) return;
+      e.preventDefault(); ref.current();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [key, on]);
+}
 
 export default function ImageGen() {
-  const { data: assets, setData: setAssets, loading, error: assetsError, reload: reloadAssets } = useApi("/api/content/assets?kind=image", []);
+  const { data: assets, setData: setAssets, loading, error, reload } = useApi("/api/content/assets?kind=image", []);
   const { data: options } = useApi("/api/providers/options?kind=image", []);
-  const EMPTY = { prompt: "", size: "1:1", width: 1024, height: 1024, count: 1, negative_prompt: "", seed: null, style: "", reference: "", keep_product: false };
-  const [form, setForm] = useState(EMPTY);
-  const admin = !!useAuth().user?.is_admin; // the platform owner sees engine and fine-tuning options; customers get the essentials
-  const [tab, setTab] = useState("create");
-  const [current, setCurrent] = useState([]);  // only the latest generation is shown in Create
-  const [q, setQ] = useState("");
-  const [prov, setProv] = useState({ provider: "builtin:free", model: "free-standard" });
   const { data: brandKit } = useApi("/api/brand");
-  const [brandOpts, setBrandOpts] = useState({ use_brand: true, add_logo: false, logo_position: "top-right" });
-  const [busy, run] = useAction();
   const { data: ratings } = useApi("/api/feedback?kind=image", {});
-  const [adFor, setAdFor] = useState(null);
-  const [editFor, setEditFor] = useState(null);
-  const [uploading, runUpload] = useAction();
-  const uploadPhoto = (e) => {
+  const admin = !!useAuth().user?.is_admin;
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const given = useRef(params.get("prompt") || "");
+  const [view, setView] = useState(given.current ? "prompt" : null);  // prompt | work | all; null until the list loads
+  const [selId, setSelId] = useState(null);
+  const [making, setMaking] = useState(null);  // {count, startedAt} while a new set is being made
+  const [changing, setChanging] = useState(false);
+  const [panelOpen, togglePanel] = usePanelOpen();
+  const [comparing, setComparing] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [adSet, setAdSet] = useState(false);
+  const [advOpen, setAdvOpen] = useState(false);
+  const [adv, setAdv] = useState({ provider: null, model: "", count: 4, style: "", negative_prompt: "", seed: null });
+  const uploadRef = useRef(null);
+
+  useEffect(() => {  // first load: the newest picture, unless the page was opened with a prompt or a picture
+    if (loading || view) return;
+    const want = Number(params.get("asset")) || null;
+    const start = (want && assets.find((a) => a.id === want)) || assets.find((a) => !isAdSize(a));
+    if (start) { setSelId(start.id); setView("work"); } else setView("prompt");
+    if (params.get("prompt") || params.get("asset")) setParams((p) => { const n = new URLSearchParams(p); n.delete("prompt"); n.delete("asset"); return n; }, { replace: true });
+  }, [loading]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pictures = assets.filter((a) => !isAdSize(a));
+  const sel = pictures.find((a) => a.id === selId) || null;
+  // Every version of the picture on the canvas, oldest first (v1 is the one the prompt made).
+  const chain = useMemo(() => (sel ? pictures.filter((a) => rootId(a) === rootId(sel)).sort((a, b) => a.id - b.id) : []), [pictures, sel]);
+  const latestOf = (root) => pictures.filter((a) => rootId(a) === root).sort((a, b) => b.id - a.id)[0];
+  // The other pictures the same prompt made, each at its latest version.
+  const batch = useMemo(() => {
+    const root = chain[0];
+    if (!root?.params?.batch) return [];
+    return pictures.filter((a) => a.params?.batch === root.params.batch && !a.params?.edited_from).sort((a, b) => a.id - b.id).map((a) => latestOf(a.id));
+  }, [pictures, chain]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const versions = chain.map((a, i) => ({ id: a.id, number: i + 1, request: said(a, i === 0), by: a.by, created_at: a.created_at, current: a.id === selId })).reverse();
+
+  const engine = () => {
+    if (admin && adv.provider) return adv.provider;
+    const best = options.find((o) => o.available && !o.free) || options.find((o) => o.available) || options[0];
+    return best ? { provider: best.ref, model: best.model, max: best.max_count || 1 } : { provider: "", model: "", max: 1 };
+  };
+  const make = async (prompt) => {
+    const e = engine();
+    const max = e.max || options.find((o) => o.ref === e.provider)?.max_count || 1;
+    const count = Math.max(1, Math.min(admin ? adv.count : 4, max));
+    setMaking({ count });
+    setView("work");
+    try {
+      const out = await post("/api/content/image", {
+        prompt, provider: e.provider, model: e.model || "", size_auto: true, count,
+        use_brand: !!brandKit?.is_set_up, ...(admin ? { style: adv.style || null, negative_prompt: adv.negative_prompt, seed: adv.seed } : {}),
+      });
+      setAssets((a) => [...out, ...a]);
+      setSelId(out[0]?.id ?? null);
+    } catch (err) {
+      toast.error(err.message);
+      if (!sel) setView("prompt");
+    } finally { setMaking(null); }
+  };
+  const change = async (instruction) => {
+    if (!sel) return false;
+    setChanging(true);
+    try {
+      const out = await post(`/api/content/image/${sel.id}/edit`, { instruction });
+      setAssets((a) => [out, ...a]);
+      setSelId(out.id);
+      return true;
+    } catch (err) { toast.error(err.message); return false; } finally { setChanging(false); }
+  };
+  const remove = (a) => {  // acts at once, with Undo (design.md: undo over confirm)
+    const keep = assets;
+    const gone = pictures.filter((x) => rootId(x) === rootId(a)).map((x) => x.id);
+    setAssets((all) => all.filter((x) => !gone.includes(x.id)));
+    const next = pictures.find((x) => !gone.includes(x.id));
+    setSelId(next?.id ?? null);
+    if (!next) setView("prompt");
+    let undone = false;
+    const t = setTimeout(() => { if (!undone) Promise.all(gone.map((id) => del(`/api/content/assets/${id}`))).catch((e) => { toast.error(e.message); reload(); }); }, 5000);
+    toast("Picture deleted.", { duration: 5000, action: { label: "Undo", onClick: () => { undone = true; clearTimeout(t); setAssets(keep); setSelId(a.id); setView("work"); } } });
+  };
+  const upload = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     const form = new FormData();
     form.append("file", file);
-    runUpload(async () => {
+    try {
       const a = await api("/api/content/image/upload", { method: "POST", form });
       setAssets((all) => [a, ...all]);
-      setEditFor(a);
-    });
+      setSelId(a.id); setView("work"); setEditing(true);
+    } catch (err) { toast.error(err.message); }
   };
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  // Until the shape is picked, the prompt decides it on the server ("for my story" -> 9:16), without a word about it.
-  const [sizePicked, setSizePicked] = useState(false);
-  const option = options.find((o) => o.ref === prov.provider);
-  const free = prov.provider === "builtin:free";
-  const maxCount = option?.max_count || 1;
+  useKey("c", () => setEditing(true), view === "work" && !!sel && !making);
 
-  const tpl = useTemplateTracker("image");
-  const tplPayload = () => ({ prompt: form.prompt, style: form.style || "", size: ["1:1", "4:5", "9:16", "16:9", "1.91:1"].includes(form.size) ? form.size : "1:1", negative_prompt: form.negative_prompt });
-  const generate = async (e) => {
-    e.preventDefault();
-    const custom = form.size === "custom";
-    const out = await run(() => post("/api/content/image", {
-      prompt: form.prompt, provider: prov.provider, model: prov.model || option?.model || "",
-      size: custom ? "1:1" : form.size, size_auto: !sizePicked && !custom, width: custom ? Number(form.width) : null, height: custom ? Number(form.height) : null,
-      count: admin ? Math.min(Number(form.count), maxCount) : Math.min(4, maxCount), negative_prompt: form.negative_prompt, seed: form.seed,
-      style: form.style || null, reference: form.reference, keep_product: !!form.reference && !free && form.keep_product,
-      ...brandOpts, use_brand: !!brandKit?.is_set_up && brandOpts.use_brand,
-    }));
-    if (out) {
-      tpl.track(tplPayload());
-      setCurrent(out);
-      setAssets((a) => [...out, ...a]);
-    }
-  };
-  const startNew = () => { setForm(EMPTY); setCurrent([]); setTab("create"); };
-  const remove = async (a) => {
-    await del(`/api/content/assets/${a.id}`);
-    setAssets((all) => all.filter((x) => x.id !== a.id));
-    setCurrent((c) => c.filter((x) => x.id !== a.id));
-  };
-  const reuse = (a) => {
-    setForm((f) => ({ ...f, prompt: a.prompt, seed: a.params?.seed ?? null, style: a.params?.style || "", negative_prompt: a.params?.negative_prompt || "" }));
-    setTab("create");
-    document.getElementById("app-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
-  };
-  const history = assets.filter((a) => a.prompt.toLowerCase().includes(q.toLowerCase()));
+  const more = (
+    <DropdownMenu>
+      <Tooltip content="More"><DropdownMenuTrigger asChild><button type="button" className="btn-subtle btn-sm w-8 px-0" aria-label="More"><MoreHorizontal className="size-4" /></button></DropdownMenuTrigger></Tooltip>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => uploadRef.current?.click()}><Upload className="size-4" /> Upload a photo to edit</DropdownMenuItem>
+        {pictures.length > 0 && <DropdownMenuItem onSelect={() => setView("all")}><LayoutGrid className="size-4" /> All pictures</DropdownMenuItem>}
+        {admin && <DropdownMenuItem onSelect={() => setAdvOpen(true)}><SlidersHorizontal className="size-4" /> Advanced</DropdownMenuItem>}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+  const hiddenUpload = <input ref={uploadRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={upload} aria-hidden tabIndex={-1} />;
+
+  if (view === null || (loading && !assets.length && view !== "prompt")) return <><PageHeader title="Pictures" /><ListSkeleton /></>;
+  if (error && !assets.length && view !== "prompt") return <><PageHeader title="Pictures" /><LoadError error={error} what="your pictures" onRetry={reload} /></>;
+
+  if (view === "prompt") {
+    return (
+      <div>
+        <PageHeader title="Pictures" />
+        {hiddenUpload}
+        <ModulePrompt moduleKey="pictures" given={given.current} busy={!!making} submitLabel="Make pictures" onSubmit={make}
+          outcome="You'll get pictures in your colours, ready for posts, ads and your page."
+          secondary={<span className="flex flex-wrap gap-x-5 gap-y-2">
+            <button type="button" className="font-medium text-brand hover:underline" onClick={() => uploadRef.current?.click()}>Upload a photo to edit</button>
+            {pictures.length > 0 && <button type="button" className="font-medium text-brand hover:underline" onClick={() => setView(sel ? "work" : "all")}>Back to my pictures</button>}
+          </span>} />
+        <AdvancedModal open={advOpen} onClose={() => setAdvOpen(false)} value={adv} onChange={setAdv} />
+      </div>
+    );
+  }
+
+  if (view === "all") {
+    const roots = pictures.filter((a) => !a.params?.edited_from).map((a) => latestOf(a.id));
+    return (
+      <div>
+        <PageHeader title="Pictures" />
+        {hiddenUpload}
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <p className="text-sm text-muted">{roots.length} picture{roots.length === 1 ? "" : "s"}</p>
+          <span className="flex items-center gap-1">{more}<Button variant="ghost" onClick={() => setView("prompt")}><Plus className="size-4" /> New pictures</Button></span>
+        </div>
+        {roots.length === 0 ? <Empty icon={ImageIcon} preview="tiles" title="Your pictures will live here" text="Everything you make is kept, with every version." action={<Button variant="ghost" onClick={() => setView("prompt")}>Make pictures</Button>} /> : (
+          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+            {roots.map((a) => (
+              <li key={a.id}>
+                <button type="button" onClick={() => { setSelId(a.id); setView("work"); }} className="block w-full overflow-hidden rounded-[10px] ring-1 ring-line hover:ring-line-strong">
+                  <img src={a.url} alt={a.prompt} loading="lazy" className="aspect-square w-full bg-surface-2 object-cover" />
+                </button>
+                <p className="mt-1.5 line-clamp-1 text-xs text-muted">{a.by ? `${a.by} · ` : ""}{a.prompt}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  const toolbar = (
+    <>
+      <ToolbarTitle status={sel && chain.length > 1 ? `v${chain.findIndex((a) => a.id === sel.id) + 1}` : null}>{sel?.prompt || "New pictures"}</ToolbarTitle>
+      {sel && !making && (
+        <span className="flex items-center gap-1">
+          <span className="hidden sm:inline-flex"><Rate kind="image" id={sel.id} initial={ratings[sel.id]} /></span>
+          <IconButton label="Point and change (C)" onClick={() => setEditing(true)}><MessageSquarePlus className="size-4" /></IconButton>
+          <IconButton label="Every ad size" onClick={() => setAdSet(true)}><LayoutGrid className="size-4" /></IconButton>
+          <IconButton label="Download" href={sel.url} download target="_blank" rel="noreferrer"><Download className="size-4" /></IconButton>
+          <IconButton label="Delete" danger onClick={() => remove(sel)}><Trash2 className="size-4" /></IconButton>
+        </span>
+      )}
+      {more}
+      <Button variant="ghost" size="sm" onClick={() => setView("prompt")}><Plus className="size-3.5" /> New</Button>
+      {sel && !making && <Button variant="accent" size="sm" onClick={() => navigate(`/app/ads/meta?image=${sel.id}`)}>Use in a campaign</Button>}
+    </>
+  );
 
   return (
-    <div>
-      <PageHeader title="Pictures"
-        actions={<div className="flex gap-2">
-          <label className={cx("btn-ghost cursor-pointer", uploading && "pointer-events-none opacity-60")} title="Edit any photo: product shots, rooms, people…">
-            {uploading ? <Spinner className="size-4" /> : <Upload className="size-4" />} Upload a photo to edit
-            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={uploadPhoto} />
-          </label>
-          <Button variant="ghost" onClick={startNew}><Plus className="size-4" /> Start new</Button>
-        </div>} />
-      <StoryLine module="pictures" />
-      <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${assets.length ? ` (${assets.length})` : ""}` }]} /></div>
-      {tab === "history" ? (
-        loading ? <ListSkeleton /> : assetsError && assets.length === 0 ? (
-          <LoadError error={assetsError} what="your pictures" onRetry={reloadAssets} />
-        ) : assets.length === 0 ? (
-          <Empty icon={ImageIcon} preview="tiles" title="Your pictures will live here" text="Everything you make is saved here, with every version you edit." action={<Button onClick={startNew}><Plus className="size-4" /> Make your first picture</Button>} />
+    <>
+      <PageHeader title="Pictures" />
+      {hiddenUpload}
+      <ModuleFrame toolbar={toolbar} panel={
+        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={making ? [] : versions} onSend={sel && !making ? change : null} sending={changing}
+          placeholder="Change anything: “warmer light”, “remove the car”" restoreLabel="Use this"
+          onRestore={(v) => setSelId(v.id)} onCompare={(v) => setComparing(pictures.find((a) => a.id === v.id))} />
+      }>
+        {making ? (
+          <div className="max-w-3xl">
+            <JobProgress seconds={18} label="Making your pictures…" />
+            <div className={cx("mt-6 grid gap-4", making.count > 1 && "sm:grid-cols-2")}>
+              {Array.from({ length: making.count }).map((_, i) => <div key={i} className="aspect-square rounded-[10px] bg-surface-2" />)}
+            </div>
+          </div>
+        ) : !sel ? (
+          <Empty icon={ImageIcon} preview="tiles" title="Your pictures appear here" text="Say what you want in one line." action={<Button variant="ghost" onClick={() => setView("prompt")}>Make pictures</Button>} />
         ) : (
-          <>
-            <input className="input mb-4 max-w-sm" placeholder="Search by prompt" value={q} onChange={(e) => setQ(e.target.value)} />
-            <motion.div variants={stagger} initial="hidden" animate="show" className="columns-1 gap-4 sm:columns-2 xl:columns-4">
-              {history.map((a) => <ImageTile key={a.id} a={a} rating={ratings[a.id]} onAdSet={() => setAdFor(a)} onEdit={() => setEditFor(a)} onDelete={() => remove(a)} onReuse={() => reuse(a)} />)}
-            </motion.div>
-          </>
-        )
-      ) : (
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
-        <Card className="h-fit lg:sticky lg:top-6">
-          <form onSubmit={generate} className="space-y-4">
-            {admin && <TemplateStrip module="image" onApply={(t) => { tpl.apply(t); setForm((f) => ({ ...f, prompt: t.payload.prompt, style: t.payload.style || "", size: t.payload.size || f.size, negative_prompt: t.payload.negative_prompt || "" })); }} />}
-            <Field label="Prompt">
-              <textarea className="input" rows={5} value={form.prompt} onChange={set("prompt")} required minLength={3} maxLength={2000}
-                placeholder="Describe the image you want…" />
-            </Field>
-            <div className="-mt-2 flex justify-end">
-              <EnhanceButton prompt={form.prompt} kind="image" useBrand={!!brandKit?.is_set_up && brandOpts.use_brand}
-                onEnhanced={(r) => setForm((f) => ({ ...f, prompt: r.prompt, negative_prompt: f.negative_prompt || r.negative_prompt || "" }))} />
+          <div className="flex flex-col items-center">
+            <div className="relative w-full">
+              <img key={sel.id} src={sel.url} alt={sel.prompt} className={cx("mx-auto max-h-[calc(100dvh-16rem)] w-auto max-w-full rounded-[10px] bg-surface-2 object-contain", changing && "opacity-60")} />
+              {changing && <div className="absolute inset-x-0 bottom-4 mx-auto w-[min(22rem,90%)] rounded-md bg-surface p-3 ring-1 ring-line"><JobProgress seconds={20} label="Making the change…" /></div>}
             </div>
-            <ProviderPicker kind="image" value={prov} onChange={setProv} />
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Format">
-                <select className="input" value={form.size} onChange={(e) => { setSizePicked(true); set("size")(e); }}>
-                  {SIZE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </Field>
-              {admin && <Field label="Images" hint={maxCount === 1 ? "This provider makes 1 at a time" : undefined}>
-                <select className="input" value={Math.min(form.count, maxCount)} onChange={set("count")} disabled={maxCount === 1}>
-                  {[1, 2, 3, 4].slice(0, maxCount).map((n) => <option key={n}>{n}</option>)}
-                </select>
-              </Field>}
-            </div>
-            {form.size === "custom" && (
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Width (px)"><input className="input" type="number" min="256" max="2048" step="16" value={form.width} onChange={set("width")} /></Field>
-                <Field label="Height (px)"><input className="input" type="number" min="256" max="2048" step="16" value={form.height} onChange={set("height")} /></Field>
+            {batch.length > 1 && (
+              <div className="mt-5 flex flex-wrap justify-center gap-2" role="list" aria-label="From the same prompt">
+                {batch.map((a) => (
+                  <button key={a.id} type="button" role="listitem" onClick={() => setSelId(a.id)} aria-label={`Picture ${batch.indexOf(a) + 1}`} aria-current={rootId(a) === rootId(sel) || undefined}
+                    className={cx("size-16 overflow-hidden rounded-md ring-1", rootId(a) === rootId(sel) ? "ring-2 ring-strong" : "ring-line hover:ring-line-strong")}>
+                    <img src={a.url} alt="" className="size-full object-cover" />
+                  </button>
+                ))}
               </div>
             )}
-            <LibraryImagePicker label="Your photo (optional)" value={form.reference} onChange={(v) => setForm((f) => ({ ...f, reference: v }))}
-              hint={form.keep_product ? "Your product photo. It's cut out and placed in a new scene, unchanged." : "A product or shop photo to build the picture around."} />
-            {form.reference && (
-              <label className={cx("flex items-start gap-2 rounded-xl border border-ink/10 p-3 text-sm", free && "opacity-60")}>
-                <input type="checkbox" className="mt-0.5" disabled={free} checked={!free && form.keep_product}
-                  onChange={(e) => setForm((f) => ({ ...f, keep_product: e.target.checked }))} />
-                <span><b className="text-strong">Keep my product exactly</b>
-                  <span className="block text-xs text-muted">{free ? "Needs Studio images. The free engine redraws the product." : "AI paints only the scene around it, so labels and shape stay true."}</span></span>
-              </label>
-            )}
-            {admin && <Advanced>
-              <Field label="Style">
-                <select className="input" value={form.style} onChange={set("style")}>{STYLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-              </Field>
-              <Field label="Avoid (negative prompt)"><input className="input" value={form.negative_prompt} onChange={set("negative_prompt")} maxLength={1000} placeholder="text, watermark, blurry, extra fingers" /></Field>
-              <SeedField value={form.seed} onChange={(v) => setForm((f) => ({ ...f, seed: v }))} />
-            </Advanced>}
-            <BrandControls brand={brandKit} value={brandOpts} onChange={setBrandOpts} freeModel={free} />
-            <Button type="submit" busy={busy} className="h-11 w-full"><Wand2 className="size-4" /> {admin ? "Generate" : "Create pictures"}</Button>
-            {admin && form.prompt.trim().length >= 3 && <div className="flex justify-center"><SaveTemplateButton module="image" getPayload={tplPayload} /></div>}
-          </form>
-        </Card>
-
-        <div>
-          {busy ? (
-            <>
-            <JobProgress className="mb-4" seconds={18} label="Making your pictures…" />
-            <div className="grid gap-4 sm:grid-cols-2">
-              {Array.from({ length: Math.min(Number(form.count), maxCount) }).map((_, i) => (
-                <div key={i} className="card grid aspect-square animate-pulse place-items-center text-sm text-muted">
-                  <span className="flex items-center gap-2"><Sparkles className="size-4 text-muted" /> Picture {i + 1}</span>
-                </div>
-              ))}
-            </div>
-            </>
-          ) : current.length === 0 ? (
-            <Empty icon={ImageIcon} preview="tiles" title="Your new pictures appear here"
-              text="Describe one sentence on the left, like “a sunlit 3 BHK balcony at golden hour”. The free model needs no key." />
-          ) : (
-            <>
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-strong">Latest result · saved to History</p>
-                <Button size="sm" variant="ghost" onClick={startNew}><Plus className="size-3.5" /> Start new</Button>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {current.map((a) => <ImageTile key={a.id} a={a} rating={ratings[a.id]} onAdSet={() => setAdFor(a)} onEdit={() => setEditFor(a)} onDelete={() => remove(a)} onReuse={() => reuse(a)} />)}
-              </div>
-              <p className="mt-3 text-xs text-muted">Happy with it? <b className="text-strong">Make an ad set</b> to get every placement size with your headline and button added cleanly.</p>
-            </>
-          )}
-        </div>
-      </div>
-      )}
-      <ImageEditor asset={editFor} open={!!editFor} onClose={() => setEditFor(null)}
-        onEdited={(out) => { setAssets((a) => [out, ...a]); setCurrent((c) => (c.length ? [out, ...c] : c)); }} />
-      <AdSetDialog asset={adFor} open={!!adFor} onClose={() => setAdFor(null)}
-        onMade={(out) => { setAssets((a) => [...out, ...a]); }} />
-    </div>
+          </div>
+        )}
+      </ModuleFrame>
+      <CompareSplit open={!!comparing} onClose={() => setComparing(null)} title={comparing ? `v${chain.findIndex((a) => a.id === comparing.id) + 1} and now` : ""}
+        before={comparing && <img src={comparing.url} alt="Before" className="max-h-full max-w-full object-contain" />}
+        after={sel && <img src={sel.url} alt="Now" className="max-h-full max-w-full object-contain" />} />
+      <ImageEditor asset={editing ? sel : null} open={editing && !!sel} onClose={() => setEditing(false)}
+        onEdited={(out) => { setAssets((a) => [out, ...a]); setSelId(out.id); }} />
+      <AdSetDialog asset={adSet ? sel : null} open={adSet && !!sel} onClose={() => setAdSet(false)} onMade={(out) => setAssets((a) => [...out, ...a])} />
+      <AdvancedModal open={advOpen} onClose={() => setAdvOpen(false)} value={adv} onChange={setAdv} />
+    </>
   );
 }
 
-function ImageTile({ a, rating, onAdSet, onEdit, onDelete, onReuse }) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
+/** Platform admin only: engine, count, style, what to avoid and seed for the next set. */
+function AdvancedModal({ open, onClose, value, onChange }) {
+  const set = (k) => (e) => onChange((v) => ({ ...v, [k]: e.target.value }));
+  const prov = value.provider || { provider: "", model: "" };
   return (
-    <motion.div variants={rise} initial="hidden" animate="show" className="group card mb-4 break-inside-avoid overflow-hidden">
-      <div className={cx("relative bg-ink/[0.03]", !loaded && "aspect-square")}>
-        {!loaded && !failed && <div className="absolute inset-0 grid place-items-center text-muted"><Spinner className="size-5" /></div>}
-        {failed ? (
-          <div className="grid aspect-square place-items-center text-sm text-muted">Image failed to load</div>
-        ) : (
-          <motion.img src={a.url} alt={a.prompt} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)}
-            initial={false} animate={loaded ? { opacity: 1, filter: "blur(0px)", scale: 1 } : { opacity: 0, filter: "blur(14px)", scale: 1.04 }}
-            transition={{ duration: 0.8, ease }} className="w-full" />
-        )}
-        <div className="absolute right-2 top-2 flex gap-1.5 opacity-0 transition group-hover:opacity-100">
-          <a href={a.url} target="_blank" rel="noreferrer" className="btn-ghost btn-sm bg-white/90" title="Open full size"><Download className="size-3.5" /></a>
-          {!a.params?.parent && <button className="btn-ghost btn-sm bg-white/90" onClick={onEdit} title="Edit with comments"><MessageSquarePlus className="size-3.5" /></button>}
-          {!a.params?.parent && <button className="btn-ghost btn-sm bg-white/90" onClick={onAdSet} title="Make an ad set (all sizes + headline)"><LayoutGrid className="size-3.5" /></button>}
-          <button className="btn-ghost btn-sm bg-white/90" onClick={onReuse} title="Reuse these settings"><RotateCcw className="size-3.5" /></button>
-          <button className="btn-ghost btn-sm bg-white/90" onClick={onDelete} title="Delete"><Trash2 className="size-3.5" /></button>
+    <Modal open={open} onClose={onClose} title="Advanced">
+      <div className="space-y-4">
+        <ProviderPicker kind="image" value={prov} onChange={(p) => onChange((v) => ({ ...v, provider: p }))} />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="How many"><select className="input" value={value.count} onChange={(e) => onChange((v) => ({ ...v, count: Number(e.target.value) }))}>{[1, 2, 3, 4].map((n) => <option key={n}>{n}</option>)}</select></Field>
+          <Field label="Style"><select className="input" value={value.style} onChange={set("style")}>{STYLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
         </div>
+        <Field label="Avoid"><input className="input" value={value.negative_prompt} onChange={set("negative_prompt")} maxLength={1000} placeholder="text, watermark, blurry" /></Field>
+        <SeedField value={value.seed} onChange={(s) => onChange((v) => ({ ...v, seed: s }))} />
+        <div className="flex justify-end"><Button variant="ghost" onClick={onClose}>Done</Button></div>
       </div>
-      <div className="p-3">
-        <p className="line-clamp-2 text-xs text-muted">{a.params?.headline ? `“${a.params.headline}” · ` : ""}{a.prompt}</p>
-        <p className="mt-1 truncate text-xs text-faint">{a.params?.placement ? `Ad set · ${a.params.placement}` : a.params?.edited_from ? (a.params.provider_label || "Edited") : a.model} · {a.params?.size}{a.params?.style ? ` · ${a.params.style}` : ""}{a.params?.seed != null ? ` · seed ${a.params.seed}` : ""}</p>
-        <UsedIn assetId={a.id} className="mt-1" />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <Rate kind="image" id={a.id} initial={rating} />
-          {!a.params?.parent && (
-            <div className="flex gap-1">
-              <button className="btn-ghost btn-sm" onClick={onEdit}><MessageSquarePlus className="size-3.5" /> Edit</button>
-              <button className="btn-ghost btn-sm" onClick={onAdSet}><LayoutGrid className="size-3.5" /> Ad set</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
+    </Modal>
   );
 }
