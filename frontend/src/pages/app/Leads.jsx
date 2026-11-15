@@ -182,7 +182,7 @@ export default function Leads() {
                   <th scope="col" className="hidden w-[10%] font-medium lg:table-cell">Language</th>
                   <th scope="col" className="w-[13%] font-medium">Status</th>
                   <th scope="col" className="font-medium">Last message</th>
-                  {!isClient && <th scope="col" className="w-[132px] pr-4 sm:pr-6 lg:pr-8"><span className="sr-only">Actions</span></th>}
+                  {!isClient && <th scope="col" className="w-[112px] pr-4 sm:pr-6 lg:pr-8"><span className="sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody>
@@ -209,11 +209,13 @@ export default function Leads() {
                     {!isClient && (
                       <td className="order-2 md:order-none md:pr-4 sm:md:pr-6 lg:pr-8" onClick={(e) => e.stopPropagation()}>
                         <span className="flex items-center justify-end gap-0.5">
-                          {l.phone && !l.opted_out && (l.needs_reply
-                            ? <Button size="sm" className="h-7 px-2.5" onClick={() => openLead(l.id, true)} title={`Reply on WhatsApp${l.language_name ? ` in ${l.language_name}` : ""}`}><MessageCircle className="size-3.5" /> Reply</Button>
-                            : <IconButton label="Message on WhatsApp" onClick={() => openLead(l.id, true)}><MessageCircle className="size-4" /></IconButton>)}
+                          {/* Icons only; a lead who is waiting gets the reply icon in brand colour. */}
+                          {l.phone && !l.opted_out && (
+                            <IconButton label={l.needs_reply ? `Reply on WhatsApp${l.language_name ? ` in ${l.language_name}` : ""}` : "Message on WhatsApp"}
+                              className={cx(l.needs_reply && "!text-brand")} onClick={() => openLead(l.id, true)}><MessageCircle className="size-4" strokeWidth={l.needs_reply ? 2.4 : 2} /></IconButton>)}
                           {l.phone && !l.opted_out && <IconButton label={`Call ${l.name || "them"}`} href={`tel:${l.phone}`}><Phone className="size-4" /></IconButton>}
-                          {!["won", "lost"].includes(l.stage) && <IconButton label="They bought: mark as won" onClick={() => { update(l.id, { stage: "won" }); openLead(l.id); }}><BadgeCheck className="size-4" /></IconButton>}
+                          {!["won", "lost"].includes(l.stage) ? <IconButton label="They bought: mark as won" onClick={() => { update(l.id, { stage: "won" }); openLead(l.id); }}><BadgeCheck className="size-4" /></IconButton>
+                            : <span aria-hidden className="w-8" />}
                         </span>
                       </td>
                     )}
