@@ -393,7 +393,7 @@ function EngineSelect({ engines, engine, setEngine, chosen }) {
         </select>
       </Field>
       {chosen && !chosen.precise && (
-        <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+        <p className="rounded-xl bg-warm-soft p-3 text-xs text-warm">
           The free model can't repaint one spot, so it redraws the picture and AIMVA keeps only the parts you marked.
           Quick edits can look patched. Precise edits and object selection aren't switched on for your account yet.
         </p>
@@ -422,7 +422,7 @@ function MorePanel({ busy, chosen, info, source, onExtend, onBackground, onUpsca
             );
           })}
         </div>
-        {chosen && !chosen.precise && <p className="mt-2 text-xs text-amber-700">Free model: the edges are redrawn separately and may not match perfectly.</p>}
+        {chosen && !chosen.precise && <p className="mt-2 text-xs text-warm">Free model: the edges are redrawn separately and may not match perfectly.</p>}
       </section>
       <section>
         <p className="flex items-center gap-1.5 text-sm font-semibold text-strong"><ImageUp className="size-4" /> New background</p>

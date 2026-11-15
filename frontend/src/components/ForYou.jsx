@@ -12,7 +12,7 @@ import { timeAgo, useApi } from "../lib/hooks";
 import { useAgentEvents, useLeadEvents } from "../lib/live";
 import { useIsClient } from "../lib/auth";
 
-const DOT = { high: "bg-warm", medium: "bg-amber-500", low: "bg-line-strong" };
+const DOT = { high: "bg-warm", medium: "bg-warm-soft0", low: "bg-line-strong" };
 const SEEN_KEY = "aimva_updates_seen_at";
 const readSeen = () => { try { return localStorage.getItem(SEEN_KEY) || ""; } catch { return ""; } };
 const writeSeen = (v) => { try { localStorage.setItem(SEEN_KEY, v); } catch { /* storage blocked */ } };
@@ -76,7 +76,7 @@ function NextSteps({ recs, onGo }) {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-strong">{r.title}</p>
               {r.why && <p className="mt-0.5 line-clamp-2 text-xs text-muted">{r.why}</p>}
-              {r.impact && <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><TrendingUp className="size-3.5" />{r.impact}</p>}
+              {r.impact && <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand"><TrendingUp className="size-3.5" />{r.impact}</p>}
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {runs
                   ? <button type="button" className={primary} disabled={busy === r.key} onClick={() => accept(r)}>{busy === r.key && <Spinner />}{label}</button>

@@ -16,22 +16,22 @@ import { FollowUps } from "./Agents";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
 const STAGE_STYLE = {
-  new: "border-sky-500/40 bg-sky-500/15 text-sky-700",
-  contacted: "border-brand/40 bg-violet-500/15 text-brand",
-  qualified: "border-amber-500/40 bg-amber-500/15 text-amber-700",
-  won: "border-emerald-500/40 bg-emerald-500/15 text-emerald-700",
-  lost: "border-rose-500/40 bg-rose-500/15 text-danger",
+  new: "border-brand bg-lavender0/15 text-brand",
+  contacted: "border-brand/40 bg-lavender0/15 text-brand",
+  qualified: "border-warm/40 bg-warm-soft0/15 text-warm",
+  won: "border-brand bg-lavender0/15 text-brand",
+  lost: "border-danger/40 bg-danger/100/15 text-danger",
 };
 const SOURCE_TONE = { website: "pink", meta: "blue", google: "green", linkedin: "cyan", whatsapp: "green", voice: "violet", manual: "slate" };
 const KIND = {
-  created: { icon: UserPlus, color: "text-slate-600 bg-slate-500/15" },
-  form: { icon: FileText, color: "text-pink-600 bg-pink-500/15" },
-  ad: { icon: Megaphone, color: "text-sky-600 bg-sky-500/15" },
-  whatsapp: { icon: MessageCircle, color: "text-emerald-600 bg-emerald-500/15" },
-  call: { icon: AudioLines, color: "text-brand bg-violet-500/15" },
-  stage: { icon: Flag, color: "text-amber-600 bg-amber-500/15" },
-  value: { icon: IndianRupee, color: "text-amber-600 bg-amber-500/15" },
-  note: { icon: StickyNote, color: "text-slate-600 bg-slate-500/15" },
+  created: { icon: UserPlus, color: "text-muted bg-surface-2/15" },
+  form: { icon: FileText, color: "text-brand bg-lavender0/15" },
+  ad: { icon: Megaphone, color: "text-brand bg-lavender0/15" },
+  whatsapp: { icon: MessageCircle, color: "text-brand bg-lavender0/15" },
+  call: { icon: AudioLines, color: "text-brand bg-lavender0/15" },
+  stage: { icon: Flag, color: "text-warm bg-warm-soft0/15" },
+  value: { icon: IndianRupee, color: "text-warm bg-warm-soft0/15" },
+  note: { icon: StickyNote, color: "text-muted bg-surface-2/15" },
 };
 const FILTERS = [
   { value: "all", label: "All" },
@@ -69,7 +69,7 @@ function CopyButton({ value }) {
         }
       }}
     >
-      {done ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+      {done ? <Check className="size-3.5 text-brand" /> : <Copy className="size-3.5" />}
     </button>
   );
 }
@@ -113,7 +113,7 @@ function TimelineItem({ item }) {
         {item.body && (
           <p className={cx(
             "mt-1.5 whitespace-pre-wrap rounded-xl px-3 py-2 text-sm",
-            item.kind === "whatsapp" ? (inbound ? "bg-surface-2 text-ink" : "bg-emerald-50 text-emerald-900") : "bg-ink/[0.03] text-muted"
+            item.kind === "whatsapp" ? (inbound ? "bg-surface-2 text-ink" : "bg-lavender text-brand") : "bg-ink/[0.03] text-muted"
           )}>{item.body}</p>
         )}
         {transcript.length > 0 && (
@@ -124,7 +124,7 @@ function TimelineItem({ item }) {
             {open && (
               <div className="mt-2 space-y-1 rounded-2xl bg-surface-2/60 p-3 text-xs">
                 {transcript.map((t, i) => (
-                  <p key={i}><b className={t.role === "agent" ? "text-cyan-600" : "text-brand"}>{t.role === "agent" ? "Agent" : "Lead"}:</b> <span className="text-ink">{t.text}</span></p>
+                  <p key={i}><b className={t.role === "agent" ? "text-brand" : "text-brand"}>{t.role === "agent" ? "Agent" : "Lead"}:</b> <span className="text-ink">{t.text}</span></p>
                 ))}
               </div>
             )}
@@ -293,7 +293,7 @@ export default function LeadPanel({ leadId, onClose, onChanged, onDelete, startR
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={cx("font-display text-2xl font-bold", lead.score >= 70 ? "text-emerald-600" : lead.score >= 40 ? "text-amber-600" : "text-slate-600")}>{lead.score}</p>
+                  <p className={cx("font-display text-2xl font-bold", lead.score >= 70 ? "text-brand" : lead.score >= 40 ? "text-warm" : "text-muted")}>{lead.score}</p>
                   <p className="text-xs text-faint">lead score</p>
                 </div>
                 <div className="-mr-2 -mt-1 flex items-center">
@@ -318,7 +318,7 @@ export default function LeadPanel({ leadId, onClose, onChanged, onDelete, startR
               {/* Quick actions (the agency's team only: a client's view is read-only) */}
               {!isClient && <>
               {lead.opted_out && (
-                <div className="mt-4 rounded-xl bg-rose-500/10 p-3 text-xs text-ink">
+                <div className="mt-4 rounded-xl bg-danger/100/10 p-3 text-xs text-ink">
                   <p><span className="font-semibold">They asked not to be contacted.</span> AIMVA won't WhatsApp or call them, and their follow-ups are cancelled. If they reply START, messages resume by themselves.</p>
                   <button className="mt-1.5 font-semibold text-muted underline hover:text-ink" disabled={busy === "optin"}
                     onClick={() => window.confirm("Only resume if the customer asked you to contact them again. Resume messages and calls?")

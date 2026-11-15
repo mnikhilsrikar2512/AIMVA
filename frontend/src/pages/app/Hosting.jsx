@@ -154,8 +154,8 @@ function DomainDialog({ site, onClose, onChange }) {
             <RecordTable records={[{ type: "CNAME", name: saved.split(".")[0], value: PROVIDER_CNAME[provider] }]} />
           </div>
         ) : info.verified ? (
-          <div className="flex items-start gap-2.5 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-800">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+          <div className="flex items-start gap-2.5 rounded-2xl bg-lavender p-4 text-sm text-brand">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand" />
             <div>
               <p className="font-semibold">{saved} points to AIMVA.</p>
               {info.published ? <a href={info.url} target="_blank" rel="noreferrer" className="text-brand-2 hover:underline">Open {saved}</a>
@@ -164,8 +164,8 @@ function DomainDialog({ site, onClose, onChange }) {
             </div>
           </div>
         ) : info.setup_issue ? (
-          <div className="flex items-start gap-2.5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" /><p>{info.setup_issue}</p>
+          <div className="flex items-start gap-2.5 rounded-2xl bg-warm-soft p-4 text-sm text-warm">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warm" /><p>{info.setup_issue}</p>
           </div>
         ) : (
           <div className="rounded-2xl bg-surface-2/60 p-4 text-sm text-muted">
@@ -177,7 +177,7 @@ function DomainDialog({ site, onClose, onChange }) {
           </div>
         ))}
 
-        {problem && <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{problem}</p>}
+        {problem && <p className="rounded-xl bg-warm-soft px-3 py-2 text-sm text-warm">{problem}</p>}
 
         {saved && !dirty && info?.target_ready && !provider && !info.verified && (
           <Button busy={checking} onClick={check}>Check DNS</Button>

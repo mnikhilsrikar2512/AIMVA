@@ -70,7 +70,7 @@ function SentimentMeter({ value, average }) {
   const label = value == null ? "Waiting for the caller" : value > 0.2 ? "Calm / positive" : value < -0.2 ? "Upset" : "Neutral";
   return (
     <div className="w-full max-w-[220px]">
-      <div className="relative h-1.5 rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400">
+      <div className="relative h-1.5 rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-brand">
         <span className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-bg shadow transition-[left] duration-700"
           style={{ left: `${pct}%` }} />
       </div>
@@ -169,7 +169,7 @@ function TestCall({ agent, onEnded }) {
         <OrbStage level={level} phase="idle" sentiment={null} size="h-52" />
         <p className="font-semibold text-strong">Test {agent.name} in your browser</p>
         <p className="mt-1 max-w-sm text-sm text-muted">{SpeechRecognition ? "Talk with your microphone or type." : "This browser can't listen to your microphone (Firefox), so type your replies, or open AIMVA in Chrome, Edge or Safari to talk."} The orb moves with whoever is speaking and changes colour with the caller's mood.</p>
-        <label className="mt-4 flex items-center gap-2 text-sm text-muted"><input type="checkbox" className="accent-cyan-400" checked={voiceOn} onChange={(e) => setVoiceOn(e.target.checked)} /> Speak replies aloud</label>
+        <label className="mt-4 flex items-center gap-2 text-sm text-muted"><input type="checkbox" className="accent-brand" checked={voiceOn} onChange={(e) => setVoiceOn(e.target.checked)} /> Speak replies aloud</label>
         <Button className="mt-5" busy={busy} onClick={start}><Phone className="size-4" /> Start test call</Button>
       </div>
     );
@@ -180,7 +180,7 @@ function TestCall({ agent, onEnded }) {
       <div className="flex flex-col items-center rounded-2xl border border-line bg-bg/40 p-3 md:h-[520px] md:justify-center">
         <OrbStage level={level} phase={phase} sentiment={sentiment} size="h-48 md:h-64" />
         <p className="mb-3 flex items-center gap-2 text-sm font-medium text-strong" aria-live="polite">
-          <span className={cx("size-2 rounded-full", phase === "listening" ? "animate-pulse bg-rose-400" : phase === "speaking" ? "animate-pulse bg-cyan-300" : phase === "thinking" ? "animate-pulse bg-violet-300" : phase === "ended" ? "bg-slate-500" : "bg-emerald-400")} />
+          <span className={cx("size-2 rounded-full", phase === "listening" ? "animate-pulse bg-danger" : phase === "speaking" ? "animate-pulse bg-brand" : phase === "thinking" ? "animate-pulse bg-brand" : phase === "ended" ? "bg-surface-2" : "bg-brand")} />
           {PHASE_LABEL[phase]}
         </p>
         <SentimentMeter value={sentiment} average={call.sentiment} />
@@ -196,16 +196,16 @@ function TestCall({ agent, onEnded }) {
           {messages.map((m, i) => (
             <motion.div key={i} className={cx("flex gap-2", m.role === "user" && "flex-row-reverse")}
               initial={{ opacity: 0, y: 8, x: m.role === "user" ? 14 : -14 }} animate={{ opacity: 1, y: 0, x: 0 }} transition={{ type: "spring", stiffness: 320, damping: 26 }}>
-              <div className={cx("grid size-7 shrink-0 place-items-center rounded-full", m.role === "agent" ? "bg-cyan-500/15 text-cyan-600" : "bg-violet-500/15 text-brand")}>
+              <div className={cx("grid size-7 shrink-0 place-items-center rounded-full", m.role === "agent" ? "bg-lavender0/15 text-brand" : "bg-lavender0/15 text-brand")}>
                 {m.role === "agent" ? <Bot className="size-4" /> : <UserIcon className="size-4" />}
               </div>
               <div className={cx("max-w-[80%] rounded-2xl px-3.5 py-2 text-sm", m.role === "agent" ? "bg-surface-2 text-ink" : "bg-brand/25 text-strong")}>
                 {m.text}
-                {m.sentiment != null && <span className={cx("ml-2 text-xs", m.sentiment > 0.2 ? "text-emerald-600" : m.sentiment < -0.2 ? "text-danger" : "text-faint")}>{m.sentiment > 0 ? "+" : ""}{m.sentiment}</span>}
+                {m.sentiment != null && <span className={cx("ml-2 text-xs", m.sentiment > 0.2 ? "text-brand" : m.sentiment < -0.2 ? "text-danger" : "text-faint")}>{m.sentiment > 0 ? "+" : ""}{m.sentiment}</span>}
               </div>
             </motion.div>
           ))}
-          {!active && call.lead_id && <p className="text-center text-xs text-emerald-600">Lead #{call.lead_id} created from this call.</p>}
+          {!active && call.lead_id && <p className="text-center text-xs text-brand">Lead #{call.lead_id} created from this call.</p>}
           <div ref={endRef} />
         </div>
         {active && (
@@ -256,7 +256,7 @@ export default function VoiceAgent() {
           <div className="space-y-2">
             {agents.map((a) => (
               <button key={a.id} onClick={() => setSelId(a.id)} className={cx("flex w-full items-center gap-3 rounded-2xl p-3 text-left transition", agent.id === a.id ? "bg-surface shadow-[var(--shadow-soft)]" : "hover:bg-ink/[0.04]")}>
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-cyan-50 text-cyan-600"><Bot className="size-4" /></span>
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-lavender text-brand"><Bot className="size-4" /></span>
                 <div className="min-w-0"><p className="truncate text-sm font-semibold text-strong">{a.name}</p><p className="text-xs text-faint">{languages?.[a.language] || a.language}</p></div>
               </button>
             ))}
@@ -304,7 +304,7 @@ export default function VoiceAgent() {
         {viewCall && (
           <div className="space-y-2 text-sm">
             {viewCall.transcript.map((t, i) => (
-              <p key={i}><b className={t.role === "agent" ? "text-cyan-600" : "text-brand"}>{t.role === "agent" ? "Agent" : "Caller"}:</b> <span className="text-ink">{t.text}</span></p>
+              <p key={i}><b className={t.role === "agent" ? "text-brand" : "text-brand"}>{t.role === "agent" ? "Agent" : "Caller"}:</b> <span className="text-ink">{t.text}</span></p>
             ))}
             {Object.keys(viewCall.answers).length > 0 && (
               <div className="mt-4 rounded-2xl bg-surface-2/60 p-3">

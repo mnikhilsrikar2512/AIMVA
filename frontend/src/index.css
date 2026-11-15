@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
 /*
- * AIMVA palette (design.md section 7, 2026-11-15): pine and teal are the calm, saffron means "a person is needed",
- * rani pink is the counter colour used once per screen for that screen's primary action. Warm ivory canvas.
- * Bright saffron (--color-peach) only on the pine rail; on light screens saffron is always --color-warm.
+ * AIMVA palette (owner reference, 2026-11-15): White, Storm Green #0F282F, Vivid Cyan #02EFF0, and a Storm-to-Cyan
+ * brand gradient that stays on the landing pages. Vivid cyan is 1.44:1 on white, so on light screens it is only ever
+ * a fill behind Storm Green text (10.7:1); for links, focus and selected states on white a deep cyan of the same hue
+ * is used (#00696B, 6.5:1). On the dark rail the vivid cyan itself is the active colour (10.7:1).
+ * Attention (a person is needed) and danger are functional colours outside the brand three.
  */
 @theme {
   --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -17,36 +19,41 @@
   --radius-2xl: 0.625rem;
   --radius-xl: 0.5rem;
 
-  --color-bg: #f6f3ec;
-  --color-surface: #fffdf8;
-  --color-surface-2: #ede8dd;
-  --color-line: rgb(15 43 45 / 0.1);
-  --color-line-strong: rgb(15 43 45 / 0.18);
-  --color-strong: #0f2b2d;
-  --color-ink: #22393a;
-  --color-muted: #56645f;
-  /* Same as muted: 5.6:1 on canvas. Kept as a name so existing text-faint passes contrast. */
-  --color-faint: #56645f;
-  /* Saffron on light: text and small marks only (5.29:1). */
-  --color-warm: #9a5200;
-  --color-warm-soft: #fdf0db;
-  /* Teal: interactive and selected, never decorative. */
-  --color-brand: #0b6b67;
-  --color-brand-2: #0b6b67;
-  --color-brand-on-dark: #5fc4b8;
-  /* Bright saffron: fills on pine only (rail marker, rail lead dot). 1.89:1 on light, so never used there. */
-  --color-peach: #f4a21c;
-  --color-lavender: #dcefeb;
-  /* Rani pink: one element per screen, its primary action. */
-  --color-accent: #c2185b;
-  --color-accent-strong: #a3124b;
-  --color-accent-soft: #fbe4ec;
-  --color-accent-on-dark: #f37ba7;
+  /* White canvas and surfaces; a cool grey from the storm scale for sunk areas. */
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef3f4;
+  --color-line: rgb(15 40 47 / 0.1);
+  --color-line-strong: rgb(15 40 47 / 0.2);
+  /* Storm Green: headings, primary text, the rail, secondary buttons (15.4:1 on white). */
+  --color-strong: #0f282f;
+  --color-ink: #1e363d;
+  /* 6.1:1 on white, 5.6:1 on surface-2. */
+  --color-muted: #52656a;
+  --color-faint: #52656a;
+  /* Deep cyan (same hue as Vivid Cyan): links, focus rings, selected states on white (6.5:1). */
+  --color-brand: #00696b;
+  --color-brand-2: #00696b;
+  /* Vivid Cyan on Storm Green: active rail icon and marker, rail focus rings (10.7:1). */
+  --color-brand-on-dark: #02eff0;
+  /* Names kept so existing classes follow: peach = the rail's active marker, lavender = selected-row tint. */
+  --color-peach: #02eff0;
+  --color-lavender: #dafafa;
+  /* The primary action: Vivid Cyan fill with Storm Green text (10.7:1). One per screen. */
+  --color-accent: #02eff0;
+  --color-accent-strong: #00d2d3;
+  --color-accent-soft: #dafafa;
+  --color-accent-on-dark: #02eff0;
+  --color-accent-ink: #0f282f;
+  /* Attention: only when a person is needed (5.2:1 on white). */
+  --color-warm: #a15c00;
+  --color-warm-soft: #fff3df;
+  /* Errors and delete, always as text plus an icon (6.6:1). */
   --color-danger: #b42318;
 
   /* No floating shadows: hairlines; lift only for menus and dialogs. */
-  --shadow-soft: 0 0 0 1px rgb(15 43 45 / 0.1);
-  --shadow-lift: 0 0 0 1px rgb(15 43 45 / 0.1), 0 18px 40px -20px rgb(10 40 42 / 0.3);
+  --shadow-soft: 0 0 0 1px rgb(15 40 47 / 0.1);
+  --shadow-lift: 0 0 0 1px rgb(15 40 47 / 0.1), 0 18px 40px -20px rgb(15 40 47 / 0.3);
 }
 
 @layer base {
@@ -72,11 +79,11 @@
 }
 @utility btn-primary {
   @apply btn text-white bg-strong font-semibold;
-  &:hover:not(:disabled) { background: #1d4346; }
+  &:hover:not(:disabled) { background: #1d3d45; }
 }
 /* The screen's one rani element (design.md 7.1). */
 @utility btn-accent {
-  @apply btn text-white bg-accent font-semibold;
+  @apply btn text-accent-ink bg-accent font-semibold;
   &:hover:not(:disabled) { background: var(--color-accent-strong); }
 }
 @utility btn-ghost { @apply btn bg-surface text-strong ring-1 ring-line-strong hover:ring-strong/30 hover:bg-surface-2; }
@@ -96,16 +103,16 @@ select.input { @apply pr-9; }
 @utility chip { @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium; }
 /* Gradients are for marketing pages only (design.md section 8). These stay for the landing pages. */
 @utility gradient-text {
-  background: linear-gradient(95deg, #0b6b67 0%, #13827a 45%, #9a5200 100%);
+  background: linear-gradient(95deg, #0f282f 0%, #00696b 55%, #02a9aa 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 @utility aura {
   background:
-    radial-gradient(40% 50% at 20% 10%, rgb(94 184 172 / 0.32), transparent 70%),
-    radial-gradient(35% 45% at 85% 0%, rgb(244 162 28 / 0.26), transparent 70%),
-    radial-gradient(45% 40% at 60% 60%, rgb(160 220 210 / 0.22), transparent 70%);
+    radial-gradient(40% 50% at 20% 10%, rgb(2 239 240 / 0.22), transparent 70%),
+    radial-gradient(35% 45% at 85% 0%, rgb(15 40 47 / 0.16), transparent 70%),
+    radial-gradient(45% 40% at 60% 60%, rgb(2 239 240 / 0.12), transparent 70%);
 }
 /* Sheets and menus inside the app: opacity only, 120ms (design.md 9.1). */
 @keyframes appfade { from { opacity: 0; } to { opacity: 1; } }
@@ -116,7 +123,7 @@ html.app-locked, html.app-locked body { height: 100%; overflow: hidden; overscro
 html, body { overflow-x: clip; }
 
 /* Thin scrollbars */
-* { scrollbar-width: thin; scrollbar-color: rgb(15 43 45 / 0.2) transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgb(15 40 47 / 0.2) transparent; }
 
 @keyframes slidein { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }

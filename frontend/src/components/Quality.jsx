@@ -23,9 +23,9 @@ export function useBriefReview(brief) {
 }
 
 const LEVEL = {
-  thin: ["Thin brief", "The page will be generic. Answer a couple of questions below.", "bg-rose-400"],
-  ok: ["Good brief", "One or two more answers will make it stronger.", "bg-amber-400"],
-  ready: ["Great brief", "Enough real detail for a page you won't need to fix.", "bg-emerald-500"],
+  thin: ["Thin brief", "The page will be generic. Answer a couple of questions below.", "bg-danger"],
+  ok: ["Good brief", "One or two more answers will make it stronger.", "bg-warm"],
+  ready: ["Great brief", "Enough real detail for a page you won't need to fix.", "bg-lavender0"],
 };
 const INLINE = { offer: "e.g. Free first consultation", audience: "e.g. Working parents nearby", phone: "e.g. +91 98765 43210", address: "Area, city" };
 
@@ -64,7 +64,7 @@ export function BriefCoach({ review, brief, onAnswer, onGoTo, onApplyPlaybook })
           <p className="text-xs text-muted">{text}</p>
           <div className="flex flex-wrap items-center gap-2 rounded-xl bg-surface px-3 py-2.5">
             <span className="text-xs text-muted"><b className="text-strong">{p.label} playbook:</b> “{p.cta}” button, form asks {p.form_fields.join(", ").replace(/_/g, " ")}.</span>
-            {applied ? <span className="ml-auto text-xs font-semibold text-emerald-600">Applied</span>
+            {applied ? <span className="ml-auto text-xs font-semibold text-brand">Applied</span>
               : <button type="button" className="btn-ghost btn-sm ml-auto" onClick={() => onApplyPlaybook(p)}>Use this structure</button>}
           </div>
           {review.missing.length > 0 && (
@@ -116,11 +116,11 @@ export function ImportBar({ onImported }) {
 }
 
 const STATUS = {
-  ready: [ShieldCheck, "Ready to launch", "text-emerald-700 bg-emerald-50"],
-  review: [AlertTriangle, "Worth a quick look before launch", "text-amber-800 bg-amber-50"],
-  blocked: [XCircle, "Fix before you can publish", "text-danger bg-rose-50"],
+  ready: [ShieldCheck, "Ready to launch", "text-brand bg-lavender"],
+  review: [AlertTriangle, "Worth a quick look before launch", "text-warm bg-warm-soft"],
+  blocked: [XCircle, "Fix before you can publish", "text-danger bg-danger/10"],
 };
-const ICON = { blocker: [XCircle, "text-rose-500"], warning: [AlertTriangle, "text-amber-500"], tip: [Lightbulb, "text-sky-500"] };
+const ICON = { blocker: [XCircle, "text-danger"], warning: [AlertTriangle, "text-warm"], tip: [Lightbulb, "text-brand"] };
 
 /** The automatic quality pass on a generated page: what passed, and the few things worth a human look. */
 export function ReadinessPanel({ siteId, version, onFixed }) {
@@ -167,7 +167,7 @@ export function ReadinessPanel({ siteId, version, onFixed }) {
       )}
       {open && (
         <ul className="space-y-2 px-4 pb-4">
-          {failed.length === 0 && <li className="flex items-center gap-2 text-sm text-ink"><CheckCircle2 className="size-4 text-emerald-500" /> Contact form, phone, mobile layout, SEO, no placeholders and no invented claims. Good to go.</li>}
+          {failed.length === 0 && <li className="flex items-center gap-2 text-sm text-ink"><CheckCircle2 className="size-4 text-brand" /> Contact form, phone, mobile layout, SEO, no placeholders and no invented claims. Good to go.</li>}
           {failed.map((c) => {
             const [I, color] = ICON[c.level];
             return (
@@ -203,11 +203,11 @@ export function Rate({ kind, id, initial, className }) {
   return (
     <div className={cx("flex flex-wrap items-center gap-1", className)}>
       <button type="button" onClick={() => send(1)} aria-label="Good result" aria-pressed={state?.rating === 1}
-        className={cx("grid size-8 place-items-center rounded-full transition", state?.rating === 1 ? "bg-emerald-50 text-emerald-600" : "text-faint hover:bg-ink/[0.05] hover:text-strong")}>
+        className={cx("grid size-8 place-items-center rounded-full transition", state?.rating === 1 ? "bg-lavender text-brand" : "text-faint hover:bg-ink/[0.05] hover:text-strong")}>
         <ThumbsUp className="size-3.5" />
       </button>
       <button type="button" onClick={() => send(-1)} aria-label="Needs work" aria-pressed={state?.rating === -1}
-        className={cx("grid size-8 place-items-center rounded-full transition", state?.rating === -1 ? "bg-rose-50 text-danger" : "text-faint hover:bg-ink/[0.05] hover:text-strong")}>
+        className={cx("grid size-8 place-items-center rounded-full transition", state?.rating === -1 ? "bg-danger/10 text-danger" : "text-faint hover:bg-ink/[0.05] hover:text-strong")}>
         <ThumbsDown className="size-3.5" />
       </button>
       {asking && (

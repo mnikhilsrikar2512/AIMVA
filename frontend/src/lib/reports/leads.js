@@ -3,7 +3,7 @@ import { cap, createReport, dateTime, day, inr, num, pct } from "./kit";
 import { parseServerDate } from "../hooks";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
-const STAGE_COLOR = { new: [109, 93, 252], contacted: [14, 159, 184], qualified: [242, 160, 40], won: [33, 140, 84], lost: [160, 150, 140] };
+const STAGE_COLOR = { new: [15, 40, 47], contacted: [0, 105, 107], qualified: [161, 92, 0], won: [0, 163, 164], lost: [169, 184, 187] };
 
 export async function leadsReport({ leads, business, filters = {}, filename }) {
   const filtered = Object.entries(filters).filter(([, v]) => v);

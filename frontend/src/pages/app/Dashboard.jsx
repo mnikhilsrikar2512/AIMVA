@@ -66,7 +66,7 @@ function Today({ t, error, onRetry, isClient }) {
       <p className="text-[15px] leading-relaxed text-ink">
         <span className="text-muted">{sinceWords(t.since + "Z", firstVisit)}: </span>
         {n ? <><b className="font-semibold tabular-nums text-strong">{n} new lead{n === 1 ? "" : "s"}</b>{sources.length > 1 || n > 1 ? ` (${sources.join(", ")})` : ` from ${SOURCE_WORD[Object.keys(t.new.by_source)[0]] || "somewhere"}`}.</> : "no new leads."}
-        {t.won.count > 0 && <> <b className="font-semibold text-emerald-700">{plural(t.won.count, "sale")}{t.won.value ? ` worth ${inr(t.won.value)}` : ""}</b>.</>}
+        {t.won.count > 0 && <> <b className="font-semibold text-brand">{plural(t.won.count, "sale")}{t.won.value ? ` worth ${inr(t.won.value)}` : ""}</b>.</>}
         {t.calls > 0 && <> {plural(t.calls, "call")} answered for you.</>}
       </p>
 

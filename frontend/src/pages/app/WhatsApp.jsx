@@ -113,7 +113,7 @@ export default function WhatsApp() {
             <Empty compact icon={MessageCircle} title="No chats yet" text="When someone messages your business number, the chat opens here." action={<Button size="sm" variant="ghost" onClick={() => setNewChat(true)}><Plus className="size-4" /> New chat</Button>} />
           ) : convos.map((c) => (
             <button key={c.contact} onClick={() => setActive(c)} className={cx("flex w-full gap-3 border-b border-line px-4 py-3 text-left hover:bg-ink/[0.03]", active?.contact === c.contact && "bg-ink/[0.05]")}>
-              <div className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/15 font-semibold text-emerald-600">{(c.contact_name || "#")[0].toUpperCase()}</div>
+              <div className="grid size-10 shrink-0 place-items-center rounded-full bg-lavender0/15 font-semibold text-brand">{(c.contact_name || "#")[0].toUpperCase()}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex justify-between gap-2"><p className="truncate text-sm font-semibold text-strong">{c.contact_name || `+${c.contact}`}</p><span className="shrink-0 text-xs text-faint">{timeAgo(c.created_at)}</span></div>
                 <p className="truncate text-xs text-muted">{c.direction === "out" && "You: "}{c.body}</p>
@@ -133,11 +133,11 @@ export default function WhatsApp() {
                   <motion.div key={m.id} className={cx("flex", m.direction === "out" ? "justify-end" : "justify-start")}
                     initial={seen.current.has(m.id) ? false : { opacity: 0, y: 10, x: m.direction === "out" ? 16 : -16, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, x: 0, scale: 1 }} transition={{ type: "spring", stiffness: 320, damping: 26 }}>
-                    <div className={cx("max-w-[75%] rounded-2xl px-3.5 py-2 text-sm", m.direction === "out" ? "rounded-br-sm bg-emerald-600/80 text-white" : "rounded-bl-sm bg-surface-2 text-ink")}>
+                    <div className={cx("max-w-[75%] rounded-2xl px-3.5 py-2 text-sm", m.direction === "out" ? "rounded-br-sm bg-lavender text-white" : "rounded-bl-sm bg-surface-2 text-ink")}>
                       <p className="whitespace-pre-wrap">{m.body}</p>
                       <p className="mt-1 flex items-center justify-end gap-1 text-xs opacity-70">
                         {timeAgo(m.created_at)}
-                        {m.direction === "out" && (m.status === "read" ? <CheckCheck className="size-3 text-sky-600" /> : m.status === "delivered" ? <CheckCheck className="size-3" /> : m.status === "failed" ? "failed" : m.status === "simulated" ? "sandbox" : m.status === "own_app" ? "from your phone" : <Check className="size-3" />)}
+                        {m.direction === "out" && (m.status === "read" ? <CheckCheck className="size-3 text-brand" /> : m.status === "delivered" ? <CheckCheck className="size-3" /> : m.status === "failed" ? "failed" : m.status === "simulated" ? "sandbox" : m.status === "own_app" ? "from your phone" : <Check className="size-3" />)}
                       </p>
                     </div>
                   </motion.div>
@@ -148,7 +148,7 @@ export default function WhatsApp() {
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {waTemplates.templates.slice(0, 5).map((t) => (
                     <button key={t.ref} onClick={() => applyTemplate(t)} title={t.payload.body}
-                      className={cx("chip cursor-pointer hover:text-ink", t.source === "suggested" ? "border-amber-300 text-amber-800" : t.source === "mine" ? "border-emerald-300 text-emerald-800" : "border-line text-muted")}>{t.name}</button>
+                      className={cx("chip cursor-pointer hover:text-ink", t.source === "suggested" ? "border-warm/40 text-warm" : t.source === "mine" ? "border-brand text-brand" : "border-line text-muted")}>{t.name}</button>
                   ))}
                   <button onClick={() => setGallery(true)} className="chip cursor-pointer border-line text-brand"><LayoutTemplate className="size-3" /> All templates</button>
                   {text.trim().length >= 5 && <SaveTemplateButton module="whatsapp" className="h-6 px-2 text-xs"

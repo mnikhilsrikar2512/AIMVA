@@ -15,7 +15,7 @@ import { ease } from "./Motion";
  * the Launch card and activity feed on the Dashboard, the Concierge switch in Leads, Autopilot in Command Center.
  */
 
-const STEP_ICON = { done: [Check, "bg-emerald-500 text-white"], skipped: [Minus, "bg-surface-2 text-muted"], failed: [X, "bg-rose-500 text-white"] };
+const STEP_ICON = { done: [Check, "bg-lavender0 text-white"], skipped: [Minus, "bg-surface-2 text-muted"], failed: [X, "bg-danger/100 text-white"] };
 
 function Steps({ steps, running }) {
   return (
@@ -146,7 +146,7 @@ export function LaunchCard({ initialWhat = "" } = {}) {
   );
 }
 
-const KIND_TONE = { launch: "bg-violet-500", concierge: "bg-emerald-500", autopilot: "bg-sky-500", weekly_report: "bg-amber-500", page_fixer: "bg-pink-500", lead_alerts: "bg-rose-500" };
+const KIND_TONE = { launch: "bg-lavender0", concierge: "bg-lavender0", autopilot: "bg-lavender0", weekly_report: "bg-warm-soft0", page_fixer: "bg-lavender0", lead_alerts: "bg-danger/100" };
 
 /** On/off (and suggest/auto) for one agent, shown on the page whose work it does. */
 export function AgentSwitch({ kind, title, text, modes }) {
@@ -167,7 +167,7 @@ export function AgentSwitch({ kind, title, text, modes }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-soft)] max-sm:-mx-4 max-sm:rounded-none max-sm:shadow-[0_-1px_0_var(--color-line),0_1px_0_var(--color-line)]">
       <div className="flex min-w-0 items-center gap-3">
-        <span className={cx("grid size-9 shrink-0 place-items-center rounded-xl", a.enabled ? "bg-emerald-500/15 text-emerald-600" : "bg-surface-2 text-faint")}>
+        <span className={cx("grid size-9 shrink-0 place-items-center rounded-xl", a.enabled ? "bg-lavender0/15 text-brand" : "bg-surface-2 text-faint")}>
           <Bot className="size-4" />
         </span>
         <span className="min-w-0">
@@ -201,7 +201,7 @@ export function FollowUps({ leadId }) {
           <li key={f.step} className="flex justify-between gap-2">
             <span>{label[f.step]}</span>
             <span title={f.step === "welcome" ? f.note || undefined : undefined}
-              className={cx(f.status === "sent" && "text-emerald-600", ["drafted", "failed"].includes(f.status) && "text-warm", f.status === "skipped" && "text-faint")}>
+              className={cx(f.status === "sent" && "text-brand", ["drafted", "failed"].includes(f.status) && "text-warm", f.status === "skipped" && "text-faint")}>
               {f.status === "pending" ? parseServerDate(f.due_at).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
                 : done[f.status] ? done[f.status] + (f.status !== "sent" && f.note ? `: ${f.note}` : "") : f.note || "Skipped"}
             </span>

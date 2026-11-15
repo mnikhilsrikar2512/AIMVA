@@ -49,7 +49,7 @@ function VideoCard({ a, rating, onChange, onDelete, onComment }) {
           <video src={a.url} controls className="h-full w-full" />
         ) : a.status === "queued" ? (
           <div className="w-[min(18rem,85%)] rounded-lg bg-surface/95 p-3"><JobProgress startedAt={a.created_at} seconds={150} canLeave label="Making your video…" /></div>
-        ) : <p className="px-4 text-center text-sm text-rose-300">Render failed{p.error ? `: ${p.error}` : ""}</p>}
+        ) : <p className="px-4 text-center text-sm text-danger">Render failed{p.error ? `: ${p.error}` : ""}</p>}
         {addingSound && (
           <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-strong">
             <Spinner className="size-3.5" /> Adding sound…
@@ -62,7 +62,7 @@ function VideoCard({ a, rating, onChange, onDelete, onComment }) {
           <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-faint">
             {timeAgo(a.created_at)}{p.aspect_ratio ? ` · ${p.aspect_ratio}` : ""}
             {a.status === "done" && (p.has_audio
-              ? <span className="inline-flex items-center gap-1 font-semibold text-emerald-600"><Volume2 className="size-3" /> With sound</span>
+              ? <span className="inline-flex items-center gap-1 font-semibold text-brand"><Volume2 className="size-3" /> With sound</span>
               : <span className="inline-flex items-center gap-1"><VolumeX className="size-3" /> Silent{p.audio_error ? " (sound failed)" : ""}</span>)}
           </p>
           <UsedIn assetId={a.id} className="mt-1" />

@@ -125,7 +125,7 @@ export function Celebrations({ onboarding }) {
     <div className="fixed inset-0 z-[70] grid place-items-center bg-bg p-6" onClick={() => setMoment(null)} role="status" aria-live="polite">
       <div className="max-w-md text-center" onClick={(e) => e.stopPropagation()}>
         <p className="serif-moment text-[40px] leading-tight text-strong">{moment.title}</p>
-        <p className="mt-4 inline-block rounded-md bg-accent-soft px-3 py-1.5 text-base text-accent-strong">{moment.text}</p>
+        <p className="mt-4 inline-block rounded-md bg-accent-soft px-3 py-1.5 text-base text-strong">{moment.text}</p>
         <div className="mt-8 flex items-center justify-center gap-2">
           {moment.action && <Link to={moment.action.to} className="btn-accent" onClick={() => setMoment(null)}>{moment.action.label}</Link>}
           <button type="button" className="btn-subtle" onClick={() => setMoment(null)} autoFocus>Back to work</button>

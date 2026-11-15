@@ -150,14 +150,14 @@ export function PageHeader({ icon: Icon, title, subtitle, actions, tone = "viole
 }
 
 export const TONES = {
-  cyan: { tile: "bg-cyan-50 text-cyan-600", chip: "border-transparent bg-cyan-50 text-cyan-700", dot: "bg-cyan-500", text: "text-cyan-600" },
+  cyan: { tile: "bg-lavender text-brand", chip: "border-transparent bg-lavender text-brand", dot: "bg-lavender0", text: "text-brand" },
   violet: { tile: "bg-lavender text-brand", chip: "border-transparent bg-lavender text-brand", dot: "bg-brand", text: "text-brand" },  // the brand tone (teal since 2026-11-08); name kept for callers
-  green: { tile: "bg-emerald-50 text-emerald-600", chip: "border-transparent bg-emerald-50 text-emerald-700", dot: "bg-emerald-500", text: "text-emerald-600" },
-  pink: { tile: "bg-pink-50 text-pink-600", chip: "border-transparent bg-pink-50 text-pink-700", dot: "bg-pink-500", text: "text-pink-600" },
-  amber: { tile: "bg-amber-50 text-amber-600", chip: "border-transparent bg-amber-50 text-amber-700", dot: "bg-amber-500", text: "text-amber-600" },
-  blue: { tile: "bg-sky-50 text-sky-600", chip: "border-transparent bg-sky-50 text-sky-700", dot: "bg-sky-500", text: "text-sky-600" },
-  slate: { tile: "bg-slate-50 text-slate-600", chip: "border-transparent bg-slate-50 text-slate-700", dot: "bg-slate-500", text: "text-slate-600" },
-  rose: { tile: "bg-rose-50 text-rose-600", chip: "border-transparent bg-rose-50 text-rose-700", dot: "bg-rose-500", text: "text-rose-600" },
+  green: { tile: "bg-lavender text-brand", chip: "border-transparent bg-lavender text-brand", dot: "bg-lavender0", text: "text-brand" },
+  pink: { tile: "bg-lavender text-brand", chip: "border-transparent bg-lavender text-brand", dot: "bg-lavender0", text: "text-brand" },
+  amber: { tile: "bg-warm-soft text-warm", chip: "border-transparent bg-warm-soft text-warm", dot: "bg-warm-soft0", text: "text-warm" },
+  blue: { tile: "bg-lavender text-brand", chip: "border-transparent bg-lavender text-brand", dot: "bg-lavender0", text: "text-brand" },
+  slate: { tile: "bg-surface-2 text-muted", chip: "border-transparent bg-surface-2 text-muted", dot: "bg-surface-2", text: "text-muted" },
+  rose: { tile: "bg-danger/10 text-danger", chip: "border-transparent bg-danger/10 text-danger", dot: "bg-danger/100", text: "text-danger" },
 };
 
 export function Chip({ tone = "slate", children, className }) {

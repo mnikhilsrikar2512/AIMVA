@@ -54,7 +54,7 @@ function TemplateCard({ t, module, onUse, onKeep, onDismiss, onDelete, compact }
         {t.recommended && t.source !== "suggested" ? <Chip tone="violet" className="shrink-0">For you</Chip> : <Chip tone={tone} className="shrink-0">{label}</Chip>}
       </div>
       {t.description && <p className="mt-1 text-xs text-muted">{t.description}</p>}
-      {t.reason && <p className="mt-2 rounded-xl bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900"><Sparkles className="mr-1 inline size-3" />{t.reason}</p>}
+      {t.reason && <p className="mt-2 rounded-xl bg-warm-soft px-2.5 py-1.5 text-xs text-warm"><Sparkles className="mr-1 inline size-3" />{t.reason}</p>}
       {!compact && <p className="mt-2 text-xs italic text-ink">{line}</p>}
       <div className="mt-2 flex flex-wrap gap-1">
         {meta && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-muted">{meta}</span>}
@@ -159,7 +159,7 @@ export function TemplateStrip({ module, onApply, title = "Start from a template"
                 <span className="block pr-4 text-sm font-semibold leading-snug text-strong">{t.name}</span>
                 <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-muted">{t.reason || t.description}</span>
                 {(t.recommended || t.source !== "builtin") && <span className={cx("mt-1.5 inline-block rounded-full px-1.5 py-0.5 text-xs font-semibold",
-                  t.source === "suggested" ? "bg-amber-100 text-amber-800" : t.source === "mine" ? "bg-emerald-100 text-emerald-800" : "bg-lavender text-brand")}>
+                  t.source === "suggested" ? "bg-warm-soft text-warm" : t.source === "mine" ? "bg-lavender text-brand" : "bg-lavender text-brand")}>
                   {t.source === "suggested" ? "Suggested" : t.source === "mine" ? "Yours" : "For you"}</span>}
               </motion.button>
             );

@@ -222,7 +222,7 @@ function MobileTabBar({ onMore }) {
       {({ isActive }) => (<>
         <span className={cx("relative grid h-7 w-12 place-items-center rounded-full", isActive && "bg-lavender")}>
           <Icon className={cx("relative size-[19px]", isActive && "text-brand")} strokeWidth={isActive ? 2.2 : 1.8} />
-          {badge > 0 && <span className="absolute right-1.5 top-0 min-w-[18px] rounded-full bg-accent px-1 text-center text-xs font-bold leading-[18px] text-white" aria-label={`${badge} new`}>{badge > 9 ? "9+" : badge}</span>}
+          {badge > 0 && <span className="absolute right-1.5 top-0 min-w-[18px] rounded-full bg-accent px-1 text-center text-xs font-bold leading-[18px] text-accent-ink" aria-label={`${badge} new`}>{badge > 9 ? "9+" : badge}</span>}
         </span>
         <span className="truncate">{label}</span>
       </>)}

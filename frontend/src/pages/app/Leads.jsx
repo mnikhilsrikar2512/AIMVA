@@ -44,7 +44,7 @@ function SyncPanel() {
   const Target = ({ integ, icon: Icon, title, target, children }) => (
     <div className="rounded-2xl bg-surface-2/60 p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5"><Icon className="size-5 text-amber-600" /><p className="font-semibold text-strong">{title}</p></div>
+        <div className="flex items-center gap-2.5"><Icon className="size-5 text-warm" /><p className="font-semibold text-strong">{title}</p></div>
         {integ?.connected ? <Chip tone="green">Connected</Chip> : <Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect</Link>}
       </div>
       {integ?.connected && (
@@ -181,7 +181,7 @@ export default function Leads() {
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-x-2">
                       <button type="button" className="text-left font-semibold text-strong hover:underline" onClick={(e) => { e.stopPropagation(); openLead(l.id); }}>{l.name || l.email || l.phone || "—"}</button>
-                      {fresh.has(l.id) && <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-xs font-bold uppercase text-emerald-600">New</span>}
+                      {fresh.has(l.id) && <span className="rounded-full bg-lavender0/20 px-1.5 py-0.5 text-xs font-bold uppercase text-brand">New</span>}
                       {l.opted_out && <span className="text-xs font-semibold text-danger" title="They replied STOP: no WhatsApp or calls">Opted out</span>}
                       {l.needs_reply && <span className="text-xs font-semibold text-warm" title="Nobody has answered them yet">{waited(l.waiting_since)}</span>}
                       {l.language && l.language !== "en" && <span className="text-xs text-muted" title="They write in this language; replies are drafted in it">{l.language_name}</span>}
@@ -189,7 +189,7 @@ export default function Leads() {
                     {l.message && <p className="mt-0.5 line-clamp-1 text-sm text-ink">{l.message}</p>}
                     <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
                       <Chip tone={SOURCE_TONE[l.source] || "slate"}>{l.source}</Chip>
-                      <span className={cx(l.stage === "won" && "font-semibold text-emerald-700")}>{STAGE_LABEL[l.stage] || l.stage}{l.stage === "won" && l.value ? ` · ₹${Number(l.value).toLocaleString("en-IN")}` : ""}</span>
+                      <span className={cx(l.stage === "won" && "font-semibold text-brand")}>{STAGE_LABEL[l.stage] || l.stage}{l.stage === "won" && l.value ? ` · ₹${Number(l.value).toLocaleString("en-IN")}` : ""}</span>
                       <span>· {timeAgo(l.created_at)}</span>
                       {l.score >= 70 && l.stage === "new" && <span className="font-semibold text-warm">· hot</span>}
                       <WelcomeNote w={l.welcome} />

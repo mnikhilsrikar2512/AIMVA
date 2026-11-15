@@ -78,12 +78,12 @@ function ListEditor({ items, onChange, blank, render, addLabel, max }) {
 function AiStatus({ ai, writer, writers }) {
   // Neutral wording only: which supplier or key writes the page stays on the server.
   if (writer && writer !== "auto" && writer !== "builtin:writer") {
-    return <span className="text-emerald-600">Written by {writers.find((w) => w.ref === writer)?.name || "your chosen AI"}.</span>;
+    return <span className="text-brand">Written by {writers.find((w) => w.ref === writer)?.name || "your chosen AI"}.</span>;
   }
-  if (ai?.full) return <span className="text-emerald-600">Written by the AIMVA writer.</span>;
+  if (ai?.full) return <span className="text-brand">Written by the AIMVA writer.</span>;
   if (ai?.free) return (
     <span>
-      <span className="text-emerald-600">Written by the AIMVA writer.</span> When it's busy, the built-in template is used.
+      <span className="text-brand">Written by the AIMVA writer.</span> When it's busy, the built-in template is used.
     </span>
   );
   return <span>The built-in template is used for now; the AI writer isn't switched on for your account yet.</span>;
@@ -471,7 +471,7 @@ function ContactChoice({ b, val, set }) {
             </Field>
             <Field label="Country code" hint="For local numbers"><input className="input" value={b.country_code} onChange={set("country_code")} maxLength={5} pattern="\+\d{1,4}" /></Field>
           </div>
-          {!twilio && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Call backs are logged on each lead now. <Link to="/app/settings" className="font-semibold underline">Connect Twilio</Link> so the agent dials them automatically.</p>}
+          {!twilio && <p className="rounded-xl bg-warm-soft px-3 py-2 text-xs text-warm">Call backs are logged on each lead now. <Link to="/app/settings" className="font-semibold underline">Connect Twilio</Link> so the agent dials them automatically.</p>}
         </div>
       )}
     </div>
@@ -711,7 +711,7 @@ function SiteRow({ s, onOpen, onDelete, viewOnly }) {
       <button type="button" className="min-w-0 flex-1 text-left" onClick={onOpen}>
         <span className="flex items-center gap-2">
           <span className="truncate text-[15px] font-medium text-strong">{s.name}</span>
-          {s.published ? <span className="rounded bg-accent-soft px-1.5 text-xs font-medium leading-5 text-accent-strong">Live</span> : <span className="text-xs text-muted">Draft</span>}
+          {s.published ? <span className="rounded bg-accent-soft px-1.5 text-xs font-medium leading-5 text-strong">Live</span> : <span className="text-xs text-muted">Draft</span>}
         </span>
         <span className="mt-0.5 block text-xs text-muted">Updated {timeAgo(s.updated_at)} · {s.visits} visits{s.published ? " · " : ""}{s.published && <Outcome kind="page" id={s.id} />}</span>
       </button>
