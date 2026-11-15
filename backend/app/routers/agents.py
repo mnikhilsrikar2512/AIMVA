@@ -40,7 +40,7 @@ class SettingIn(BaseModel):
 
 
 ALLOWED_CONFIG = {  # what each agent's config may contain, with limits
-    "concierge": {"messages"},
+    "concierge": {"messages", "brief"},  # brief: the owner's instructions for WhatsApp replies (the module prompt)
     "autopilot": {"max_actions", "allow_scale", "max_scale_pct"},
     "weekly_report": {"email"},
     "lead_alerts": {"email"},
@@ -52,6 +52,8 @@ def _clean_config(kind: str, cfg: dict) -> dict:
     if "messages" in out:
         msgs = out["messages"] if isinstance(out["messages"], dict) else {}
         out["messages"] = {k: str(v).strip()[:1000] for k, v in msgs.items() if k in ("welcome", "day2", "day7") and str(v).strip()}
+    if "brief" in out:
+        out["brief"] = str(out["brief"] or "").strip()[:1000]  # "" clears it
     if "max_actions" in out:
         out["max_actions"] = max(0, min(10, int(out["max_actions"])))
     if "max_scale_pct" in out:

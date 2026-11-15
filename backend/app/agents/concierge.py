@@ -35,6 +35,12 @@ def message(db: Session, user: User, lead: Lead, step: str) -> str:
     from .. import lead_reply
     cfg = setting(db, user.id, "concierge").config or {}
     custom = (cfg.get("messages") or {}).get(step)
+    if cfg.get("brief") and not custom:
+        # The owner told AIMVA how to reply (the WhatsApp module's prompt): write this step with it, in the lead's
+        # language. Without an AI writer this falls through to the standard wording below.
+        d = lead_reply.draft(db, user, lead, "welcome" if step == "welcome" else "follow_up")
+        if d["by"] == "ai":
+            return d["text"] + ("\n\nReply STOP and we won't message again." if step == "day7" else "")
     english = _english(db, user, lead, step, custom)
     language = lead_reply.language_of(db, lead)
     if custom or language == "en":

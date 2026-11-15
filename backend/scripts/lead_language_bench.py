@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.lead_reply import detect  # noqa: E402
 
 HERE = os.path.join(os.path.dirname(__file__), "prompt_sets")
-SPLITS = ("dev", "test", "fresh", "fresh2")
+SPLITS = ("dev", "test", "fresh", "fresh2", "roman_dev", "roman_test", "roman_fresh")
 
 
 def rows(name):

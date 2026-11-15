@@ -133,9 +133,15 @@ def detect_language(text: str) -> Optional[str]:
     return None
 
 
-def call_language(agent_language: str, hint_text: str = "") -> str:
-    """The language for a call: what the lead wrote or asked for, if the call can speak it; else the assistant's."""
+def call_language(agent_language: str, hint_text: str = "", written: bool = False) -> str:
+    """The language for a call: what the lead wrote or asked for, if the call can speak it; else the assistant's.
+    written=True for the lead's own typed message, where Hindi, Telugu or Tamil in English letters ("rate entha
+    andi") also counts: they get the call in that language. Not used mid-call, where speech-to-text spells words."""
     wanted = detect_language(hint_text)
+    if not wanted and written:
+        from .lead_reply import detect
+        typed = detect(hint_text) or ""
+        wanted = typed.replace("-Latn", "-IN") if typed.endswith("-Latn") else None
     if wanted and wanted in ai_registry.voice_languages() and (wanted in ai_registry.phone_languages() or not wanted.endswith("-IN")):
         return wanted
     return agent_language

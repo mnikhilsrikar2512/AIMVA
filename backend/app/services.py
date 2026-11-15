@@ -20,7 +20,10 @@ def sentiment(text: str) -> float:
 
 
 GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
-GEMINI_FALLBACK_MODEL = "gemini-flash-latest"  # Google's alias for the current Flash model
+# Tried in order after GEMINI_MODEL when it is retired, overloaded, rate-limited or slow. New keys can't use 2.5 Flash
+# (404 since late 2026) and the "latest" alias was seen hanging for minutes, so a pinned Flash comes first.
+GEMINI_FALLBACK_MODELS = ("gemini-3.5-flash", "gemini-flash-lite-latest")
+GEMINI_TIMEOUT = 30  # seconds per model; an owner waiting longer than this is better served by the ready-made text
 
 
 def gemini_key(db: Session, user_id: Optional[int]) -> str:
@@ -43,20 +46,39 @@ def llm(prompt: str, system: str = "", max_tokens: int = 2048, key: Optional[str
         key = ai_registry.key_for("text", "gemini")
     if not key:
         return None
-    body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}}
-    if system:
-        body["systemInstruction"] = {"parts": [{"text": system}]}
-    for model in dict.fromkeys([settings.gemini_model, GEMINI_FALLBACK_MODEL]):
+    for model in dict.fromkeys([settings.gemini_model, *GEMINI_FALLBACK_MODELS]):
+        out = _gemini_once(model, prompt, system, max_tokens, key)
+        if out is not None:
+            return out or None
+    return None
+
+
+def _gemini_once(model: str, prompt: str, system: str, max_tokens: int, key: str) -> Optional[str]:
+    """One model's answer; "" means it answered nothing, None means try the next model.
+
+    Newer Flash models think before answering and the thinking counts against maxOutputTokens, so a short answer
+    (a 12-token label) came back empty. Thinking is turned down to "minimal"; models that refuse that level are
+    asked again with their default thinking and room for it on top of the answer."""
+    gen = {"maxOutputTokens": max_tokens, "temperature": 0.7, "thinkingConfig": {"thinkingLevel": "minimal"}}
+    for attempt in (0, 1):
+        body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": gen}
+        if system:
+            body["systemInstruction"] = {"parts": [{"text": system}]}
         try:
-            r = httpx.post(f"{GEMINI_API}/models/{model}:generateContent", params={"key": key}, json=body, timeout=60)
-            if r.status_code == 404:  # model retired or renamed: try the "latest Flash" alias
-                continue
-            r.raise_for_status()
-            parts = r.json()["candidates"][0]["content"]["parts"]
-            return "".join(p.get("text", "") for p in parts).strip() or None
+            r = httpx.post(f"{GEMINI_API}/models/{model}:generateContent", params={"key": key}, json=body,
+                           timeout=GEMINI_TIMEOUT)
         except Exception:
             return None
+        if r.status_code == 400 and attempt == 0 and "thinking" in r.text.lower():
+            gen = {"maxOutputTokens": max_tokens + 2048, "temperature": 0.7}
+            continue
+        if r.status_code != 200:
+            return None
+        try:
+            parts = r.json()["candidates"][0]["content"].get("parts", [])
+        except Exception:
+            return None
+        return "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
     return None
 
 

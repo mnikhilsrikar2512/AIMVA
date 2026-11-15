@@ -30,7 +30,7 @@ SUPPORTS = {
 LEGACY_KEYS = {"text": ("gemini", "GEMINI_API_KEY"), "image": ("fal", "FAL_KEY"), "image_edit": ("fal", "FAL_KEY"),
                "video": ("fal", "FAL_KEY"), "tts": ("sarvam", "SARVAM_API_KEY"), "stt": ("sarvam", "SARVAM_API_KEY")}
 DEFAULT_MODELS = {
-    ("gemini", "text"): "gemini-2.5-flash", ("fal", "image"): "fal-ai/flux/schnell", ("fal", "video"): "fal-ai/ltx-2/text-to-video",
+    ("gemini", "text"): "gemini-3.5-flash", ("fal", "image"): "fal-ai/flux/schnell", ("fal", "video"): "fal-ai/ltx-2/text-to-video",
     ("sarvam", "tts"): "bulbul:v3", ("sarvam", "stt"): "saaras:v4",
 }
 FALLBACK = {"text": "free", "image": "free", "image_edit": "free", "video": "", "tts": "builtin", "stt": "builtin",

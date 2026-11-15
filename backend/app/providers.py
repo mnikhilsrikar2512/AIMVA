@@ -34,7 +34,7 @@ PRESETS = {
                   "docs": "https://console.anthropic.com/settings/keys"},
     "gemini": {"kind": "text", "adapter": "gemini", "label": "Google Gemini",
                "base_url": "https://generativelanguage.googleapis.com/v1beta",
-               "model": "gemini-2.5-flash", "models": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest"],
+               "model": "gemini-3.5-flash", "models": ["gemini-3.5-flash", "gemini-2.5-pro", "gemini-flash-latest"],
                "docs": "https://aistudio.google.com/apikey"},
     "groq": {"kind": "text", "adapter": "openai", "label": "Groq", "base_url": "https://api.groq.com/openai/v1",
              "model": "llama-3.3-70b-versatile", "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],

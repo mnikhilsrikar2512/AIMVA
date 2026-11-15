@@ -44,6 +44,7 @@ _MODELS = {
     "fal-ai/wan/v2.2-a14b/text-to-video": ("video-open", "Video · open model"),
     "fal-ai/mmaudio-v2": ("sound-match", "Matching sound"),
     # writing
+    "gemini-3.5-flash": ("writer-fast", "AIMVA writer · fast"),
     "gemini-2.5-flash": ("writer-fast", "AIMVA writer · fast"),
     "gemini-2.5-pro": ("writer-pro", "AIMVA writer · thorough"),
     "gemini-flash-latest": ("writer-latest", "AIMVA writer · latest"),

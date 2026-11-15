@@ -28,8 +28,9 @@ CLOSED = {"won", "lost"}
 LANGUAGES = {  # code -> name shown to the business
     "en": "English", "hi-IN": "Hindi", "hi-Latn": "Hinglish", "bn-IN": "Bengali", "ta-IN": "Tamil", "te-IN": "Telugu",
     "gu-IN": "Gujarati", "kn-IN": "Kannada", "ml-IN": "Malayalam", "mr-IN": "Marathi", "pa-IN": "Punjabi", "od-IN": "Odia",
-    "ur-IN": "Urdu", "ar-SA": "Arabic",
+    "ur-IN": "Urdu", "ar-SA": "Arabic", "te-Latn": "Telugu (English letters)", "ta-Latn": "Tamil (English letters)",
 }
+LATIN = ("en", "hi-Latn", "te-Latn", "ta-Latn")  # replies written in English letters
 SCRIPT_OF = {  # languages whose reply must be in their own script
     "hi-IN": r"[ऀ-ॿ]", "mr-IN": r"[ऀ-ॿ]", "bn-IN": r"[ঀ-৿]", "pa-IN": r"[਀-੿]",
     "gu-IN": r"[઀-૿]", "od-IN": r"[଀-୿]", "ta-IN": r"[஀-௿]", "te-IN": r"[ఀ-౿]",
@@ -53,10 +54,46 @@ _HINGLISH = {"hai", "hain", "kya", "kitna", "kitne", "kitni", "chahiye", "chahte
              "lagega", "lagegi", "lagenge", "jayega", "jayegi", "hoga", "hogi", "aaya", "aaunga", "aaungi", "aa", "kal",
              "aaj", "shaam", "subah", "jaldi", "thoda", "paise", "rupaye", "baat", "bolo", "samajh", "ghar", "yeh", "woh",
              "tha", "thi", "baar", "tak", "hoon", "bhara", "liye", "mein", "aur", "bhi", "zaroor", "kuch", "koi", "jaana",
-             "dekhna"}
+             "dekhna", "karunga", "karungi", "jaunga", "jaungi", "aaungi", "bataunga", "bhejunga", "milunga", "dekhunga",
+             "bolunga", "rakhunga", "sochunga", "karenge", "thanda", "thandi"}
 # Count only next to a real Hindi word: short words that are also names, places or English ("Ka Nagar", "Ho Chi Minh").
 _HINGLISH_WEAK = {"bhai", "bhaiya", "ji", "sahab", "yaar", "plz", "sir", "madam", "ka", "ki", "ke", "ko", "ye", "sa", "pe",
-                  "ho", "hu", "hun", "ek", "din", "aa", "h"}
+                  "ho", "hu", "hun", "ek", "din", "aa", "h", "anna", "akka", "amma", "bro", "ma", "mam"}
+# Telugu and Tamil written in English letters ("rate entha andi", "price evlo"). Words both languages share (anna,
+# akka, rendu, mari) or that are English or names (sari, nan, oka) aren't here, or are only weak.
+_TELUGU = {"andi", "entha", "enta", "enti", "emiti", "ela", "elaa", "ekkada", "eppudu", "enduku", "evaru", "naaku",
+           "naku", "nenu", "meeru", "miru", "mee", "meeku", "meku", "memu", "manam", "maaku", "kavali", "kaavali",
+           "kavala", "cheppandi", "cheppu", "cheppara", "cheyandi", "cheyali", "chestanu", "chesta", "chestaru",
+           "chesaru", "chesanu", "undi", "unnaru", "unnara", "unnav", "unnanu", "unda", "undha", "undaa", "unte",
+           "ledu", "leda", "ledhu", "levu", "vaddu", "vaddhu", "kaadu", "kadu", "avunu", "sare", "saare", "baagundi",
+           "bagundi", "baaga", "baga", "bagunnara", "inka", "inkaa", "ippudu", "ipudu", "ivala", "ivvala", "eeroju",
+           "repu", "ninna", "tarvata", "taruvata", "taravata", "pampandi", "pampu", "pampinchandi", "vastanu",
+           "vasthanu", "vastaru", "vastundi", "vachi", "vacha", "vachanu", "raavali", "randi", "raa", "matladandi",
+           "matladatanu", "matladali", "maatladali", "maatladandi", "dorukutunda", "dorukutundi", "telusu", "teliyadu",
+           "chala", "chaala", "konchem", "koncham", "emaina", "emanna", "ekkuva", "takkuva", "dabbulu", "dabbu", "maa",
+           "intlo", "intiki", "garu", "gaaru", "kosam", "gurinchi", "kuda", "kooda", "okka", "saayantram", "sayantram",
+           "poddunna", "podduna", "roju", "ikkada", "akkada", "aithe", "ayithe", "kaani", "ante", "babu", "thammudu",
+           "chudandi", "chusi", "chustanu", "istanu", "ivvandi", "ichi", "dhara", "vivaralu"}
+_TAMIL = {"evlo", "evvalavu", "evalavu", "enna", "ennaa", "epdi", "eppadi", "enga", "engae", "eppo", "eppodhu", "yen",
+          "yaaru", "enakku", "enaku", "naan", "neenga", "neengal", "unga", "ungal", "ungalukku", "ungaluku", "ungakitta",
+          "venum", "venam", "vendum", "vendam", "sollunga", "sollu", "solunga", "pannunga", "pannu", "pannalama",
+          "pannalaama", "panren", "panrom", "irukku", "iruku", "irukka", "iruka", "irukeenga", "irukinga", "irundha",
+          "illa", "illai", "illaya", "seri", "nalla", "nallaa", "romba", "konjam", "innum", "ippo", "ippa", "inniku",
+          "innaiku", "innaikku", "naalaikku", "nalaiku", "naalaiku", "netru", "nethu", "apram", "appuram", "aprm",
+          "anuppunga", "anuppu", "anupunga", "varen", "varalaama", "varalama", "varuveenga", "varum", "vaanga",
+          "vanga", "ponga", "pesunga", "pesuren", "pesalam", "pesalaam", "theriyum", "theriyadhu", "theriyala",
+          "kidaikkuma", "kidaikuma", "kidaikum", "kidaikkum", "edhavadhu", "ethavathu", "vilai", "kaasu", "panam",
+          "veedu", "kadai", "thambi", "machan", "kudunga", "kodunga", "paakalam", "paakanum", "paarunga", "ellam",
+          "ellaam", "adhu", "idhu", "athu", "ithu", "oru", "moonu", "saayangalam", "saayankalam", "kaalaila",
+          "kalaila", "maalai", "mattum", "thaan", "dhaan", "sollalaam", "mudiyuma", "mudiyum", "aagum", "aaguma",
+          "eppavum", "yenna", "inga", "anga"}
+_TELUGU_END = re.compile(r"(?:andi|tunda|thunda|tundi|thundi|stanu|sthanu|staru|stharu|atanu|ataru|aledu)$")
+_TAMIL_END = re.compile(r"(?:unga|eenga|inga|laama|lama|kkuma|kkum|kiren|uren|aaren|aanga)$")
+# Plain-English words: a message that is mostly English with one such word is English with a name in it
+# ("Andi is my name, call me").
+_ENGLISH = {"is", "my", "the", "a", "an", "to", "me", "you", "your", "i", "it", "can", "will", "please", "call", "name",
+            "and", "of", "for", "on", "at", "this", "that", "what", "when", "where", "how", "do", "does", "are", "was",
+            "be", "have", "has", "want", "need", "get", "available", "still", "come"}
 # "reply in Tamil", "call me in Hindi", "speak Telugu", "Hindi me baat karo" — unless it's "I don't speak Hindi".
 _LANG_NAMES = {"english": "en", "hindi": "hi-IN", "bengali": "bn-IN", "bangla": "bn-IN", "tamil": "ta-IN",
                "telugu": "te-IN", "gujarati": "gu-IN", "kannada": "kn-IN", "malayalam": "ml-IN", "marathi": "mr-IN",
@@ -90,13 +127,38 @@ def _script(text: str) -> Optional[str]:
     return code
 
 
-def _hinglish(text: str) -> bool:
+def _latin(text: str) -> Optional[str]:
+    """Hindi, Telugu or Tamil typed in English letters: the language with the most of its own words, when there is
+    a clear winner and enough of them (two, or one next to a short Hindi/Telugu/Tamil word, or in a short message)."""
     words = re.findall(r"[a-z]+", text.lower())
     if words[:1] == ["hai"]:
         words = words[1:]
-    strong = sum(w in _HINGLISH for w in words)
+    counts = {"hi-Latn": 0, "te-Latn": 0, "ta-Latn": 0}
+    for w in words:
+        if w in _HINGLISH:  # a listed word belongs to its language; endings only decide words no list has
+            counts["hi-Latn"] += 1
+        elif w in _TELUGU:
+            counts["te-Latn"] += 1
+        elif w in _TAMIL:
+            counts["ta-Latn"] += 1
+        elif len(w) > 5 and _TELUGU_END.search(w):
+            counts["te-Latn"] += 1
+        elif len(w) > 5 and _TAMIL_END.search(w):
+            counts["ta-Latn"] += 1
+    ranked = sorted(counts.items(), key=lambda kv: -kv[1])
+    (code, strong), (_, second) = ranked[0], ranked[1]
+    if strong == 0 or strong == second:
+        return None
     weak = sum(w in _HINGLISH_WEAK for w in words)
-    return strong >= 2 or (strong == 1 and (weak >= 1 or len(words) <= 6))
+    if strong >= 2:
+        return code
+    if code != "hi-Latn" and sum(w in _ENGLISH for w in words) >= 4:
+        return None
+    return code if weak >= 1 or len(words) <= 6 else None
+
+
+def _hinglish(text: str) -> bool:
+    return _latin(text) == "hi-Latn"
 
 
 def wa_number(phone: str) -> str:
@@ -126,9 +188,7 @@ def detect(text: str) -> Optional[str]:
     code = _script(text)
     if code:
         return code
-    if _hinglish(text):
-        return "hi-Latn"
-    return None
+    return _latin(text)
 
 
 def remember_language(lead: Lead, text: str) -> None:
@@ -208,7 +268,7 @@ def template_for(integ, kind: str, language: str) -> Optional[dict]:
     if not name or not re.fullmatch(r"[a-z0-9_]{1,120}", str(name)):
         return None
     langs = [str(x) for x in (meta.get("template_languages") or ["en"]) if x] or ["en"]
-    base = "en" if language in ("en", "hi-Latn") else language.split("-")[0]
+    base = "en" if language in LATIN else language.split("-")[0]
     return {"name": name, "lang": base if base in langs else langs[0], "with_name": meta.get("template_has_name", True) is not False}
 
 
@@ -226,6 +286,15 @@ READY = {  # ready-made replies when no AI is available. {name} = first name, {b
                 "follow_up": "Namaste {name}, aapki enquiry ke baare mein follow up kar rahe hain. Koi sawaal ho toh bataiye, hum madad karenge.",
                 "visit": "Namaste {name}! Kya aap visit ka time fix karna chahenge? Apni suvidha ka din aur time bataiye.",
                 "pricing": "Namaste {name}, hum aapke budget ke hisaab se prices bhej sakte hain. Baat karne ka sahi time kab rahega?"},
+    # Telugu and Tamil the way people type them on WhatsApp. Written by Claude, not yet checked by a native speaker.
+    "te-Latn": {"welcome": "Namaskaram {name}, {business} meeda aasakti chupinchinanduku dhanyavaadalu! Meetho maatladataniki ye time baguntundi?",
+                "follow_up": "Namaskaram {name}, mee enquiry gurinchi follow up chestunnam. Emaina questions unte cheppandi, help chestam.",
+                "visit": "Namaskaram {name}! Visit ki time fix cheddama? Meeku veelaina roju, time cheppandi.",
+                "pricing": "Namaskaram {name}, mee budget ki taggattu prices pampagalam. Maatladataniki ye time baguntundi?"},
+    "ta-Latn": {"welcome": "Vanakkam {name}, {business} mela interest kaattinadhukku nandri! Ungakitta pesa endha neram vasathiya irukkum?",
+                "follow_up": "Vanakkam {name}, unga enquiry pathi follow up panrom. Edhavadhu kelvi irundha sollunga, help panrom.",
+                "visit": "Vanakkam {name}! Visit ku neram fix pannalaama? Ungalukku vasathiyana naal, neram sollunga.",
+                "pricing": "Vanakkam {name}, unga budget ku yetha prices anuppalaam. Pesa endha neram vasathiya irukkum?"},
     "bn-IN": {"welcome": "নমস্কার {name}, {business}-এ আগ্রহ দেখানোর জন্য ধন্যবাদ! আপনার সঙ্গে কথা বলার সুবিধাজনক সময় কখন?",
               "follow_up": "নমস্কার {name}, আপনার জিজ্ঞাসার বিষয়ে খোঁজ নিচ্ছি। কোনো প্রশ্ন থাকলে জানাবেন, আমরা সাহায্য করব।",
               "visit": "নমস্কার {name}! আপনি কি দেখা করার সময় ঠিক করতে চান? আপনার সুবিধামতো দিন ও সময় জানান।",
@@ -291,7 +360,7 @@ def fits_language(text: str, language: str) -> bool:
     pattern = SCRIPT_OF.get(language)
     if pattern:
         return len(re.findall(pattern, text)) >= 5
-    if language in ("en", "hi-Latn"):
+    if language in LATIN:
         return not any(re.search(p, text) for p in SCRIPT_OF.values())
     return True
 
@@ -317,6 +386,10 @@ def language_instruction(language: str) -> str:
     name = LANGUAGES.get(language, "English")
     if language == "hi-Latn":
         return "Hinglish: Hindi written in English letters, the way people type on WhatsApp (e.g. 'Aapka visit kab fix karein?')"
+    if language == "te-Latn":
+        return "Telugu written in English letters, the way people type on WhatsApp (e.g. 'Mee visit eppudu fix cheddam?')"
+    if language == "ta-Latn":
+        return "Tamil written in English letters, the way people type on WhatsApp (e.g. 'Unga visit eppo fix pannalaam?')"
     if language in SCRIPT_OF:
         return f"{name}, in {name} script"
     return name
@@ -363,6 +436,13 @@ def send_state(db: Session, user: User, lead: Lead, language: str, intent: str) 
             "template": tpl["name"] if tpl else "", "note": note, "wa_number": wa_number(lead.phone)}
 
 
+def owner_brief(db: Session, user: User) -> str:
+    """The owner's standing instructions for WhatsApp replies (the WhatsApp module's prompt), if they saved any."""
+    from .models import AgentSetting
+    s = db.scalar(select(AgentSetting).where(AgentSetting.user_id == user.id, AgentSetting.kind == "concierge"))
+    return str(((s.config or {}) if s else {}).get("brief") or "").strip()
+
+
 def draft(db: Session, user: User, lead: Lead, intent: str = "auto") -> dict:
     """A short WhatsApp reply in the lead's language, plus whether WhatsApp will let it through."""
     language = language_of(db, lead)
@@ -375,8 +455,10 @@ def draft(db: Session, user: User, lead: Lead, intent: str = "auto") -> dict:
               "1 to 3 short sentences, warm and plain, at most one emoji, no markdown, no sign-off. Use the lead's first "
               "name. Never invent prices, dates, addresses, discounts or promises that are not given below. "
               f"Write in {language_instruction(language)}.")
+    brief = owner_brief(db, user)
     prompt = "\n".join(filter(None, [
         f"Business: {business or 'our business'}" + (f" ({user.industry})" if getattr(user, "industry", "") else ""),
+        f"The business owner's instructions for replies (follow them; facts here may be used): {brief}" if brief else "",
         f"Lead's first name: {first_name(lead)}",
         f"What they asked when they enquired: {lead.message[:600]}" if lead.message else "",
         "Conversation so far:\n" + "\n".join(lines) if lines else "",

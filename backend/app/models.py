@@ -266,6 +266,9 @@ class SiteVersion(Base):
     brief: Mapped[dict] = mapped_column(JSON, default=dict)
     note: Mapped[str] = mapped_column(String(120), default="")
     generator: Mapped[str] = mapped_column(String(20), default="")
+    page: Mapped[str] = mapped_column(String(60), default="", server_default="")  # "" = the main page, else an extra page's slug
+    request: Mapped[str] = mapped_column(String(120), default="", server_default="")  # the owner's own words for an AI edit
+    by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # the person who saved it
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

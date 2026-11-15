@@ -50,6 +50,7 @@ const INTENTS = [
 const LANGUAGES = [
   ["en", "English"], ["hi-IN", "Hindi"], ["hi-Latn", "Hinglish"], ["bn-IN", "Bengali"], ["ta-IN", "Tamil"], ["te-IN", "Telugu"],
   ["gu-IN", "Gujarati"], ["kn-IN", "Kannada"], ["ml-IN", "Malayalam"], ["mr-IN", "Marathi"], ["pa-IN", "Punjabi"], ["od-IN", "Odia"], ["ur-IN", "Urdu"],
+  ["te-Latn", "Telugu (English letters)"], ["ta-Latn", "Tamil (English letters)"],
 ];
 const typing = (el) => el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 

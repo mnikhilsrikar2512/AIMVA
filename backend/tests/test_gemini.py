@@ -90,7 +90,7 @@ def test_keys_are_per_user(auth_client, other_client, mock_http):
 
 def test_retired_model_falls_back_to_latest_alias(auth_client, mock_http):
     mock_http.post(url__startswith=f"{GEMINI}/models/{settings.gemini_model}:").respond(404, json={"error": "not found"})
-    fallback = gemini_reply(mock_http, "Headline: Fresh\nText: Still works.", model="gemini-flash-latest")
+    fallback = gemini_reply(mock_http, "Headline: Fresh\nText: Still works.", model="gemini-flash-lite-latest")
     connect(auth_client)
     r = auth_client.post("/api/content/ad-copy", json={"product": "Acme"}).json()
     assert r["source"] == "ai" and fallback.called

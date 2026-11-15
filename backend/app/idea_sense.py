@@ -257,12 +257,58 @@ def read_kind(text: str) -> tuple:
     return "local_service", next(i for k, i in hits if k == "local_service")
 
 
-def read_idea(idea: str, link: str = "") -> dict:
-    """Profile, gaps and modules for one idea. `link` is used only as a hint (a site usually means a running business)."""
+# ---- the AI reads first, the rules are the backup (owner decision 2026-11-15) -------------------------------
+AI_SYSTEM = ("You sort small Indian businesses into one kind. Reply with the kind's key only, nothing else.\n"
+             "local_service: customers visit or book a service nearby (clinic, salon, gym, coaching, real estate, "
+             "restaurant, repairs, events).\n"
+             "product_seller: sells physical products, online or from a shop (D2C brand, boutique, bakery with delivery, "
+             "pickles, phones).\n"
+             "personal_brand: one person selling their own name or skill (creator, coach, consultant, doctor's own brand, "
+             "artist, astrologer).\n"
+             "b2b: sells to other businesses (software, manufacturing, wholesale, supply, staffing, facility services).\n"
+             "idea_only: the business doesn't exist yet (wants to start, planning, thinking of).\n"
+             "unclear: not enough to tell.\n"
+             "The idea may be in English, Hinglish, Hindi, Telugu, Tamil, Kannada or another Indian language.")
+_KIND_WORD = re.compile(r"\b(" + "|".join(KINDS) + r")\b")
+
+
+def ai_kind(write, idea: str) -> Optional[str]:
+    """The AI writer's kind for an idea, or None. Only an answer naming exactly one kind counts."""
+    try:
+        answer = write(f"Business idea: {idea[:600]}\n\nKind:", AI_SYSTEM, 12)
+    except Exception:
+        return None
+    found = set(_KIND_WORD.findall((answer or "").lower()))
+    return found.pop() if len(found) == 1 else None
+
+
+def industry_for(kind: str, text: str, rules_kind: str, rules_industry: str) -> str:
+    """Keep the industry consistent with the kind when the AI and the rules disagree."""
+    if kind == rules_kind:
+        return rules_industry
+    if kind == "product_seller":
+        return "retail"
+    if kind == "b2b":
+        return "saas" if SAAS.search(text) else "other"
+    if kind == "personal_brand":
+        return "healthcare" if rules_industry == "healthcare" else "other"
+    if kind == "local_service":
+        return rules_industry if rules_industry in ("healthcare", "education", "real_estate", "services") else "services"
+    if kind == "idea_only":
+        return rules_industry
+    return "other"
+
+
+def read_idea(idea: str, link: str = "", write=None) -> dict:
+    """Profile, gaps and modules for one idea. With an AI writer, its kind wins when it names a valid one; the rules
+    fill everything else (city, area, languages, name) and stand in whenever the AI is missing or off-script.
+    `link` is only a hint (a site usually means a running business)."""
     text = _norm(idea)
     kind, industry = read_kind(text)
-    if kind == "unclear" and link and not text:
-        kind = "unclear"
+    if write and text:
+        ai = ai_kind(write, text)
+        if ai and not (ai == "unclear" and kind != "unclear"):  # the AI shrugging never undoes a clear rules answer
+            kind, industry = ai, industry_for(ai, text, kind, industry)
     city = find_city(idea or "")
     langs, langs_sure = customer_languages(idea or "", city)
     profile = {

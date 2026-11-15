@@ -83,7 +83,7 @@ class Settings:
 
     # AI providers
     gemini_api_key = _env("GEMINI_API_KEY")
-    gemini_model = _env("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model = _env("GEMINI_MODEL", "gemini-3.5-flash")
     fal_key = _env("FAL_KEY")
     # Optional Pollinations key: the keyless free tier allows ~1 image / 45 s per server IP, shared by every user.
     pollinations_token = _env("POLLINATIONS_TOKEN")
