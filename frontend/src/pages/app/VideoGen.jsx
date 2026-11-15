@@ -1,280 +1,255 @@
-import { useEffect, useState } from "react";
-import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
-import { motion } from "framer-motion";
-import { rise, stagger } from "../../components/Motion";
-import { Link } from "react-router-dom";
+// Videos (design.md v3 7.3): one prompt makes the clip; the result fills the canvas and the changes panel takes every
+// change after that. A typed change makes a new version of the whole clip; C opens the frame-by-frame comment view
+// to point at a moment and a spot. Engine and fine-tuning stay hidden from owners.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Clapperboard, KeyRound, MessageSquarePlus, Plus, Trash2, Video, Volume2, VolumeX, Wand2 } from "lucide-react";
-import { Button, Card, Chip, Empty, Field, Notice, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
+import { Download, LayoutGrid, MessageSquarePlus, MoreHorizontal, Plus, SlidersHorizontal, Trash2, Video } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/shadcn/dropdown-menu";
+import { Tooltip } from "../../components/shadcn/tooltip";
+import { Button, Empty, IconButton, JobProgress, ListSkeleton, Modal, PageHeader, cx } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
-import { del, get, post } from "../../lib/api";
-import { timeAgo, useAction, useApi } from "../../lib/hooks";
-import BrandControls from "../../components/BrandControls";
-import { useAuth } from "../../lib/auth";
-import { Advanced, LibraryImagePicker, ProviderPicker, SeedField, STYLES } from "../../components/GenControls";
-import { EnhanceButton, Rate } from "../../components/Quality";
+import { ModulePrompt } from "../../components/ModulePrompt";
+import { ChangesPanel, ModuleFrame, ToolbarTitle, usePanelOpen } from "../../components/ModuleChanges";
+import { ProviderPicker } from "../../components/GenControls";
+import { Rate } from "../../components/Quality";
 import VideoStudio from "../../components/VideoStudio";
-import { StoryLine, UsedIn } from "../../components/Story";
+import { del, get, post } from "../../lib/api";
+import { useApi } from "../../lib/hooks";
+import { useAuth } from "../../lib/auth";
 
-const DURATION_LABEL = (d) => `${String(d).replace(/s$/, "")} seconds`;
-
-function Switch({ checked, onChange, label }) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}
-      className={cx("relative h-6 w-10 shrink-0 rounded-full transition", checked ? "bg-strong" : "bg-ink/15")}>
-      <span className={cx("absolute top-0.5 size-5 rounded-full bg-white shadow transition-all", checked ? "left-[18px]" : "left-0.5")} />
-    </button>
-  );
-}
-
-function VideoCard({ a, rating, onChange, onDelete, onComment }) {
-  const [soundBusy, setSoundBusy] = useState(false);
+/** The words a video version shows in the panel. */
+function said(a, first) {
   const p = a.params || {};
-  const addingSound = a.status === "queued" && p.stage === "audio";
-  const addSound = async () => {
-    setSoundBusy(true);
-    try {
-      onChange(await post(`/api/content/video/${a.id}/sound`, {}));
-      toast.success("Adding sound. This usually takes about a minute.");
-    } catch (e) {
-      toast.error(e.message);
-    } finally {
-      setSoundBusy(false);
-    }
-  };
-  return (
-    <motion.div variants={rise} initial="hidden" animate="show" className="card overflow-hidden">
-      <div className="relative grid aspect-video place-items-center bg-strong/90">
-        {a.status === "done" || (addingSound && p.silent_url) ? (
-          <video src={a.url} controls className="h-full w-full" />
-        ) : a.status === "queued" ? (
-          <div className="w-[min(18rem,85%)] rounded-lg bg-surface/95 p-3"><JobProgress startedAt={a.created_at} seconds={150} canLeave label="Making your video…" /></div>
-        ) : <p className="px-4 text-center text-sm text-danger">Render failed{p.error ? `: ${p.error}` : ""}</p>}
-        {addingSound && (
-          <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-strong">
-            <Spinner className="size-3.5" /> Adding sound…
-          </span>
-        )}
-      </div>
-      <div className="flex items-start justify-between gap-2 p-4">
-        <div className="min-w-0">
-          <p className="line-clamp-2 text-sm text-ink">{a.prompt}</p>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-faint">
-            {timeAgo(a.created_at)}{p.aspect_ratio ? ` · ${p.aspect_ratio}` : ""}
-            {a.status === "done" && (p.has_audio
-              ? <span className="inline-flex items-center gap-1 font-semibold text-brand"><Volume2 className="size-3" /> With sound</span>
-              : <span className="inline-flex items-center gap-1"><VolumeX className="size-3" /> Silent{p.audio_error ? " (sound failed)" : ""}</span>)}
-          </p>
-          <UsedIn assetId={a.id} className="mt-1" />
-          {a.status === "done" && !p.has_audio && (
-            <button onClick={addSound} disabled={soundBusy} className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-lavender px-3 py-1 text-xs font-semibold text-strong hover:bg-brand/15 disabled:opacity-50">
-              {soundBusy ? <Spinner className="size-3" /> : <Wand2 className="size-3" />} Add sound
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {a.status === "done" && <button className="btn-subtle btn-sm" title="Comment to change it" aria-label="Comment to change it" onClick={onComment}><MessageSquarePlus className="size-3.5" /></button>}
-          {a.status === "done" && <Rate kind="video" id={a.id} initial={rating} />}
-          <Chip tone={a.status === "done" ? "green" : a.status === "queued" ? "amber" : "rose"}>{addingSound ? "sound" : a.status}</Chip>
-          <button className="btn-subtle btn-sm" aria-label="Delete video" onClick={onDelete}><Trash2 className="size-3.5" /></button>
-        </div>
-      </div>
-    </motion.div>
-  );
+  if (first) return a.prompt;
+  const words = [p.request, ...(p.changes || []).map((c) => c.text)].filter(Boolean);
+  return words.join("; ") || "New version";
 }
-
-const CAMERAS = [["", "No camera move"], ["static", "Static"], ["push_in", "Slow push-in"], ["pull_out", "Pull-out reveal"], ["pan_left", "Pan left"],
-  ["pan_right", "Pan right"], ["orbit", "Orbit"], ["drone", "Drone flyover"], ["handheld", "Handheld"], ["tilt_up", "Tilt up"]];
-const GENERIC_DURATIONS = ["4s", "5s", "6s", "8s", "10s"];
 
 export default function VideoGen() {
-  const { data: models } = useApi("/api/content/models");
-  const { data: options } = useApi("/api/providers/options?kind=video", []);
-  const { data: assets, setData: setAssets, loading, error: assetsError, reload: reloadAssets } = useApi("/api/content/assets?kind=video", []);
-  const EMPTY = { prompt: "", aspect_ratio: "16:9", duration: "", resolution: "", negative_prompt: "", seed: null,
-                  camera: "", style: "", start: "", generate_audio: false };
-  const [form, setForm] = useState(EMPTY);
-  const admin = !!useAuth().user?.is_admin; // the platform owner sees engine and fine-tuning options; customers get the essentials
-  const [tab, setTab] = useState("create");
-  const [currentIds, setCurrentIds] = useState([]);  // renders started in this session, shown in Create
-  const [q, setQ] = useState("");
-  const [prov, setProv] = useState({ provider: "builtin:studio", model: "video-sound" });
-  const [sound, setSound] = useState({ add_sound: true, sound_prompt: "" });
-  const [busy, run] = useAction();
+  const { data: assets, setData: setAssets, loading, error, reload } = useApi("/api/content/assets?kind=video", []);
+  const { data: options, loading: optsLoading } = useApi("/api/providers/options?kind=video", []);
   const { data: brandKit } = useApi("/api/brand");
-  const [brandOpts, setBrandOpts] = useState({ use_brand: true });
   const { data: ratings } = useApi("/api/feedback?kind=video", {});
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const queued = assets.filter((a) => a.status === "queued").map((a) => a.id).join(",");
+  const admin = !!useAuth().user?.is_admin;
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const given = useRef(params.get("prompt") || "");
+  const [view, setView] = useState(given.current ? "prompt" : null);
+  const [selId, setSelId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [panelOpen, togglePanel] = usePanelOpen();
+  const [comparing, setComparing] = useState(null);
+  const [studio, setStudio] = useState(false);
+  const [advOpen, setAdvOpen] = useState(false);
+  const [engine, setEngine] = useState(null);  // admin only
+  const available = options.some((o) => o.available);
 
-  const isFal = prov.provider === "builtin:studio";  // AIMVA video (neutral id from the backend)
-  const known = isFal ? models?.video.find((m) => m.id === prov.model) : null;
-  const durations = known ? known.durations : GENERIC_DURATIONS;
-  const duration = durations.includes(form.duration) ? form.duration : durations[0] || "";
-  const makesSound = known ? known.audio : form.generate_audio;
-  const anyAvailable = options.some((o) => o.available);
-  const falConnected = models?.studio_available;
-
-  // Poll queued renders every 6s (also picks up the "adding sound" stage).
   useEffect(() => {
-    if (!queued) return;
+    if (loading || view) return;
+    const want = Number(params.get("asset")) || null;
+    const start = (want && assets.find((a) => a.id === want)) || assets[0];
+    if (start) { setSelId(start.id); setView("work"); } else setView("prompt");
+    if (params.get("prompt") || params.get("asset")) setParams((p) => { const n = new URLSearchParams(p); n.delete("prompt"); n.delete("asset"); return n; }, { replace: true });
+  }, [loading]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Renders take minutes: check the unfinished ones every 6 seconds (also picks up the sound stage).
+  const queued = assets.filter((a) => a.status === "queued").map((a) => a.id).join(",");
+  useEffect(() => {
+    if (!queued) return undefined;
     const t = setInterval(async () => {
       for (const id of queued.split(",")) {
         const a = await get(`/api/content/video/${id}`).catch(() => null);
-        if (a) setAssets((all) => all.map((x) => (x.id === a.id ? a : x)));
+        if (a) setAssets((all) => all.map((x) => (x.id === a.id ? { ...x, ...a } : x)));
       }
     }, 6000);
     return () => clearInterval(t);
   }, [queued, setAssets]);
 
-  const tpl = useTemplateTracker("video");
-  const tplPayload = () => ({ prompt: form.prompt, aspect_ratio: form.aspect_ratio, camera: form.camera || "", style: form.style || "", negative_prompt: form.negative_prompt });
-  const submit = async (e) => {
-    e.preventDefault();
-    const start = form.start;
-    const out = await run(() => post("/api/content/video", {
-      prompt: form.prompt, provider: prov.provider, model: prov.model, aspect_ratio: form.aspect_ratio, duration,
-      resolution: form.resolution || null, negative_prompt: form.negative_prompt, seed: form.seed,
-      camera: form.camera || null, style: form.style || null, generate_audio: known ? null : form.generate_audio,
-      start_ref: start || "",
-      ...sound, add_sound: sound.add_sound && !makesSound,
-      use_brand: !!brandKit?.is_set_up && brandOpts.use_brand,
-    }), "Render started");
-    if (out) {
-      tpl.track(tplPayload());
+  const byId = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
+  const rootOf = (a) => { let x = a; const seen = new Set(); while (x?.params?.parent && byId.has(x.params.parent) && !seen.has(x.id)) { seen.add(x.id); x = byId.get(x.params.parent); } return x?.id; };
+  const sel = byId.get(selId) || null;
+  const chain = sel ? assets.filter((a) => rootOf(a) === rootOf(sel)).sort((a, b) => a.id - b.id) : [];
+  const versions = chain.map((a, i) => ({ id: a.id, number: i + 1, request: said(a, i === 0), by: a.by, created_at: a.created_at,
+    current: a.id === selId, state: a.status === "queued" && a.params?.stage !== "audio" ? "making" : a.status === "failed" ? "failed" : null })).reverse();
+
+  const make = async (prompt) => {
+    setBusy(true);
+    try {
+      const e = engine || {};
+      const out = await post("/api/content/video", { prompt, aspect_auto: true, add_sound: true, use_brand: !!brandKit?.is_set_up,
+        ...(e.provider ? { provider: e.provider, model: e.model || "" } : {}) });
       setAssets((a) => [out, ...a]);
-      setCurrentIds((ids) => [out.id, ...ids]);
-    }
+      setSelId(out.id); setView("work");
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
   };
-  const startNew = () => { setForm(EMPTY); setCurrentIds([]); setTab("create"); };
-  const current = assets.filter((a) => currentIds.includes(a.id));
-  const history = assets.filter((a) => a.prompt.toLowerCase().includes(q.toLowerCase()));
-  const [studio, setStudio] = useState(null);
-  const rootOf = (a) => { let x = a; const seen = new Set(); while (x?.params?.parent && !seen.has(x.id)) { seen.add(x.id); x = assets.find((y) => y.id === x.params.parent) || x; if (seen.has(x.id)) break; } return x?.id; };
-  const chain = studio ? assets.filter((x) => rootOf(x) === rootOf(studio)).sort((a, b) => a.id - b.id) : [];
-  const card = (a) => (
-    <VideoCard key={a.id} a={a} rating={ratings[a.id]} onComment={() => setStudio(a)}
-      onChange={(n) => setAssets((all) => all.map((x) => (x.id === n.id ? n : x)))}
-      onDelete={async () => { await del(`/api/content/assets/${a.id}`); setAssets((all) => all.filter((x) => x.id !== a.id)); }} />
+  const change = async (request) => {
+    if (!sel) return false;
+    setBusy(true);
+    try {
+      const p = sel.params || {};
+      const root = byId.get(rootOf(sel)) || sel;
+      const out = await post("/api/content/video", { prompt: root.prompt, parent_id: sel.id, request, aspect_ratio: p.aspect_ratio || "16:9",
+        duration: String(p.duration || "5s"), add_sound: !p.has_audio, use_brand: !!p.brand });
+      setAssets((a) => [out, ...a]);
+      setSelId(out.id);
+      return true;
+    } catch (err) { toast.error(err.message); return false; } finally { setBusy(false); }
+  };
+  const remove = (a) => {
+    const keep = assets;
+    setAssets((all) => all.filter((x) => x.id !== a.id));
+    const next = chain.filter((x) => x.id !== a.id).pop() || assets.find((x) => x.id !== a.id);
+    setSelId(next?.id ?? null);
+    if (!next) setView("prompt");
+    let undone = false;
+    const t = setTimeout(() => { if (!undone) del(`/api/content/assets/${a.id}`).catch((e) => { toast.error(e.message); reload(); }); }, 5000);
+    toast("Video deleted.", { duration: 5000, action: { label: "Undo", onClick: () => { undone = true; clearTimeout(t); setAssets(keep); setSelId(a.id); setView("work"); } } });
+  };
+  const addSound = async () => {
+    try {
+      const out = await post(`/api/content/video/${sel.id}/sound`, {});
+      setAssets((all) => all.map((x) => (x.id === out.id ? { ...x, ...out } : x)));
+    } catch (err) { toast.error(err.message); }
+  };
+  useEffect(() => {
+    if (view !== "work" || !sel || sel.status !== "done") return undefined;
+    const k = (e) => {
+      if (e.key.toLowerCase() !== "c" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.querySelector("[role=dialog]")) return;
+      e.preventDefault(); setStudio(true);
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [view, sel]);
+
+  const notOn = !optsLoading && options.length > 0 && !available ? "Video isn't switched on for your account yet." : null;
+  const more = (
+    <DropdownMenu>
+      <Tooltip content="More"><DropdownMenuTrigger asChild><button type="button" className="btn-subtle btn-sm w-8 px-0" aria-label="More"><MoreHorizontal className="size-4" /></button></DropdownMenuTrigger></Tooltip>
+      <DropdownMenuContent align="end">
+        {assets.length > 0 && <DropdownMenuItem onSelect={() => setView("all")}><LayoutGrid className="size-4" /> All videos</DropdownMenuItem>}
+        {admin && <DropdownMenuItem onSelect={() => setAdvOpen(true)}><SlidersHorizontal className="size-4" /> Advanced</DropdownMenuItem>}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+  const advanced = (
+    <Modal open={advOpen} onClose={() => setAdvOpen(false)} title="Advanced">
+      <ProviderPicker kind="video" value={engine || { provider: "", model: "" }} onChange={setEngine} />
+      <div className="mt-4 flex justify-end"><Button variant="ghost" onClick={() => setAdvOpen(false)}>Done</Button></div>
+    </Modal>
+  );
+
+  if (view === null) return <><PageHeader title="Videos" /><ListSkeleton /></>;
+  if (error && !assets.length && view !== "prompt") return <><PageHeader title="Videos" /><LoadError error={error} what="your videos" onRetry={reload} /></>;
+
+  if (view === "prompt") {
+    return (
+      <div>
+        <PageHeader title="Videos" />
+        <ModulePrompt moduleKey="videos" given={given.current} busy={busy} submitLabel="Make the video" onSubmit={make} disabled={!!notOn} note={notOn}
+          outcome="You'll get a short video with sound. It takes a few minutes, and you can leave this page."
+          secondary={assets.length > 0 && <button type="button" className="font-medium text-brand hover:underline" onClick={() => setView(sel ? "work" : "all")}>Back to my videos</button>} />
+        {advanced}
+      </div>
+    );
+  }
+
+  if (view === "all") {
+    const roots = assets.filter((a) => !a.params?.parent || !byId.has(a.params.parent));
+    return (
+      <div>
+        <PageHeader title="Videos" />
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <p className="text-sm text-muted">{roots.length} video{roots.length === 1 ? "" : "s"}</p>
+          <span className="flex items-center gap-1">{more}<Button variant="ghost" onClick={() => setView("prompt")}><Plus className="size-4" /> New video</Button></span>
+        </div>
+        <ul className="border-t border-line">
+          {roots.map((r) => {
+            const latest = assets.filter((a) => rootOf(a) === r.id).sort((a, b) => b.id - a.id)[0] || r;
+            return (
+              <li key={r.id}>
+                <button type="button" onClick={() => { setSelId(latest.id); setView("work"); }} className="flex w-full items-center gap-4 border-b border-line py-3 text-left hover:bg-surface-2/60">
+                  <span className="grid h-14 w-24 shrink-0 place-items-center overflow-hidden rounded-md bg-strong">
+                    {latest.status === "done" ? <video src={latest.url} muted preload="metadata" className="size-full object-cover" /> : <Video className="size-4 text-white/70" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-strong">{r.prompt}</span>
+                    <span className="block text-xs text-muted">{latest.by ? `${latest.by} · ` : ""}{latest.status === "queued" ? "Making it…" : latest.status === "failed" ? "Didn't finish" : `${assets.filter((a) => rootOf(a) === r.id).length} version${assets.filter((a) => rootOf(a) === r.id).length === 1 ? "" : "s"}`}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {advanced}
+      </div>
+    );
+  }
+
+  const p = sel?.params || {};
+  const making = sel?.status === "queued" && p.stage !== "audio";
+  const toolbar = (
+    <>
+      <ToolbarTitle status={chain.length > 1 ? `v${chain.findIndex((a) => a.id === sel?.id) + 1}` : null}>{(byId.get(rootOf(sel)) || sel)?.prompt || "New video"}</ToolbarTitle>
+      {sel?.status === "done" && (
+        <span className="flex items-center gap-1">
+          <span className="hidden sm:inline-flex"><Rate kind="video" id={sel.id} initial={ratings[sel.id]} /></span>
+          <IconButton label="Point and change (C)" onClick={() => setStudio(true)}><MessageSquarePlus className="size-4" /></IconButton>
+          <IconButton label="Download" href={sel.url} download target="_blank" rel="noreferrer"><Download className="size-4" /></IconButton>
+        </span>
+      )}
+      {sel && sel.status !== "queued" && <IconButton label="Delete" danger onClick={() => remove(sel)}><Trash2 className="size-4" /></IconButton>}
+      {more}
+      <Button variant="ghost" size="sm" onClick={() => setView("prompt")}><Plus className="size-3.5" /> New</Button>
+      {sel?.status === "done" && <Button variant="accent" size="sm" onClick={() => navigate(`/app/ads/meta?video=${sel.id}`)}>Use in a campaign</Button>}
+    </>
   );
 
   return (
-    <div>
-      <VideoStudio video={studio} versions={chain} open={!!studio} onClose={() => setStudio(null)} onPick={setStudio}
-        onCreated={(n) => { setAssets((all) => [n, ...all]); setStudio(null); setTab("history"); }} />
-      <PageHeader title="Videos"
-        actions={<Button variant="ghost" onClick={startNew}><Plus className="size-4" /> Start new</Button>} />
-      <StoryLine module="videos" />
-      <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${assets.length ? ` (${assets.length})` : ""}` }]} /></div>
-      {options.length > 0 && !anyAvailable && (
-        <Notice tone="amber" icon={KeyRound}>
-          Video isn't switched on for your account yet.
-        </Notice>
-      )}
-      {tab === "history" ? (
-        loading ? <ListSkeleton /> : assetsError && assets.length === 0 ? (
-          <LoadError error={assetsError} what="your videos" onRetry={reloadAssets} />
-        ) : assets.length === 0 ? (
-          <Empty icon={Video} preview="tiles" title="Your videos will live here" text="Every video you make is saved here, with its sound." action={<Button onClick={() => setTab("create")}><Plus className="size-4" /> Make your first video</Button>} />
-        ) : (
-          <>
-            <input className="input mb-4 max-w-sm" placeholder="Search by prompt" value={q} onChange={(e) => setQ(e.target.value)} />
-            <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{history.map(card)}</motion.div>
-          </>
-        )
-      ) : (
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
-        <Card className="h-fit">
-          <form onSubmit={submit} className="space-y-4">
-            {admin && <TemplateStrip module="video" onApply={(t) => { tpl.apply(t); setForm((f) => ({ ...f, prompt: t.payload.prompt, aspect_ratio: t.payload.aspect_ratio || f.aspect_ratio, camera: t.payload.camera || "", style: t.payload.style || "", negative_prompt: t.payload.negative_prompt || "" })); }} />}
-            <Field label="Prompt">
-              <textarea className="input" rows={5} value={form.prompt} onChange={set("prompt")} required minLength={3} maxLength={2000}
-                placeholder="A slow cinematic drone shot over a beachfront villa at sunset, waves and soft music…" />
-            </Field>
-            <div className="-mt-2 flex justify-end">
-              <EnhanceButton prompt={form.prompt} kind="video" useBrand={!!brandKit?.is_set_up && brandOpts.use_brand}
-                onEnhanced={(r) => setForm((f) => ({ ...f, prompt: r.prompt, negative_prompt: f.negative_prompt || r.negative_prompt || "" }))} />
+    <>
+      <PageHeader title="Videos" />
+      <ModuleFrame toolbar={toolbar} panel={
+        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={versions} onSend={sel?.status === "done" ? change : null} sending={busy}
+          placeholder="Change anything: “slower”, “more people smiling”" restoreLabel="Use this"
+          onRestore={(v) => setSelId(v.id)} onCompare={(v) => setComparing(byId.get(v.id))} />
+      }>
+        {!sel ? <Empty icon={Video} title="Your video appears here" text="Say what you want in one line." action={<Button variant="ghost" onClick={() => setView("prompt")}>Make a video</Button>} />
+          : making ? (
+            <div className="mx-auto max-w-xl">
+              <div className={cx("mb-5 w-full rounded-[10px] bg-surface-2", p.aspect_ratio === "9:16" ? "mx-auto aspect-[9/16] max-h-[55dvh] w-auto" : "aspect-video")} />
+              <JobProgress startedAt={sel.created_at} seconds={150} canLeave label="Making your video…" />
             </div>
-            <ProviderPicker kind="video" value={prov} onChange={setProv}
-              models={isFal ? (models?.video || []).map((m) => m.id) : undefined}
-              modelHint={known ? (known.audio ? "Generates video and matching audio together." : "This model makes silent video.") : "Any model this provider offers. Settings below are passed through."} />
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Aspect ratio">
-                <select className="input" value={form.aspect_ratio} onChange={set("aspect_ratio")} disabled={known && !known.aspect_ratio}
-                  title={known && !known.aspect_ratio ? "This model picks the shape itself" : undefined}>
-                  {(known ? ["16:9", "9:16", "1:1"] : ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"]).map((s) => <option key={s}>{s}</option>)}
-                </select>
-              </Field>
-              <Field label="Duration">
-                <select className="input" value={duration} onChange={set("duration")} disabled={!durations.length}>
-                  {durations.length ? durations.map((d) => <option key={d} value={d}>{DURATION_LABEL(d)}</option>) : <option value="">Auto</option>}
-                </select>
-              </Field>
+          ) : sel.status === "failed" ? (
+            <div className="max-w-xl">
+              <p role="alert" className="text-sm text-danger">This version didn't finish{p.error ? `: ${p.error}` : "."}</p>
+              <p className="mt-2 text-sm text-muted">Try the change again in the panel, or pick an earlier version.</p>
             </div>
-
-            {admin && <Advanced>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Camera">
-                  <select className="input" value={form.camera} onChange={set("camera")}>{CAMERAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-                </Field>
-                <Field label="Style">
-                  <select className="input" value={form.style} onChange={set("style")}>{STYLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-                </Field>
-              </div>
-              <Field label="Resolution" hint={known && !known.audio ? "Chosen by this model." : "Leave on Auto unless your model needs it."}>
-                <select className="input" value={form.resolution} onChange={set("resolution")} disabled={known && !known.audio}>
-                  {["", "480p", "540p", "720p", "1080p", "1440p", "2160p"].map((r) => <option key={r} value={r}>{r || "Auto"}</option>)}
-                </select>
-              </Field>
-              <Field label="Avoid (negative prompt)"><input className="input" value={form.negative_prompt} onChange={set("negative_prompt")} maxLength={1000} placeholder="blurry, distorted faces, text" /></Field>
-              <SeedField value={form.seed} onChange={(v) => setForm((f) => ({ ...f, seed: v }))} />
-              {!known && (
-                <label className="flex items-center gap-2 text-sm text-ink">
-                  <input type="checkbox" className="size-4 accent-brand" checked={form.generate_audio}
-                    onChange={(e) => setForm((f) => ({ ...f, generate_audio: e.target.checked }))} />
-                  This engine renders its own sound
-                </label>
-              )}
-            </Advanced>}
-
-            <LibraryImagePicker label="Start from an image (optional)" value={form.start} onChange={(v) => setForm((f) => ({ ...f, start: v }))}
-              hint="Animates a product photo or one of your generated images." />
-
-            {!makesSound && falConnected && (
-              <div className="space-y-3 rounded-2xl bg-surface-2/60 p-4">
-                <div className="flex items-center gap-3">
-                  <Volume2 className="size-4 text-brand" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-strong">Add sound</p>
-                    <p className="text-xs text-muted">Adds matching ambience and music after rendering.</p>
-                  </div>
-                  <Switch label="Add sound" checked={sound.add_sound} onChange={(v) => setSound((s) => ({ ...s, add_sound: v }))} />
-                </div>
-                {sound.add_sound && (
-                  <input className="input" value={sound.sound_prompt} onChange={(e) => setSound((s) => ({ ...s, sound_prompt: e.target.value }))}
-                    maxLength={500} placeholder="Optional: describe the sound, e.g. waves, seagulls, soft piano" />
-                )}
-              </div>
-            )}
-
-            <BrandControls brand={brandKit} value={brandOpts} onChange={setBrandOpts} mode="video-plain" />
-            <Button type="submit" busy={busy} disabled={!anyAvailable} className="h-11 w-full"><Clapperboard className="size-4" /> Render video</Button>
-            {admin && form.prompt.trim().length >= 3 && <div className="flex justify-center"><SaveTemplateButton module="video" getPayload={tplPayload} /></div>}
-          </form>
-        </Card>
-        <div>
-          {current.length === 0 ? (
-            <Empty icon={Video} preview="tiles" title="Your new video appears here"
-              text="Describe it on the left. It usually takes 1–3 minutes, plus about a minute for sound. Earlier videos are in History." />
           ) : (
-            <>
-              <p className="mb-3 text-sm font-semibold text-strong">This session · saved to History</p>
-              <div className="grid gap-4 sm:grid-cols-2">{current.map(card)}</div>
-            </>
+            <div className="flex flex-col items-center">
+              <video key={sel.id} src={sel.url} controls playsInline className="max-h-[calc(100dvh-16rem)] w-auto max-w-full rounded-[10px] bg-strong" />
+              <p className="mt-3 flex items-center gap-3 text-xs text-muted">
+                {p.has_audio ? "With sound" : p.stage === "audio" ? "Adding sound…" : "No sound yet"}
+                {!p.has_audio && p.stage !== "audio" && <button type="button" className="font-medium text-brand hover:underline" onClick={addSound}>Add sound</button>}
+              </p>
+            </div>
           )}
-        </div>
-      </div>
-      )}
-    </div>
+      </ModuleFrame>
+      <Modal open={!!comparing} onClose={() => setComparing(null)} title={comparing ? `v${chain.findIndex((a) => a.id === comparing.id) + 1} and now` : ""} wide="xl">
+        {comparing && sel && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[["Before", comparing], ["Now", sel]].map(([l, a]) => (
+              <figure key={l}>
+                <figcaption className="mb-1.5 text-xs font-medium text-muted">{l}</figcaption>
+                {a.status === "done" ? <video src={a.url} controls playsInline className="w-full rounded-md bg-strong" /> : <div className="grid aspect-video place-items-center rounded-md bg-surface-2 text-xs text-muted">Not ready</div>}
+              </figure>
+            ))}
+          </div>
+        )}
+      </Modal>
+      <VideoStudio video={studio ? sel : null} versions={chain} open={studio && !!sel} onClose={() => setStudio(false)} onPick={(v) => setSelId(v.id)}
+        onCreated={(n) => { setAssets((all) => [n, ...all]); setSelId(n.id); setStudio(false); }} />
+      {advanced}
+    </>
   );
 }

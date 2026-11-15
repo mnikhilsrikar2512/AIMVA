@@ -1,252 +1,293 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, useParams } from "react-router-dom";
-import { Facebook, Linkedin, Pause, Play, Plus, RefreshCw, Search, Send, Sparkles, Trash2, Plug } from "lucide-react";
-import { Button, Card, Chip, Empty, Field, Modal, Notice, PageHeader, Spinner, cx, ListSkeleton, IconButton } from "../../components/ui";
+// Campaigns (design.md v3 7.3): one prompt drafts the campaign (budget, area, people, ad and where it sends them);
+// the ad and its settings fill the canvas, and the changes panel takes every change after that. Each setting can also
+// be edited in place. Nothing is spent until Launch, which always asks first because it spends money.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { MoreHorizontal, Pause, Play, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/shadcn/dropdown-menu";
+import { Tooltip } from "../../components/shadcn/tooltip";
+import { Button, IconButton, ListSkeleton, Modal, PageHeader, cx } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
+import { ModulePrompt } from "../../components/ModulePrompt";
+import { ChangesPanel, CompareText, ModuleFrame, ToolbarTitle, usePanelOpen } from "../../components/ModuleChanges";
+import AdPlacements from "../../components/AdPlacements";
 import { del, get, patch, post } from "../../lib/api";
 import { useAction, useApi } from "../../lib/hooks";
 import { useAuth } from "../../lib/auth";
-import AdPlacements from "../../components/AdPlacements";
-import { SaveTemplateButton, TemplateStrip, useTemplateTracker } from "../../components/Templates";
-import { StoryLine, Outcome } from "../../components/Story";
 
-const META = {
-  meta: { title: "Meta Ads", sub: "Facebook & Instagram campaigns with instant lead forms.", icon: Facebook, tone: "blue", provider: "meta",
-    objectives: [["leads", "Lead generation"], ["traffic", "Traffic"]] },
-  google: { title: "Google Ads", sub: "Search and Performance Max campaigns with lead form assets.", icon: Search, tone: "green", provider: "google",
-    objectives: [["leads", "Leads"], ["traffic", "Website traffic"]] },
-  linkedin: { title: "LinkedIn Ads", sub: "B2B campaigns with Lead Gen Forms.", icon: Linkedin, tone: "cyan", provider: "linkedin",
-    objectives: [["leads", "Lead generation"], ["traffic", "Website visits"]] },
-};
-const STATUS_TONE = { draft: "slate", active: "green", paused: "amber" };
-const FORM_FIELDS = ["full_name", "email", "phone_number", "city", "company_name", "job_title"];
+const PLATFORMS = { meta: "Meta", google: "Google", linkedin: "LinkedIn" };
+const STATUS = { draft: "Draft", paused: "Paused", active: "Running" };
+const FIELD_LABEL = { full_name: "Name", email: "Email", phone_number: "Phone", city: "City", company_name: "Company", job_title: "Job title" };
+const rupees = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
-function CampaignForm({ platform, onCreated, preview }) {
-  const cfg = META[platform];
-  const [c, setC] = useState({
-    name: "", objective: "leads", daily_budget: 20,
-    creative: { headline: "", text: "", image_url: "", cta: "Learn more" },
-    targeting: { locations: "", age_min: 18, age_max: 65, interests: "" },
-    lead_form: { fields: ["full_name", "email", "phone_number"], privacy_url: "", form_id: "" },
-  });
-  const [product, setProduct] = useState("");
-  const [busy, run] = useAction();
-  const [copyBusy, runCopy] = useAction();
-  const { data: images } = useApi("/api/content/assets?kind=image", []);
-  const setIn = (sec, k) => (e) => setC((x) => ({ ...x, [sec]: { ...x[sec], [k]: e.target.value } }));
-  const tpl = useTemplateTracker("ads");
-  const applyTemplate = (t) => {
-    tpl.apply(t);
-    const p = t.payload;
-    setC((x) => ({ ...x, name: x.name || t.name, objective: p.objective, daily_budget: p.daily_budget,
-      creative: { ...x.creative, headline: p.creative.headline, text: p.creative.text, cta: p.creative.cta },
-      targeting: { ...p.targeting, locations: x.targeting.locations || p.targeting.locations },
-      lead_form: { ...x.lead_form, fields: p.lead_form.fields } }));
-  };
-  const templatePayload = () => ({
-    platform, objective: c.objective, daily_budget: Number(c.daily_budget) || 0,
-    creative: { headline: c.creative.headline, text: c.creative.text, cta: c.creative.cta || "Learn more" },
-    targeting: { locations: c.targeting.locations, interests: c.targeting.interests, age_min: Number(c.targeting.age_min) || 18, age_max: Number(c.targeting.age_max) || 65 },
-    lead_form: { fields: c.lead_form.fields },
-  });
-
-  const suggest = () => runCopy(async () => {
-    const d = await post("/api/content/ad-copy", { product: product || c.name, platform, audience: c.targeting.interests });
-    const v = d.variants[0];
-    setC((x) => ({ ...x, creative: { ...x.creative, headline: v.headline, text: v.text } }));
-  });
-
+/** A setting shown as plain words that becomes a text box when clicked. */
+function Setting({ label, value, shown, onSave, type = "text", placeholder }) {
+  const [draft, setDraft] = useState(null);
+  const save = () => { const v = (draft ?? "").trim(); setDraft(null); if (v !== String(value ?? "")) onSave(v); };
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_290px]">
-    <form className="min-w-0 space-y-5" onSubmit={(e) => {
-      e.preventDefault();
-      run(async () => { const out = await post("/api/campaigns", { ...c, platform, daily_budget: Number(c.daily_budget) }); tpl.track(templatePayload()); onCreated(out); }, "Campaign saved as draft");
-    }}>
-      <TemplateStrip module="ads" onApply={applyTemplate} title="Start from a campaign template" />
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Campaign name" className="sm:col-span-2"><input className="input" value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} required minLength={2} /></Field>
-        <Field label="Daily budget (₹)"><input className="input" type="number" min="0" value={c.daily_budget} onChange={(e) => setC({ ...c, daily_budget: e.target.value })} /></Field>
-      </div>
-      <Field label="Objective">
-        <select className="input" value={c.objective} onChange={(e) => setC({ ...c, objective: e.target.value })}>
-          {cfg.objectives.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
-      </Field>
-
-      <fieldset className="space-y-3 rounded-2xl bg-surface-2/60 p-4">
-        <legend className="px-1 text-sm font-semibold text-strong">Creative</legend>
-        <div className="flex gap-2">
-          <input className="input" placeholder="What are you promoting? (for AI copy)" value={product} onChange={(e) => setProduct(e.target.value)} />
-          <Button type="button" variant="ghost" busy={copyBusy} onClick={suggest}><Sparkles className="size-4" /> Write copy</Button>
-        </div>
-        <Field label="Headline"><input className="input" value={c.creative.headline} onChange={setIn("creative", "headline")} /></Field>
-        <Field label="Primary text"><textarea className="input" rows={3} value={c.creative.text} onChange={setIn("creative", "text")} /></Field>
-        <Field label="Image" hint="Pick a generated image or paste a URL">
-          <input className="input" value={c.creative.image_url} onChange={setIn("creative", "image_url")} />
-        </Field>
-        {images.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {images.slice(0, 10).map((a) => (
-              <button type="button" key={a.id} onClick={() => setC((x) => ({ ...x, creative: { ...x.creative, image_url: a.url } }))}
-                className={`size-16 shrink-0 overflow-hidden rounded-lg border-2 ${c.creative.image_url === a.url ? "border-brand-2" : "border-transparent"}`}>
-                <img src={a.url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-              </button>
-            ))}
-          </div>
+    <div className="grid grid-cols-[9rem_1fr] items-start gap-3 border-b border-line py-2.5 text-sm">
+      <dt className="pt-1 text-muted">{label}</dt>
+      <dd className="min-w-0">
+        {draft !== null ? (
+          <input autoFocus type={type} aria-label={label} value={draft} placeholder={placeholder} onChange={(e) => setDraft(e.target.value)} onBlur={save}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") setDraft(null); }}
+            className="block w-full rounded-md bg-surface px-2 py-1 text-strong ring-2 ring-brand/40 focus:outline-none" />
+        ) : (
+          <button type="button" title="Click to edit" onClick={() => setDraft(String(value ?? ""))}
+            className={cx("w-full whitespace-pre-wrap rounded-md px-2 py-1 text-left hover:bg-surface-2", value ? "text-strong" : "text-muted")}>{shown ?? (value || placeholder || "Add…")}</button>
         )}
-      </fieldset>
-
-      <fieldset className="grid gap-3 rounded-2xl bg-surface-2/60 p-4 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold text-strong">Targeting</legend>
-        <Field label="Locations"><input className="input" placeholder="Hyderabad, Bengaluru" value={c.targeting.locations} onChange={setIn("targeting", "locations")} /></Field>
-        <Field label="Interests / job titles"><input className="input" value={c.targeting.interests} onChange={setIn("targeting", "interests")} /></Field>
-        <Field label="Min age"><input className="input" type="number" value={c.targeting.age_min} onChange={setIn("targeting", "age_min")} /></Field>
-        <Field label="Max age"><input className="input" type="number" value={c.targeting.age_max} onChange={setIn("targeting", "age_max")} /></Field>
-      </fieldset>
-
-      <fieldset className="space-y-3 rounded-2xl bg-surface-2/60 p-4">
-        <legend className="px-1 text-sm font-semibold text-strong">Lead form</legend>
-        <div className="flex flex-wrap gap-2">
-          {FORM_FIELDS.map((f) => {
-            const on = c.lead_form.fields.includes(f);
-            return (
-              <button type="button" key={f} onClick={() => setC((x) => ({ ...x, lead_form: { ...x.lead_form, fields: on ? x.lead_form.fields.filter((y) => y !== f) : [...x.lead_form.fields, f] } }))}
-                className={`chip cursor-pointer ${on ? "border-brand/50 bg-brand/15 text-strong" : "border-line text-muted"}`}>{f.replace("_", " ")}</button>
-            );
-          })}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Privacy policy URL"><input className="input" value={c.lead_form.privacy_url} onChange={setIn("lead_form", "privacy_url")} /></Field>
-          {platform === "meta" && <Field label="Existing form ID (to sync leads)"><input className="input" value={c.lead_form.form_id} onChange={setIn("lead_form", "form_id")} /></Field>}
-        </div>
-      </fieldset>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" busy={busy}>Save campaign</Button>
-        <SaveTemplateButton module="ads" getPayload={templatePayload} />
-      </div>
-    </form>
-    <div className="hidden lg:block">
-      <div className="sticky top-0"><AdPlacements creative={c.creative} platform={platform} {...preview} /></div>
-    </div>
+      </dd>
     </div>
   );
 }
 
 export default function Ads() {
-  const { platform } = useParams();
-  const cfg = META[platform] || META.meta;
+  const { platform = "meta" } = useParams();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const { data: campaigns, setData, loading, reload, error } = useApi(`/api/campaigns?platform=${platform}`, []);
   const { data: integrations, reload: reloadInteg } = useApi("/api/integrations", []);
-  const [creating, setCreating] = useState(false);
-  const [selected, setSelected] = useState(null);
-  const [accounts, setAccounts] = useState(null);
-  const [busy, run] = useAction();
-  const integ = integrations.find((i) => i.provider === cfg.provider);
-  const { user } = useAuth();
   const { data: sites } = useApi("/api/sites", []);
-  const live = sites.find((s) => s.published);
   const { data: kit } = useApi("/api/brand");
+  const { user } = useAuth();
+  const given = useRef(params.get("prompt") || "");
+  const [media, setMedia] = useState(null);  // a picture or video from "Use in a campaign"
+  const [view, setView] = useState(null);  // prompt | work | all
+  const [selId, setSelId] = useState(null);
+  const sel = campaigns.find((c) => c.id === selId) || null;
+  const { data: versions, reload: reloadVersions, loading: vLoading } = useApi(sel ? `/api/versions/campaign/${sel.id}` : null, []);
+  const [busy, setBusy] = useState(false);
+  const [panelOpen, togglePanel] = usePanelOpen();
+  const [comparing, setComparing] = useState(null);
+  const [launching, setLaunching] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [accounts, setAccounts] = useState(null);
+  const [acting, act] = useAction();
+  const integ = integrations.find((i) => i.provider === platform);
+  const live = sites.find((s) => s.published);
   const logo = kit?.logos?.find((l) => l.is_primary) || kit?.logos?.[0];
-  const preview = {
-    brand: kit?.name || user.company || user.name,
-    logo: logo?.url,
-    domain: live ? (live.custom_domain || new URL(live.deploy_url || live.url).host) : undefined,
+  const preview = useMemo(() => ({
+    brand: kit?.name || user.company || user.name, logo: logo?.url,
+    domain: live ? (live.custom_domain || (() => { try { return new URL(live.deploy_url || live.url).host; } catch { return undefined; } })()) : undefined,
     connected: new Set(integrations.filter((i) => i.connected).map((i) => i.provider)),
-  };
-  useEffect(() => { setSelected(null); }, [platform]);
+  }), [kit, user, logo, live, integrations]);
 
-  const replace = (c) => { setData((all) => all.map((x) => (x.id === c.id ? c : x))); setSelected(c); };
+  useEffect(() => {  // a picture or video sent here from Pictures or Videos
+    const image = params.get("image"), video = params.get("video");
+    if (image || video) {
+      get(`/api/content/assets?kind=${image ? "image" : "video"}`).then((all) => {
+        const a = all.find((x) => String(x.id) === (image || video));
+        if (a) setMedia(a);
+      }).catch(() => {});
+      setView("prompt");
+    }
+    if (image || video || params.get("prompt")) setParams((p) => { const n = new URLSearchParams(p); ["image", "video", "prompt"].forEach((k) => n.delete(k)); return n; }, { replace: true });
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelId(null); if (view !== "prompt" || !media) setView(null); }, [platform]);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {  // first visit: the prompt; with campaigns, the newest one
+    if (loading || view) return;
+    if (!given.current && campaigns.length) { setSelId(campaigns[0].id); setView("work"); } else setView("prompt");
+  }, [loading, view, campaigns]);
+
+  const replace = (c) => { setData((all) => (all.some((x) => x.id === c.id) ? all.map((x) => (x.id === c.id ? c : x)) : [c, ...all])); setSelId(c.id); reloadVersions(); };
+  const draft = async (prompt) => {
+    setBusy(true);
+    try {
+      const c = await post("/api/campaigns/draft", { prompt, platform, asset_id: media?.id ?? null });
+      replace(c); setMedia(null); setView("work"); given.current = "";
+    } catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  };
+  const change = async (request) => {
+    setBusy(true);
+    try { replace(await post(`/api/campaigns/${sel.id}/change`, { request })); return true; }
+    catch (e) { toast.error(e.message); return false; } finally { setBusy(false); }
+  };
+  const save = async (fields) => { try { replace(await patch(`/api/campaigns/${sel.id}`, fields)); } catch (e) { toast.error(e.message); } };
+  const setCreative = (k) => (v) => save({ creative: { ...sel.creative, [k]: v } });
+  const setTarget = (fields) => save({ targeting: { ...sel.targeting, ...fields } });
+  const restore = async (v) => { try { replace(await post(`/api/versions/${v.id}/restore`)); toast(`Back to v${v.number}.`); } catch (e) { toast.error(e.message); } };
+  const compare = async (v) => {
+    setComparing({ v, before: null });
+    try { setComparing({ v, before: (await get(`/api/versions/${v.id}`)).data }); } catch (e) { toast.error(e.message); setComparing(null); }
+  };
+  const plain = (c) => c && ({ Budget: `${rupees(c.daily_budget)} a day`, Where: [c.targeting?.locations, c.targeting?.radius_km ? `${c.targeting.radius_km} km around` : ""].filter(Boolean).join(", "),
+    Who: [c.targeting?.interests, `ages ${c.targeting?.age_min || 18}–${c.targeting?.age_max || 65}`].filter(Boolean).join(", "),
+    Headline: c.creative?.headline, Text: c.creative?.text, Button: c.creative?.cta });
+
+  const launch = () => act(async () => {
+    let c = sel;
+    if (!c.external_id) c = await post(`/api/campaigns/${c.id}/publish`);
+    c = await patch(`/api/campaigns/${c.id}`, { status: "active" });
+    replace(c); setLaunching(false);
+    return c;
+  }, `Launched on ${PLATFORMS[platform]}.`);
+  const remove = () => {
+    if (sel.external_id) { setRemoving(true); return; }
+    const gone = sel, keep = campaigns;
+    setData((all) => all.filter((x) => x.id !== gone.id));
+    const next = campaigns.find((x) => x.id !== gone.id);
+    setSelId(next?.id ?? null);
+    if (!next) setView("prompt");
+    let undone = false;
+    const t = setTimeout(() => { if (!undone) del(`/api/campaigns/${gone.id}`).catch((e) => { toast.error(e.message); reload(); }); }, 5000);
+    toast("Draft deleted.", { duration: 5000, action: { label: "Undo", onClick: () => { undone = true; clearTimeout(t); setData(keep); setSelId(gone.id); setView("work"); } } });
+  };
+
+  const tabs = (
+    <nav aria-label="Platform" className="flex gap-1">
+      {Object.entries(PLATFORMS).map(([k, l]) => (
+        <NavLink key={k} to={`/app/ads/${k}`} className={({ isActive }) => cx("rounded-md px-2.5 py-1 text-sm font-medium", isActive ? "bg-accent-soft text-strong" : "text-muted hover:bg-surface-2 hover:text-strong")}>{l}</NavLink>
+      ))}
+    </nav>
+  );
+
+  if (view === null) return <><PageHeader title="Campaigns" /><ListSkeleton /></>;
+  if (error && !campaigns.length && view !== "prompt") return <><PageHeader title="Campaigns" /><LoadError error={error} what="your campaigns" onRetry={reload} /></>;
+
+  if (view === "prompt") {
+    return (
+      <div>
+        <PageHeader title="Campaigns" />
+        <div className="mb-6">{tabs}</div>
+        {media && (
+          <div className="mb-4 flex max-w-3xl items-center gap-3 text-sm text-muted">
+            {media.kind === "video" ? <video src={media.url} muted className="h-12 w-12 rounded-md bg-strong object-cover" /> : <img src={media.url} alt="" className="size-12 rounded-md object-cover" />}
+            <span className="flex-1">The ad uses this {media.kind === "video" ? "video" : "picture"}.</span>
+            <IconButton label="Don't use it" onClick={() => setMedia(null)}><X className="size-4" /></IconButton>
+          </div>
+        )}
+        <ModulePrompt key={platform} moduleKey="campaigns" given={given.current} busy={busy} submitLabel="Draft the campaign" onSubmit={draft}
+          outcome={`You'll get a ${PLATFORMS[platform]} campaign with the ad, the area and a daily budget. Nothing is spent until you press Launch.`}
+          secondary={campaigns.length > 0 && <button type="button" className="font-medium text-brand hover:underline" onClick={() => { setSelId(sel?.id || campaigns[0].id); setView("work"); }}>Back to my campaigns</button>} />
+      </div>
+    );
+  }
+
+  if (view === "all") {
+    return (
+      <div>
+        <PageHeader title="Campaigns" />
+        <div className="mb-6 flex items-center justify-between gap-3">{tabs}<Button variant="ghost" onClick={() => setView("prompt")}><Plus className="size-4" /> New campaign</Button></div>
+        <table className="w-full text-sm">
+          <thead className="bg-surface-2 text-left text-xs text-muted"><tr><th className="px-3 py-2 font-medium">Campaign</th><th className="px-3 py-2 font-medium">Budget</th><th className="hidden px-3 py-2 font-medium sm:table-cell">Spent</th><th className="px-3 py-2 font-medium">State</th></tr></thead>
+          <tbody>
+            {campaigns.map((c) => (
+              <tr key={c.id} onClick={() => { setSelId(c.id); setView("work"); }} className="cursor-pointer border-b border-line hover:bg-surface-2/60">
+                <td className="px-3 py-2.5"><button type="button" className="text-left font-medium text-strong" onClick={() => { setSelId(c.id); setView("work"); }}>{c.name}</button></td>
+                <td className="px-3 py-2.5 tabular-nums">{rupees(c.daily_budget)} a day</td>
+                <td className="hidden px-3 py-2.5 tabular-nums sm:table-cell">{rupees(c.spend)}</td>
+                <td className="px-3 py-2.5 text-muted">{STATUS[c.status] || c.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-3 text-xs text-muted">{campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}</p>
+      </div>
+    );
+  }
+
+  const t = sel?.targeting || {}, cr = sel?.creative || {};
+  const connected = !!integ?.connected;
+  const toolbar = (
+    <>
+      <ToolbarTitle status={sel ? STATUS[sel.status] || sel.status : null}>{sel?.name || "Campaign"}</ToolbarTitle>
+      {tabs}
+      {sel && (
+        <span className="flex items-center gap-1">
+          {sel.external_id && <IconButton label="Get the latest results" busy={acting} onClick={() => act(async () => replace(await post(`/api/campaigns/${sel.id}/sync`)))}><RefreshCw className="size-4" /></IconButton>}
+          {sel.external_id && sel.status === "active" && <IconButton label="Pause" onClick={() => act(async () => replace(await patch(`/api/campaigns/${sel.id}`, { status: "paused" })), "Paused.")}><Pause className="size-4" /></IconButton>}
+          <IconButton label="Delete" danger onClick={remove}><Trash2 className="size-4" /></IconButton>
+        </span>
+      )}
+      <DropdownMenu>
+        <Tooltip content="More"><DropdownMenuTrigger asChild><button type="button" className="btn-subtle btn-sm w-8 px-0" aria-label="More"><MoreHorizontal className="size-4" /></button></DropdownMenuTrigger></Tooltip>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setView("all")}>All campaigns</DropdownMenuItem>
+          {connected && platform === "meta" && <DropdownMenuItem onSelect={() => act(async () => setAccounts(await get("/api/campaigns/meta/ad-accounts")))}>Choose the ad account</DropdownMenuItem>}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button variant="ghost" size="sm" onClick={() => setView("prompt")}><Plus className="size-3.5" /> New</Button>
+      {sel && sel.status !== "active" && (connected
+        ? <Button variant="accent" size="sm" onClick={() => setLaunching(true)}>{sel.status === "paused" ? <><Play className="size-3.5" /> Resume</> : "Launch"}</Button>
+        : <Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect {PLATFORMS[platform]} to launch</Link>)}
+    </>
+  );
 
   return (
-    <div>
-      <PageHeader title="Campaigns" subtitle={cfg.sub}
-        actions={<Button onClick={() => setCreating(true)}><Plus className="size-4" /> New campaign</Button>} />
-      {/* One Campaigns page; the platforms are tabs, not three sidebar items. */}
-      <nav aria-label="Platform" className="-mt-4 mb-6 flex gap-1 border-b border-line">
-        {Object.entries(META).map(([k, m]) => (
-          <NavLink key={k} to={`/app/ads/${k}`} className={({ isActive }) => cx("-mb-px flex h-9 items-center gap-1.5 border-b-2 px-3 text-sm font-medium transition",
-            isActive ? "border-strong text-strong" : "border-transparent text-muted hover:text-strong")}>
-            <m.icon className="size-4" /> {m.title.replace(" Ads", "")}
-          </NavLink>
-        ))}
-      </nav>
-      <StoryLine module="campaigns" className="mt-0 sm:mt-0" />
-
-      {integ && !integ.connected && (
-        <Notice tone="blue" icon={Plug} action={<Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect account</Link>}>
-          {integ.app_configured ? `Connect your ${integ.label} account to publish campaigns and sync results.`
-            : `You can draft campaigns now. Publishing to ${integ.label} is being switched on for your account; we'll let you know when it's ready.`}
-        </Notice>
-      )}
-      {integ?.connected && platform === "meta" && !integ.meta?.ad_account_id && (
-        <Notice tone="amber" action={<Button size="sm" variant="ghost" onClick={() => run(async () => setAccounts(await get("/api/campaigns/meta/ad-accounts")))}>Choose ad account</Button>}>
-          Pick which Meta ad account AIMVA should publish to.
-        </Notice>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <Card className="min-w-0 p-0 sm:p-0">
-          {loading ? <ListSkeleton /> : error && campaigns.length === 0 ? (
-            <LoadError error={error} what="your campaigns" onRetry={reload} />
-          ) : campaigns.length === 0 ? (
-            <Empty icon={cfg.icon} title="Your campaigns will live here" text="Draft one with AI-written copy and a lead form. Nothing is spent until you publish." action={<Button onClick={() => setCreating(true)}><Plus className="size-4" /> New campaign</Button>} />
-          ) : (
-            <ul>
-              {campaigns.map((c) => (
-                <li key={c.id}>
-                  <button onClick={() => setSelected(c)} className={`flex w-full items-center gap-4 border-b border-line px-5 py-4 text-left last:border-0 hover:bg-ink/[0.03] ${selected?.id === c.id ? "bg-ink/[0.04]" : ""}`}>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-strong">{c.name}</p>
-                      <p className="text-xs text-muted">₹{Number(c.daily_budget).toLocaleString("en-IN")}/day · {c.objective}{c.external_id ? ` · ID ${c.external_id}` : ""}</p>
-                      <Outcome id={c.id} className="sm:hidden" />
-                    </div>
-                    <div className="hidden text-right text-xs text-muted sm:block">
-                      <p>₹{Number(c.spend || 0).toLocaleString("en-IN")} spent · {c.clicks} clicks</p><Outcome id={c.id} />
-                    </div>
-                    <Chip tone={STATUS_TONE[c.status]}>{c.status}</Chip>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <div className="space-y-4">
-          {selected ? (
-            <Card className="space-y-4">
-              <div className="flex items-center justify-between"><h2 className="font-semibold text-strong">{selected.name}</h2><Chip tone={STATUS_TONE[selected.status]}>{selected.status}</Chip></div>
-              <AdPlacements creative={selected.creative} platform={platform} {...preview} />
-              <div className="flex flex-wrap gap-2">
-                {!selected.external_id && <Button size="sm" variant="accent" busy={busy} onClick={() => run(async () => replace(await post(`/api/campaigns/${selected.id}/publish`)), "Published (paused) to Meta")}><Send className="size-3.5" /> Publish</Button>}
-                {selected.external_id && <IconButton label="Sync results from the platform" busy={busy} onClick={() => run(async () => { const r = await post(`/api/campaigns/${selected.id}/sync`); replace(r); return r; }, "Synced")}><RefreshCw className="size-4" /></IconButton>}
-                {selected.status !== "draft" && (
-                  <Button size="sm" variant="ghost" onClick={() => run(async () => replace(await patch(`/api/campaigns/${selected.id}`, { status: selected.status === "active" ? "paused" : "active" })))}>
-                    {selected.status === "active" ? <><Pause className="size-3.5" /> Pause</> : <><Play className="size-3.5" /> Activate</>}
-                  </Button>
-                )}
-                <Button size="sm" variant="danger" onClick={() => confirm("Delete this campaign from AIMVA?") && run(async () => { await del(`/api/campaigns/${selected.id}`); setSelected(null); reload(); }, "Deleted")}><Trash2 className="size-3.5" /></Button>
+    <>
+      <PageHeader title="Campaigns" />
+      <ModuleFrame toolbar={toolbar} panel={
+        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={versions} loading={vLoading} onSend={sel ? change : null} sending={busy}
+          placeholder="Change anything: “₹800 a day”, “within 5 km”, “shorter headline”" onRestore={restore} onCompare={compare} />
+      }>
+        {sel && (
+          <div className="grid gap-8 xl:grid-cols-[300px_minmax(0,1fr)]">
+            <div className="order-2 xl:order-1"><AdPlacements creative={cr} platform={platform} still {...preview} /></div>
+            <dl className="order-1 max-w-2xl border-t border-line xl:order-2">
+              <Setting label="Budget" type="number" value={sel.daily_budget} shown={`${rupees(sel.daily_budget)} a day · about ${rupees(sel.daily_budget * 30)} a month`}
+                onSave={(v) => { const n = Number(v); if (n >= 0) save({ daily_budget: n }); }} />
+              <Setting label="Where" value={t.locations ? `${t.radius_km ? `${t.radius_km} km around ` : ""}${t.locations}` : ""} placeholder="A city or area, like “8 km around Kukatpally”"
+                onSave={(v) => { const m = v.match(/^\s*(\d{1,3})\s*km\s*(?:around|of|from)?\s*(.*)$/i); setTarget(m ? { radius_km: Number(m[1]), locations: m[2].trim() } : { radius_km: 0, locations: v }); }} />
+              <Setting label="Who" value={t.interests} placeholder="Anyone" onSave={(v) => setTarget({ interests: v })} />
+              <Setting label="Ages" value={`${t.age_min || 18}-${t.age_max || 65}`} shown={`${t.age_min || 18} to ${t.age_max || 65}`}
+                onSave={(v) => { const m = v.match(/(\d{2})\D+(\d{2})/); if (m) setTarget({ age_min: Number(m[1]), age_max: Number(m[2]) }); }} />
+              <Setting label="Headline" value={cr.headline} onSave={setCreative("headline")} />
+              <Setting label="Text" value={cr.text} onSave={setCreative("text")} />
+              <Setting label="Button" value={cr.cta} onSave={setCreative("cta")} />
+              <div className="grid grid-cols-[9rem_1fr] gap-3 border-b border-line py-2.5 text-sm">
+                <dt className="text-muted">Sends people to</dt>
+                <dd className="px-2 text-strong">{cr.destination === "whatsapp" ? "Your WhatsApp" : cr.link ? <a href={cr.link} target="_blank" rel="noreferrer" className="text-brand hover:underline">Your page</a>
+                  : <span className="text-muted">Your page, once you make one. <Link to="/app/websites" className="font-medium text-brand hover:underline">Make a page</Link></span>}</dd>
               </div>
-            </Card>
-          ) : (
-            <Card><p className="text-sm text-muted">Select a campaign to preview the ad and publish it.</p></Card>
-          )}
-        </div>
-      </div>
-
-      <Modal open={creating} onClose={() => setCreating(false)} title={`New ${cfg.title} campaign`} wide="xl">
-        <CampaignForm platform={platform} preview={preview} onCreated={(c) => { setData((all) => [c, ...all]); setSelected(c); setCreating(false); }} />
+              <div className="grid grid-cols-[9rem_1fr] gap-3 border-b border-line py-2.5 text-sm">
+                <dt className="text-muted">Form asks for</dt>
+                <dd className="px-2 text-strong">{(sel.lead_form?.fields || []).map((f) => FIELD_LABEL[f] || f).join(", ") || "Name, Phone"}</dd>
+              </div>
+              {cr.video_url && (
+                <div className="grid grid-cols-[9rem_1fr] gap-3 border-b border-line py-2.5 text-sm">
+                  <dt className="text-muted">Video</dt>
+                  <dd className="px-2"><video src={cr.video_url} controls className="max-h-40 rounded-md bg-strong" /></dd>
+                </div>
+              )}
+              {sel.external_id && (
+                <p className="py-3 text-sm text-muted"><span className="tabular-nums text-strong">{rupees(sel.spend)}</span> spent · <span className="tabular-nums text-strong">{sel.clicks}</span> clicks · <span className="tabular-nums text-strong">{sel.impressions}</span> views</p>
+              )}
+            </dl>
+          </div>
+        )}
+      </ModuleFrame>
+      <CompareText open={!!comparing} onClose={() => setComparing(null)} title={comparing ? `v${comparing.v.number} and now` : ""}
+        before={plain(comparing?.before)} after={plain(sel)} />
+      <Modal open={launching} onClose={() => setLaunching(false)} title={`${sel?.status === "paused" ? "Resume" : "Launch"} on ${PLATFORMS[platform]}?`}>
+        {sel && (
+          <>
+            <p className="text-sm text-ink">This starts spending up to <b className="tabular-nums text-strong">{rupees(sel.daily_budget)} a day</b> (about <span className="tabular-nums">{rupees(sel.daily_budget * 30)}</span> a month) from your {PLATFORMS[platform]} account. You can pause it any time.</p>
+            {platform === "meta" && !integ?.meta?.ad_account_id && <p className="mt-3 text-sm text-warm">Choose which Meta ad account to use first, from ⋯ → Choose the ad account.</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="subtle" onClick={() => setLaunching(false)}>Not now</Button>
+              <Button variant="accent" busy={acting} disabled={platform === "meta" && !integ?.meta?.ad_account_id} onClick={launch}>Spend {rupees(sel.daily_budget)} a day</Button>
+            </div>
+          </>
+        )}
       </Modal>
-      <Modal open={!!accounts} onClose={() => setAccounts(null)} title="Choose Meta ad account">
-        <ul className="space-y-2">
+      <Modal open={removing} onClose={() => setRemoving(false)} title="Delete this campaign?">
+        <p className="text-sm text-ink">It is paused on {PLATFORMS[platform]} first, then removed from AIMVA.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="subtle" onClick={() => setRemoving(false)}>Keep it</Button>
+          <Button variant="danger" busy={acting} onClick={() => act(async () => { await del(`/api/campaigns/${sel.id}`); setRemoving(false); setSelId(null); await reload(); setView(null); }, "Deleted.")}>Delete</Button>
+        </div>
+      </Modal>
+      <Modal open={!!accounts} onClose={() => setAccounts(null)} title="Choose the Meta ad account">
+        <ul className="divide-y divide-line">
           {(accounts || []).map((a) => (
-            <li key={a.id}><button className="btn-ghost w-full justify-between" onClick={() => run(async () => {
-              await patch("/api/integrations/meta/meta", { meta: { ad_account_id: a.id } });
-              setAccounts(null); reloadInteg();
-            }, "Ad account selected")}>{a.name}<span className="text-xs text-faint">{a.id} · {a.currency}</span></button></li>
+            <li key={a.id}><button type="button" className="flex w-full items-center justify-between py-2.5 text-left text-sm hover:bg-surface-2" onClick={() => act(async () => {
+              await patch("/api/integrations/meta/meta", { meta: { ad_account_id: a.id } }); setAccounts(null); reloadInteg();
+            }, "Ad account chosen.")}><span className="text-strong">{a.name}</span><span className="text-xs text-muted">{a.id} · {a.currency}</span></button></li>
           ))}
-          {accounts?.length === 0 && <p className="text-sm text-muted">No ad accounts found on this Meta login.</p>}
+          {accounts?.length === 0 && <li className="py-2 text-sm text-muted">No ad accounts on this Meta login.</li>}
         </ul>
       </Modal>
-    </div>
+    </>
   );
 }

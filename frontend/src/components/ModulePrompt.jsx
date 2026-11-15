@@ -20,16 +20,16 @@ export function useModulePrompt(key, given) {
 
 /**
  * The empty state of a module. `outcome` says what you'll get. `onSubmit(prompt)` runs it. `secondary` is a quiet
- * second way in (fill in the details yourself). The send button is pine: rani belongs to the module's Publish.
+ * second way in (fill in the details yourself). The run button is the screen's one Vivid Cyan action (design.md v3 7.3).
  */
-export function ModulePrompt({ moduleKey, given, outcome, submitLabel, onSubmit, busy, secondary, className }) {
+export function ModulePrompt({ moduleKey, given, outcome, submitLabel, onSubmit, busy, secondary, className, disabled, note }) {
   const [{ prompt, line, loading }, setPrompt] = useModulePrompt(moduleKey, given);
   const ref = useRef(null);
   useEffect(() => {  // cursor at the end of the written prompt
     const el = ref.current;
     if (el && !loading) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
   }, [loading]);
-  const submit = (e) => { e?.preventDefault(); if (prompt.trim() && !busy) onSubmit(prompt.trim()); };
+  const submit = (e) => { e?.preventDefault(); if (prompt.trim() && !busy && !disabled) onSubmit(prompt.trim()); };
   return (
     <form onSubmit={submit} className={cx("max-w-3xl", className)}>
       <div className="rounded-[10px] bg-surface ring-1 ring-line-strong focus-within:ring-2 focus-within:ring-brand/50">
@@ -38,10 +38,11 @@ export function ModulePrompt({ moduleKey, given, outcome, submitLabel, onSubmit,
           placeholder={loading ? "" : "Say what you want, the way you'd tell a friend."}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); }} />
         <div className="flex items-center justify-end px-3 pb-3">
-          <Button type="submit" busy={busy} disabled={!prompt.trim() || loading}>{submitLabel} <ArrowRight className="size-4" /></Button>
+          <Button type="submit" variant="accent" busy={busy} disabled={!prompt.trim() || loading || disabled}>{submitLabel} <ArrowRight className="size-4" /></Button>
         </div>
       </div>
       <p className="mt-3 text-sm text-muted">{outcome || line}</p>
+      {note && <p role="status" className="mt-2 text-sm text-warm">{note}</p>}
       {secondary && <div className="mt-6 text-sm">{secondary}</div>}
     </form>
   );

@@ -145,6 +145,7 @@ class VoiceAgent(Base):
     instructions: Mapped[str] = mapped_column(Text, default="")
     questions: Mapped[list] = mapped_column(JSON, default=list)  # qualification questions
     handoff_number: Mapped[str] = mapped_column(String(40), default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")  # off: nobody is called back
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -269,6 +270,22 @@ class SiteVersion(Base):
     page: Mapped[str] = mapped_column(String(60), default="", server_default="")  # "" = the main page, else an extra page's slug
     request: Mapped[str] = mapped_column(String(120), default="", server_default="")  # the owner's own words for an AI edit
     by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # the person who saved it
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class MadeVersion(Base):
+    """Every version of a call script or a campaign draft, with the words that asked for it and who asked
+    (design.md v3 7.3: the changes panel). Pictures and videos keep their versions as assets instead."""
+    __tablename__ = "made_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # call_script | campaign
+    ref_id: Mapped[int] = mapped_column(Integer, index=True)  # the voice agent or campaign it belongs to
+    number: Mapped[int] = mapped_column(Integer)
+    request: Mapped[str] = mapped_column(String(300), default="")  # the owner's own words; "" for a hand edit
+    note: Mapped[str] = mapped_column(String(120), default="")  # plain label when there were no words
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

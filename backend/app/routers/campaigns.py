@@ -7,7 +7,7 @@ developer access on those platforms. Every platform gets the campaign paused: AI
 from typing import Literal, Optional
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -99,8 +99,11 @@ class CampaignPatch(BaseModel):
 
 
 @router.patch("/{cid}")
-def update_campaign(cid: int, body: CampaignPatch, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_campaign(cid: int, body: CampaignPatch, user: User = Depends(current_user), db: Session = Depends(get_db),
+                    req: Request = None):
+    from .. import made
     c = _own(db, user, cid)
+    before = made.snapshot("campaign", c)
     changes = body.model_dump(exclude_none=True)
     if "product_id" in changes:
         changes["product_id"] = changes["product_id"] or None
@@ -119,6 +122,8 @@ def update_campaign(cid: int, body: CampaignPatch, user: User = Depends(current_
         from .. import ad_platforms
         set_status = ad_platforms.google_set_status if c.platform == "google" else ad_platforms.linkedin_set_status
         set_status(db, c, oauth_access_token(db, user.id, c.platform), body.status)
+    if made.snapshot("campaign", c) != before:  # a hand edit is a version in the changes panel too
+        made.record(db, "campaign", c, getattr(getattr(getattr(req, "state", None), "person", None), "id", None), note="Edited by hand")
     db.commit()
     return campaign_out(c)
 

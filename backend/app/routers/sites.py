@@ -1707,6 +1707,8 @@ def _dial_back(user_id: int, lead_id: int, number: str, agent_id: Optional[int])
             return
         if not agent:
             add_event(db, lead, "call", "Call back waiting", "Create a voice agent so AIMVA can call leads back automatically.")
+        elif agent.enabled is False:
+            add_event(db, lead, "call", "Call back waiting", "Call-backs are off. Call them from the lead panel, or turn call-backs on in Calls.")
         else:
             try:
                 c = place_phone_call(db, user, agent, number, lead_id=lead.id)
