@@ -128,7 +128,7 @@ class Brief(BaseModel):
     contact_mode: Literal["voice_agent", "own_phone", "both"] = "voice_agent"
     phone: str = Field("", max_length=30)
     whatsapp: str = Field("", max_length=30)
-    primary: str = Field("#6366f1", pattern=r"^#[0-9a-fA-F]{6}$")
+    primary: str = Field("#4f46e5", pattern=r"^#[0-9a-fA-F]{6}$")
     accent: str = Field("#22d3ee", pattern=r"^#[0-9a-fA-F]{6}$")
     hero_image: str = Field("", max_length=1000)  # https URL, or "asset:<id>" / "brand:<id>" from your library
     use_ai: bool = True
@@ -813,7 +813,7 @@ def create_site(b: Brief, req: Request, user: User = Depends(current_user), db: 
     rate_limit(f"site:{user.id}", 20, 600)
     slug = _slugify(b.business)
     html, source = _generate(db, user, b, slug)
-    html, fixed = _auto_fix(db, user, html, b)
+    html, fixed, page_score = _auto_fix(db, user, html, b, source)
     s = Site(user_id=user.id, name=b.business, slug=slug, brief=b.model_dump(), html=html)
     db.add(s)
     db.flush()
@@ -823,16 +823,43 @@ def create_site(b: Brief, req: Request, user: User = Depends(current_user), db: 
         from ..agents import record
         record(db, user.id, "page_fixer", f"Tidied “{s.name}” before you saw it", {"site_id": s.id, "fixed": fixed},
                [{"label": f, "status": "done", "detail": ""} for f in fixed])
-    return {**site_out(s, True), "generator": source, "auto_fixed": fixed}
+    return {**site_out(s, True), "generator": source, "auto_fixed": fixed, "page_score": page_score}
 
 
-def _auto_fix(db: Session, user: User, html: str, b: Brief) -> tuple:
-    """The Page Fixer agent cleans up safe launch issues on every new page (unless the user turned it off)."""
+def _auto_fix(db: Session, user: User, html: str, b: Brief, source: str = "template") -> tuple:
+    """Every new page is scored against the checklist (app/page_score.py). The Page Fixer (unless the user turned it
+    off) applies the safe fixes and, for a page the writer wrote that still scores low, asks for one better version."""
+    from .. import page_score
     from ..agents import enabled
     from ..agents.fixer import fix_html
+    from ..brand_book import build as brand_book
+    brief, book = b.model_dump(), brand_book(db, user)
     if not enabled(db, user.id, "page_fixer"):
-        return html, []
-    return fix_html(html, b.model_dump())
+        return html, [], page_score.score(html, brief, book)
+    # Showcase pages are our template with written words only: a whole-page rewrite would undo the design.
+    write = writer(db, user.id, b.writer, agent="page_writer") if (source == "ai" and b.use_ai and b.layout != "showcase") else None
+    rewrite = (lambda h, notes: _rewrite_for_score(write, h, notes)) if write else None
+    html, result, fixed = page_score.improve(html, brief, book, fix=lambda h: fix_html(h, brief), rewrite=rewrite)
+    return html, fixed, result
+
+
+def _rewrite_for_score(write, current: str, notes: str) -> Optional[str]:
+    """One rewrite of a whole page that fixes the listed problems and nothing else. None when unusable."""
+    small, blobs = _shrink(current)
+    if len(small) > 120_000:
+        return None
+    out = write("Here is a complete landing page:\n\n" + small + "\n\nAn editor checked it and found these problems:\n"
+                + notes + "\n\nFix exactly these and leave everything else as it is. " + AI_EDIT_RULES
+                + " Keep the lead form (form data-aimva-lead) and all its fields. Return ONLY the full HTML document.",
+                max_tokens=12000)
+    new = _strip_fence(out or "")
+    if "<html" not in new.lower() or "data-aimva-lead" not in new:
+        return None
+    scripts = re.findall(r"<script\b[\s\S]*?</script\s*>", current, re.I)  # the lead-form script and tracking are ours
+    new = _unshrink(sanitize_html(new), blobs)
+    if scripts:
+        new = new.replace("</body>", "".join(scripts) + "</body>", 1) if "</body>" in new else new + "".join(scripts)
+    return new
 
 
 @router.get("/api/sites/playbooks")
@@ -1177,11 +1204,11 @@ def regenerate(site_id: int, b: Brief, req: Request, user: User = Depends(curren
     rate_limit(f"site:{user.id}", 20, 600)
     s = _own(db, user, site_id)
     html, source = _generate(db, user, b, s.slug)
-    s.html = _auto_fix(db, user, html, b)[0]
+    s.html, fixed, page_score = _auto_fix(db, user, html, b, source)
     s.brief, s.name = b.model_dump(), b.business
     add_version(db, s, "Regenerated", source, person_id(req))
     db.commit()
-    return {**site_out(s, True), "generator": source}
+    return {**site_out(s, True), "generator": source, "auto_fixed": fixed, "page_score": page_score}
 
 
 def _page_now(s: Site, slug: str) -> Optional[str]:
@@ -1256,8 +1283,9 @@ def checks(site_id: int, user: User = Depends(current_user), db: Session = Depen
 
 @router.get("/api/sites/{site_id}/audit")
 def audit(site_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    c = site_checks(_own(db, user, site_id), db)
-    return {"checks": c, "readiness": readiness(c)}
+    s = _own(db, user, site_id)
+    c = site_checks(s, db)
+    return {"checks": c, "readiness": readiness(c), "page_score": _score(db, user, s, c)}
 
 
 @router.post("/api/sites/{site_id}/autofix")
@@ -1268,7 +1296,13 @@ def autofix(site_id: int, user: User = Depends(current_user), db: Session = Depe
     out = fix_site(db, user, s.id)
     db.refresh(s)
     c = site_checks(s, db)
-    return {"site": site_out(s, True), "fixed": out["fixed"], "checks": c, "readiness": readiness(c)}
+    return {"site": site_out(s, True), "fixed": out["fixed"], "checks": c, "readiness": readiness(c), "page_score": _score(db, user, s, c)}
+
+
+def _score(db: Session, user: User, s: Site, checks: list) -> dict:
+    from .. import page_score
+    from ..brand_book import build as brand_book
+    return page_score.score(s.html, s.brief or {}, brand_book(db, user), checks)
 
 
 # ---- before generating: playbooks, brief review and import ---------------------------------------

@@ -27,7 +27,7 @@ const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefin
 
 const BLANK = {
   business: "", industry: "", audience: "", offer: "", headline: "", subheadline: "", cta: "Get a free quote",
-  features: "", contact_mode: "voice_agent", voice_agent_id: null, country_code: "+91", phone: "", whatsapp: "", primary: "#6366f1", accent: "#22d3ee", hero_image: "", use_ai: true,
+  features: "", contact_mode: "voice_agent", voice_agent_id: null, country_code: "+91", phone: "", whatsapp: "", primary: "#4f46e5", accent: "#22d3ee", hero_image: "", use_ai: true,
   writer: "auto", page_type: "lead_gen", layout: "auto", decor: "auto", look: "modern", theme: "light", font: "auto", match_colors: true, language: "English",
   sections: ["features"], about: "", testimonials: [], faqs: [], pricing: [], gallery: [],
   form_fields: ["name", "phone", "email", "message"], form_title: "", thank_you: "Thanks! We'll be in touch shortly.",
