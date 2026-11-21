@@ -522,7 +522,6 @@ function Editor({ site, onClose, onChange, feedback }) {
   const [publishing, setPublishing] = useState(false);
   const [menu, setMenu] = useState(false);
   const [code, setCode] = useState(null);  // HTML being edited by hand
-  const [checks, setChecks] = useState(false);
   const [busy, run] = useAction();
 
   // Regenerate, restore, HTML edits and whole-page AI edits replace the page: reload the editor with it.
@@ -597,7 +596,7 @@ function Editor({ site, onClose, onChange, feedback }) {
   );
   const right = (
     <>
-      <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={async () => { await flush(); setChecks(true); }}>Checks</Button>
+      <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={async () => { await flush(); ed.current?.showPanel("checks"); }}>Checks</Button>
       {site.published && <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={async () => { await flush(); navigate(`/app/ads/meta?prompt=${encodeURIComponent(`An ad that brings people to my page "${site.name}"`)}`); }}>
         <Megaphone className="size-3.5" /> Run an ad to it</Button>}
       <div className="relative">
@@ -607,7 +606,7 @@ function Editor({ site, onClose, onChange, feedback }) {
             {[
               [RefreshCw, "Start over from brief", async () => { await flush(); setShowBrief(true); }],
               [Code2, "Edit HTML code", async () => { await flush(); setCode(htmlOf(site, pageSlug)); }],
-              [ShieldCheck, "Launch checks", async () => { await flush(); setChecks(true); }],
+              [ShieldCheck, "Launch checks", async () => { await flush(); ed.current?.showPanel("checks"); }],
               ...(site.published ? [[ExternalLink, "Open live page", () => window.open(liveUrl, "_blank", "noopener")],
                 [Globe, "Domains & deploys", async () => { await flush(); navigate("/app/hosting"); }]] : []),
             ].map(([I, l, fn]) => (
@@ -624,7 +623,8 @@ function Editor({ site, onClose, onChange, feedback }) {
   return (
     <>
       <VisualEditor key={rev} ref={ed} html={base} siteId={site.id} page={pageSlug} onSave={autosave} onPageReplaced={replaced} left={left} right={right}
-        changes={<ChangesList site={site} page={pageSlug} onRestore={replaced} />} />
+        changes={<ChangesList site={site} page={pageSlug} onRestore={replaced} />}
+        checks={<div className="p-3"><ReadinessPanel siteId={site.id} version={site.html} onFixed={replaced} inPanel /></div>} />
       <Modal open={!!adding} onClose={() => setAdding(null)} title="Add a page">
         <form onSubmit={addPage} className="space-y-4">
           <div className="flex flex-wrap gap-1.5">
@@ -642,9 +642,6 @@ function Editor({ site, onClose, onChange, feedback }) {
           </Field>
           <div className="flex justify-end"><Button type="submit" busy={busy}>Add page</Button></div>
         </form>
-      </Modal>
-      <Modal open={checks} onClose={() => setChecks(false)} title="Launch checks">
-        <ReadinessPanel siteId={site.id} version={site.html} onFixed={replaced} />
       </Modal>
       <Modal open={code !== null} onClose={() => setCode(null)} title="Edit HTML code" wide="xl">
         <p className="mb-3 text-sm text-muted">For developers. Saving creates a new version, so you can always go back.</p>

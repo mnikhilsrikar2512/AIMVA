@@ -125,8 +125,8 @@ const ICON = { blocker: [XCircle, "text-danger"], warning: [AlertTriangle, "text
 /** Six marks out of 10. A page passes at an average of 8 with nothing under 7. */
 function ScoreParts({ score }) {
   return (
-    <div className="px-4 pb-3">
-      <div className="grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
+    <div className="@container px-4 pb-3">
+      <div className="grid gap-x-6 gap-y-2.5 @md:grid-cols-2">
         {score.parts.map((p) => (
           <div key={p.key} className="min-w-0">
             <div className="flex items-baseline justify-between gap-2 text-xs">
@@ -144,7 +144,7 @@ function ScoreParts({ score }) {
 }
 
 /** The automatic quality pass on a generated page: what passed, and the few things worth a human look. */
-export function ReadinessPanel({ siteId, version, onFixed }) {
+export function ReadinessPanel({ siteId, version, onFixed, inPanel }) {
   const [audit, setAudit] = useState(null);
   const [open, setOpen] = useState(false);
   const first = useRef(true);
@@ -153,7 +153,7 @@ export function ReadinessPanel({ siteId, version, onFixed }) {
     get(`/api/sites/${siteId}/audit`).then((a) => {
       if (!live) return;
       setAudit(a);
-      if (first.current) { setOpen(a.readiness.status !== "ready"); first.current = false; }
+      if (first.current) { setOpen(inPanel || a.readiness.status !== "ready"); first.current = false; }
     }).catch(() => {});
     return () => { live = false; };
   }, [siteId, version]);
@@ -176,9 +176,9 @@ export function ReadinessPanel({ siteId, version, onFixed }) {
     }
   };
   return (
-    <div className="mb-4 rounded-2xl bg-surface-2/60">
+    <div className={cx("rounded-2xl bg-surface-2/60", !inPanel && "mb-4")}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-        <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", tone)}><Icon className="size-3.5" /> {label}</span>
+        <span className={cx("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold", tone)}><Icon className="size-3.5" /> {label}</span>
         <span className="text-sm text-muted">{audit.page_score ? `Score ${audit.page_score.average}/10` : `${r.score}/100`} · {passed} of {checks.length} checks passed</span>
         <ChevronDown className={cx("ml-auto size-4 text-muted transition", open && "rotate-180")} />
       </button>
