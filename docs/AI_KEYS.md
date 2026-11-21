@@ -22,25 +22,29 @@ Order: the capability's own provider and key → its legacy variable → the sha
 (only for capabilities that provider supports: gemini = writing; fal = images, editing, video; sarvam = speech,
 transcription; openai = writing, images) → the fallback.
 
-## Backup for pictures and video (`app/google_media.py`)
+## Pictures on Google first, video on the studio (`app/google_media.py`)
 
-The studio engine (`FAL_KEY`) stays the main engine because it is the cheapest. Google is a backup only:
+Owner decision (2026-11-21): Google makes pictures and whole-image edits first because it is cheaper there; the
+studio engine (`FAL_KEY`) stays first for video because Veo costs more per second.
 
-- Pictures: studio → Google image model (`GOOGLE_IMAGE_MODEL`, default `gemini-3.1-flash-image`) → free images
-  (only where `FREE_AI` is on, which production turns off).
-- Video: studio → Google Veo (`GOOGLE_VIDEO_MODEL`, default `veo-3.1-fast-generate-preview`, 720p, renders its own
-  sound). A clip that the studio accepts and later fails is handed to Veo too.
+- Pictures from words: Google's Lite image model (`GOOGLE_PICTURE_MODEL`, default `gemini-3.1-flash-lite-image`,
+  about $0.034 a picture) → studio → free images (only where `FREE_AI` is on, off in production). Set an
+  `imagen-*` model there to use Imagen (about $0.02, 4 per call) on keys that offer it: on 2026-11-21 ListModels
+  showed no Imagen or Veo models for our key, so check before switching.
+- Pictures with a reference photo, and whole-image edits ("make it night"): Google image model
+  (`GOOGLE_IMAGE_MODEL`, default `gemini-3.1-flash-lite-image`) → studio (Kontext for edits).
+- Spot edits, eraser, object select, cutout, "keep my product" and upscale stay on the studio: they need masks.
+- Video: studio → Google Veo (`GOOGLE_VIDEO_MODEL`, default `veo-3.1-fast-generate-preview`, 720p). A clip that
+  the studio accepts and later fails is handed to Veo too.
+- A customer's own connected engine is never rerouted.
 
-Google is called only after the studio engine has failed (error, timeout, out of credit, key rejected, nothing
-returned). It is not used when `FAL_KEY` is missing: that is a setup gap, and paying Google for every picture
-would cost more. The key is `GOOGLE_MEDIA_API_KEY`, or the platform Gemini key when that is empty;
-`GOOGLE_MEDIA_FALLBACK=false` switches the backup off.
+`PICTURE_ENGINE=fal` puts the studio first for pictures again (Google then acts only as the backup, and only when
+`GOOGLE_MEDIA_FALLBACK` is on). The key is `GOOGLE_MEDIA_API_KEY`, or the platform Gemini key when that is empty.
 
 Google picture and video generation needs billing turned on for the Google AI Studio project. With a free key
-Google refuses (quota 0); the customer sees the same neutral "busy" message as before, and the server log says
-the backup failed and that billing is needed. Customers never see that a backup ran: no supplier, model or
-"backup" wording reaches the browser. Rough cost when it does run (check Google's price page): about $0.04 per
-picture and about $0.10–0.15 per second of Veo Fast video, so an 8-second clip is about $1.
+Google refuses; pictures then come from the studio as before, the customer sees nothing different, and the server
+log says Google failed and that billing is needed. Customers never see which engine ran: no supplier, model or
+"backup" wording reaches the browser.
 
 Keys go in a request header, never the URL, and httpx's request log is kept at WARNING with key-shaped query
 values masked (`app/observability.py`), so keys don't end up in server logs.

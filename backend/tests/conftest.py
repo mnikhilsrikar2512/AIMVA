@@ -15,7 +15,7 @@ os.environ.update({
     "SECRET_KEY": "test-secret-key-that-is-long-enough-123", "TOKEN_ENCRYPTION_KEYS": "",
     "SMTP_USER": "", "SMTP_PASSWORD": "",
     "GEMINI_API_KEY": "", "FAL_KEY": "", "GOOGLE_MEDIA_API_KEY": "", "GOOGLE_MEDIA_FALLBACK": "",
-    "GOOGLE_IMAGE_MODEL": "", "GOOGLE_VIDEO_MODEL": "", "FREE_AI": "false", "AGENTS_SCHEDULER": "false", "POLLINATIONS_TOKEN": "",
+    "GOOGLE_IMAGE_MODEL": "", "GOOGLE_VIDEO_MODEL": "", "GOOGLE_PICTURE_MODEL": "", "PICTURE_ENGINE": "", "FREE_AI": "false", "AGENTS_SCHEDULER": "false", "POLLINATIONS_TOKEN": "",
     "META_APP_ID": "", "META_APP_SECRET": "test-meta-app-secret", "GOOGLE_CLIENT_ID": "", "LINKEDIN_CLIENT_ID": "", "MICROSOFT_CLIENT_ID": "",
     "TWILIO_ACCOUNT_SID": "", "TWILIO_AUTH_TOKEN": "", "TWILIO_FROM_NUMBER": "",
     "PUBLIC_URL": "http://testserver", "FRONTEND_URL": "http://frontend.test",

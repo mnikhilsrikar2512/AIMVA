@@ -75,7 +75,8 @@ def is_builtin_model(model: str) -> bool:
 # LinkedIn, Netlify, Vercel, Cloudflare, GitHub, Sheets, OneDrive) are deliberately not here.
 VENDORS = ["sarvam", "fal.ai", "fal-ai", "fal.run", "pollinations", "openai", "anthropic", "claude", "elevenlabs", "deepgram",
            "gemini", "replicate", "groq", "stability", "ollama", "comfyui", "huggingface", "together.ai", "mistral",
-           "flux", "stable diffusion", "kling", "luma", "ltx", "veo", "mmaudio", "recraft", "ideogram", "wan-video", "llama"]
+           "flux", "stable diffusion", "kling", "luma", "ltx", "veo", "mmaudio", "recraft", "ideogram", "wan-video", "llama",
+           "imagen", "nano banana"]
 _VENDOR_RE = re.compile(r"\b(" + "|".join(re.escape(v) for v in VENDORS) + r")\b|\bfal\b", re.I)
 _ENV_RE = re.compile(r"\b[A-Z][A-Z0-9]*_(?:KEY|TOKEN|SECRET|API_KEY|MODEL|EMAILS|URL|ID|SID)\b|\b(?:backend/)?\.env\b")
 _SECRETISH = re.compile(r"\b(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{16,}\b")

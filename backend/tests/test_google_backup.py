@@ -1,4 +1,5 @@
-"""Google as the backup picture/video engine: used only after fal fails, never shown to customers, never live.
+"""Google as the backup picture/video engine (PICTURE_ENGINE=fal): used only after fal fails, never shown to
+customers, never live. Google-first pictures are covered in tests/test_google_pictures.py.
 
 Every Google and fal call here is mocked with respx; no real image or video model is ever reached.
 """
@@ -13,7 +14,8 @@ from PIL import Image
 from app.discreet import leaks
 
 G = "https://generativelanguage.googleapis.com/v1beta"
-IMG_URL = f"{G}/models/gemini-3.1-flash-image:generateContent"
+IMG_URL = f"{G}/models/gemini-3.1-flash-lite-image:generateContent"
+IMAGEN_URL = f"{G}/models/imagen-4.0-fast-generate-001:predict"
 VEO_URL = f"{G}/models/veo-3.1-fast-generate-preview:predictLongRunning"
 OP = "models/veo-3.1-fast-generate-preview/operations/op123"
 
@@ -27,6 +29,16 @@ def png():
 def picture_answer():
     return {"candidates": [{"content": {"parts": [{"inlineData": {"mimeType": "image/png",
                                                                   "data": base64.b64encode(png()).decode()}}]}}]}
+
+
+def imagen_answer(n=1):
+    return {"predictions": [{"mimeType": "image/png", "bytesBase64Encoded": base64.b64encode(png()).decode()}] * n}
+
+
+@pytest.fixture(autouse=True)
+def fal_first(monkeypatch):
+    monkeypatch.setenv("PICTURE_ENGINE", "fal")  # this file covers Google as the backup
+    monkeypatch.setenv("GOOGLE_PICTURE_MODEL", "imagen-4.0-fast-generate-001")  # Imagen where a key offers it
 
 
 @pytest.fixture
@@ -43,7 +55,7 @@ def fal_on(auth_client, monkeypatch):
 # ---- pictures --------------------------------------------------------------------------------------------------
 def test_fal_working_never_touches_google(fal_on, mock_http, google_key):
     mock_http.post("https://fal.run/fal-ai/flux/schnell").respond(json={"images": [{"url": "https://cdn.fal/1.png"}]})
-    google = mock_http.post(IMG_URL).respond(json=picture_answer())
+    google = mock_http.post(IMAGEN_URL).respond(json=imagen_answer())
     r = fal_on.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell"})
     assert r.status_code == 200 and r.json()[0]["url"] == "https://cdn.fal/1.png"
     assert not google.called  # no extra cost on a normal day
@@ -58,7 +70,7 @@ def test_fal_working_never_touches_google(fal_on, mock_http, google_key):
 def test_google_steps_in_when_fal_fails(fal_on, mock_http, google_key, fal_failure):
     fal = mock_http.post("https://fal.run/fal-ai/flux/schnell")
     fal.mock(side_effect=fal_failure) if isinstance(fal_failure, Exception) else fal.mock(return_value=fal_failure)
-    google = mock_http.post(IMG_URL).respond(json=picture_answer())
+    google = mock_http.post(IMAGEN_URL).respond(json=imagen_answer())
     r = fal_on.post("/api/content/image", json={"prompt": "a cat on a sofa", "model": "fal-ai/flux/schnell",
                                                 "size": "9:16", "negative_prompt": "blurry"})
     assert r.status_code == 200, r.text
@@ -75,14 +87,15 @@ def test_google_steps_in_when_fal_fails(fal_on, mock_http, google_key, fal_failu
 
 def test_google_makes_each_requested_picture(fal_on, mock_http, google_key):
     mock_http.post("https://fal.run/fal-ai/flux/schnell").respond(503)
-    google = mock_http.post(IMG_URL).respond(json=picture_answer())
+    google = mock_http.post(IMAGEN_URL).respond(json=imagen_answer(3))
     r = fal_on.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell", "count": 3})
-    assert len(r.json()) == 3 and google.call_count == 3
+    assert len(r.json()) == 3 and google.call_count == 1  # Imagen makes all three in one call
+    assert '"sampleCount":3' in google.calls[0].request.read().decode().replace(" ", "")
 
 
 def test_free_google_key_fails_cleanly_with_the_usual_message(fal_on, mock_http, google_key, caplog):
     mock_http.post("https://fal.run/fal-ai/flux/schnell").respond(500, json={"detail": "boom"})
-    mock_http.post(IMG_URL).respond(429, json={"error": {"code": 429, "message": "Quota exceeded. limit: 0", "status": "RESOURCE_EXHAUSTED"}})
+    mock_http.post(IMAGEN_URL).respond(429, json={"error": {"code": 429, "message": "Quota exceeded. limit: 0", "status": "RESOURCE_EXHAUSTED"}})
     with caplog.at_level(logging.WARNING):
         r = fal_on.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell"})
     assert r.status_code == 502  # the studio's own failure, neutral to the customer
@@ -95,7 +108,7 @@ def test_free_engine_is_the_last_step_where_allowed(fal_on, mock_http, google_ke
     from app.config import settings
     monkeypatch.setattr(settings, "free_ai", True)
     mock_http.post("https://fal.run/fal-ai/flux/schnell").respond(500)
-    mock_http.post(IMG_URL).respond(400, json={"error": {"message": "Imagen API is only accessible to billed users"}})
+    mock_http.post(IMAGEN_URL).respond(400, json={"error": {"message": "Imagen API is only accessible to billed users"}})
     free = mock_http.get(url__startswith="https://image.pollinations.ai/prompt/").respond(200, content=png(),
                                                                                          headers={"content-type": "image/png"})
     r = fal_on.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell", "smart_prompt": False})
@@ -104,7 +117,7 @@ def test_free_engine_is_the_last_step_where_allowed(fal_on, mock_http, google_ke
 
 def test_no_google_key_keeps_todays_behaviour(fal_on, mock_http):
     mock_http.post("https://fal.run/fal-ai/flux/schnell").respond(500)
-    google = mock_http.post(IMG_URL).respond(json=picture_answer())
+    google = mock_http.post(IMAGEN_URL).respond(json=imagen_answer())
     assert fal_on.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell"}).status_code == 502
     assert not google.called
 
@@ -112,23 +125,23 @@ def test_no_google_key_keeps_todays_behaviour(fal_on, mock_http):
 def test_backup_can_be_switched_off(fal_on, mock_http, google_key, monkeypatch):
     monkeypatch.setenv("GOOGLE_MEDIA_FALLBACK", "false")
     mock_http.post("https://fal.run/fal-ai/flux/schnell").respond(500)
-    google = mock_http.post(IMG_URL).respond(json=picture_answer())
+    google = mock_http.post(IMAGEN_URL).respond(json=imagen_answer())
     assert fal_on.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell"}).status_code == 502
     assert not google.called
 
 
 def test_google_is_not_used_when_studio_isnt_set_up(auth_client, mock_http, google_key):
     # No fal key is a setup gap, not a failure: paying Google for every picture would cost more.
-    google = mock_http.post(IMG_URL).respond(json=picture_answer())
+    google = mock_http.post(IMAGEN_URL).respond(json=imagen_answer())
     r = auth_client.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell"})
     assert r.status_code == 400 and not google.called
 
 
 def test_own_media_key_and_model_override(fal_on, mock_http, google_key, monkeypatch):
     monkeypatch.setenv("GOOGLE_MEDIA_API_KEY", "g-media-key")
-    monkeypatch.setenv("GOOGLE_IMAGE_MODEL", "gemini-2.5-flash-image")
+    monkeypatch.setenv("GOOGLE_PICTURE_MODEL", "imagen-4.0-generate-001")
     mock_http.post("https://fal.run/fal-ai/flux/schnell").respond(500)
-    google = mock_http.post(f"{G}/models/gemini-2.5-flash-image:generateContent").respond(json=picture_answer())
+    google = mock_http.post(f"{G}/models/imagen-4.0-generate-001:predict").respond(json=imagen_answer())
     assert fal_on.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell"}).status_code == 200
     assert google.calls[0].request.headers["x-goog-api-key"] == "g-media-key"
 
@@ -195,7 +208,7 @@ def test_veo_refusal_marks_the_clip_failed_once(fal_on, mock_http, google_key):
 
 def test_video_start_image_reaches_veo(fal_on, mock_http, google_key):
     mock_http.post("https://fal.run/fal-ai/flux/schnell").respond(500)
-    mock_http.post(IMG_URL).respond(json=picture_answer())
+    mock_http.post(IMAGEN_URL).respond(json=imagen_answer())
     pic = fal_on.post("/api/content/image", json={"prompt": "a cat", "model": "fal-ai/flux/schnell"}).json()[0]
     mock_http.post("https://queue.fal.run/fal-ai/luma-dream-machine/ray-2/image-to-video").respond(500)
     veo = mock_http.post(VEO_URL).respond(json={"name": OP})
