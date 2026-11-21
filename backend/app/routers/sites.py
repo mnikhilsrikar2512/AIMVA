@@ -1302,6 +1302,29 @@ def audit(site_id: int, user: User = Depends(current_user), db: Session = Depend
     return {"checks": c, "readiness": readiness(c), "page_score": _score(db, user, s, c)}
 
 
+@router.get("/api/sites/{site_id}/ideas")
+def ideas(site_id: int, page: str = "", quick: bool = False, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Ideas for the editor's change box, written for this business and this page (app/page_ideas.py). quick=true
+    answers at once from the rules; the editor shows those, then swaps in the writer's when they arrive."""
+    from .. import page_ideas, page_score
+    from ..brand_book import build as brand_book
+    s = _own(db, user, site_id)
+    html = s.html
+    if page:
+        html = next((p.get("html") or "" for p in (s.pages or []) if p.get("slug") == page), None)
+        if html is None:
+            raise HTTPException(404, "That page doesn't exist.")
+    book, brief = brand_book(db, user), s.brief or {}
+    todo = page_score.score(html, brief, book)["todo"]
+    write = None
+    if not quick:
+        try:
+            write = writer(db, user.id, "auto", agent="page_writer")
+        except HTTPException:
+            write = None
+    return page_ideas.ideas(html, brief, book, todo, write)
+
+
 @router.post("/api/sites/{site_id}/autofix")
 def autofix(site_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     """One tap: the Page Fixer applies every fix that has one right answer, as a new version (so it can be undone)."""
