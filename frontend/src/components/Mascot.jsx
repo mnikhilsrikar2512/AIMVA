@@ -13,7 +13,6 @@ import cx from "clsx";
 const W = 1080, H = 900;
 const BOX = { x: 240, y: 165, w: 600, h: 720 };
 const EYES = [[459.6, 363.3], [598.5, 352.2]];
-const HAND = { l: { x: 219, y: 542, w: 127, h: 176 }, r: { x: 721, y: 514, w: 120, h: 174 } };
 const GLOW = "#8BF6F1";
 const EYE_SCALE = 1.41;  // owner 2026-11-21: "make the eyes big"
 const LOOK = 0.9;        // how far the eyes travel, in canvas units per pointer unit
@@ -45,33 +44,42 @@ const FACES = {
 // Moods without their own eyes borrow one.
 const FACE_OF = { idle: "hello", calm: "happy", busy: "focused", data: "pointing", sit: "sleepy", peek: "surprised" };
 
-// Where each hand rests for a mood (canvas units, from the hand's resting place). Rotation is about the wrist.
-const REST = { x: 0, y: 0, rotate: 0 };
-const HANDS = {
-  hello: { r: { x: 30, y: -190, rotate: -12 } },
-  happy: { l: { x: -10, y: -40, rotate: -12 }, r: { x: 10, y: -40, rotate: 12 } },
-  cheer: { l: { x: -40, y: -230, rotate: -25 }, r: { x: 40, y: -230, rotate: 25 } },
-  thinking: { l: { x: 135, y: -105, rotate: 30 } },
-  sorry: { l: { x: 100, y: -30, rotate: 25 }, r: { x: -100, y: -30, rotate: -25 } },
-  surprised: { l: { x: -30, y: -130, rotate: -30 }, r: { x: 30, y: -130, rotate: 30 } },
-  wink: { r: { x: 20, y: -80, rotate: 18 } },
-  cheeky: { r: { x: -170, y: -150, rotate: -35 } },
-  pointing: { r: { x: 90, y: -90, rotate: -80 } },
-  sleepy: { l: { x: 0, y: 25, rotate: 8 }, r: { x: 0, y: 25, rotate: -8 } },
-  shy: { l: { x: 175, y: -265, rotate: 20 }, r: { x: -180, y: -250, rotate: -20 } },
-  confused: { r: { x: -190, y: -360, rotate: -45 } },
-  busy: { l: { x: 70, y: -40, rotate: 15 }, r: { x: -70, y: -40, rotate: -15 } },
-  focused: { l: { x: 135, y: -105, rotate: 30 } },
-  data: { r: { x: 90, y: -90, rotate: -80 } },
-  peek: { l: { x: 175, y: -265, rotate: 20 } },
+// His hands are real shapes cut from the owner's poses (open palm, wave, fist, pointing, finger up, raised), so a
+// gesture changes the hand's shape and direction, not just where it is. Sizes and centres are canvas units.
+const SHAPES = {
+  "rest-l": [127, 176], "rest-r": [120, 174], "wave-r": [207, 257], "up-l": [143, 250], "up-r": [152, 240],
+  "raise-r": [150, 188], "point-r": [262, 147], "fist-r": [143, 137], "grab-r": [182, 167], "sit-l": [107, 148], "sit-r": [107, 149],
 };
-// A short gesture played once when the mood arrives (on top of the resting place above).
+// For each mood, each hand: [shape, centre x, centre y, rotate, mirrored]. A left hand can borrow a right-hand shape
+// mirrored. Positions for the posed shapes are where they sit in the owner's own pose of that mood.
+const L0 = ["rest-l", 282, 630, 0], R0 = ["rest-r", 781, 601, 0];
+const HANDS = {
+  hello: { r: ["wave-r", 838, 392, 0] },
+  happy: { l: ["rest-l", 270, 590, -12], r: ["rest-r", 795, 560, 12] },
+  cheer: { l: ["up-l", 196, 316, 0], r: ["up-r", 762, 378, 0] },
+  thinking: { l: ["fist-r", 440, 500, -10, true] },
+  focused: { l: ["fist-r", 440, 500, -10, true], r: ["grab-r", 837, 468, 0] },
+  sorry: { l: ["fist-r", 455, 640, 10, true], r: ["fist-r", 615, 640, -10] },
+  surprised: { l: ["up-l", 215, 440, -8], r: ["up-r", 850, 450, 8] },
+  wink: { r: ["raise-r", 823, 384, 0] },
+  cheeky: { r: ["fist-r", 610, 470, 0] },
+  pointing: { r: ["point-r", 815, 464, 0] },
+  data: { r: ["point-r", 815, 464, 0] },
+  sleepy: { l: ["sit-l", 292, 640, 0], r: ["sit-r", 748, 640, 0] },
+  sit: { l: ["sit-l", 292, 557, 0], r: ["sit-r", 748, 554, 0] },
+  shy: { l: ["up-l", 465, 390, 10], r: ["up-r", 600, 380, -10] },
+  confused: { r: ["raise-r", 700, 220, -35] },
+  busy: { l: ["fist-r", 360, 570, 0, true], r: ["fist-r", 720, 570, 0] },
+  peek: { l: ["raise-r", 300, 470, 0, true] },
+};
+// A small flourish played after the hand arrives (relative movement, about the wrist).
 const GESTURE = {
-  hello: { r: { rotate: [-12, 18, -12, 18, -12], transition: { duration: 1.4, ease: "easeInOut" } } },
-  cheer: { l: { y: [-230, -260, -230], transition: { duration: 0.5, repeat: 1 } }, r: { y: [-230, -260, -230], transition: { duration: 0.5, repeat: 1 } } },
-  busy: { l: { y: [-40, -55, -40], transition: { duration: 0.35, repeat: Infinity } }, r: { y: [-40, -25, -40], transition: { duration: 0.35, repeat: Infinity } } },
-  cheeky: { r: { rotate: [-35, -25, -35, -25, -35], transition: { duration: 0.8 } } },
-  confused: { r: { x: [-190, -175, -190, -175, -190], transition: { duration: 0.9 } } },
+  hello: { r: { rotate: [0, 16, -8, 16, 0], transition: { duration: 1.4, ease: "easeInOut" } } },
+  cheer: { l: { y: [0, -30, 0], transition: { duration: 0.5, repeat: 1 } }, r: { y: [0, -30, 0], transition: { duration: 0.5, repeat: 1 } } },
+  busy: { l: { y: [0, -16, 0], transition: { duration: 0.35, repeat: Infinity } }, r: { y: [0, 16, 0], transition: { duration: 0.35, repeat: Infinity } } },
+  cheeky: { r: { rotate: [0, 10, -6, 10, 0], transition: { duration: 0.8 } } },
+  confused: { r: { x: [0, 14, 0, 14, 0], transition: { duration: 0.9 } } },
+  pointing: { r: { x: [0, 14, 0], transition: { duration: 0.6, repeat: 1 } } },
 };
 const BLINKS = new Set(["hello", "thinking", "surprised", "pointing", "cheeky", "idle", "confused"]);
 // Faces he can glance into for a moment while idle (a wink, a smile), then back.
@@ -81,7 +89,7 @@ let preloaded = false;
 function preload() {
   if (preloaded || typeof Image === "undefined") return;
   preloaded = true;
-  ["body", "hand-l", "hand-r"].forEach((n) => { new Image().src = `/mascot/${n}.webp`; });
+  ["body", ...Object.keys(SHAPES).map((k) => `hands/${k}`)].forEach((n) => { new Image().src = `/mascot/${n}.webp`; });
 }
 
 /** Where the caret is on screen, near enough: the end of the typed text (or of the last line in a box). */
@@ -121,11 +129,19 @@ function Face({ face, look = [0, 0], blink }) {
   );
 }
 
-function Hand({ side, controls }) {
-  const h = HAND[side];
+/** One hand: glides to its new place, turns, and changes shape on the way (the old shape fades as the new one arrives). */
+function Hand({ spec, flourish }) {
+  const [shape, x, y, rotate, flip] = spec;
+  const [w, h] = SHAPES[shape];
   return (
-    <motion.g animate={controls} initial={false} style={{ transformBox: "fill-box", transformOrigin: "50% 75%" }}>
-      <image href={`/mascot/hand-${side}.webp`} x={h.x} y={h.y} width={h.w} height={h.h} />
+    <motion.g initial={false} animate={{ x, y, rotate }} transition={{ type: "spring", stiffness: 160, damping: 17 }}>
+      <motion.g animate={flourish}>
+        <AnimatePresence initial={false}>
+          <motion.image key={shape + (flip ? "-m" : "")} href={`/mascot/hands/${shape}.webp`} x={-w / 2} y={-h / 2} width={w} height={h}
+            transform={flip ? "scale(-1 1)" : undefined}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }} />
+        </AnimatePresence>
+      </motion.g>
     </motion.g>
   );
 }
@@ -209,17 +225,16 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
   const shown = typing === "secret" ? "shy" : typing ? "hello" : mood;
   const face = glance || FACE_OF[shown] || (FACES[shown] ? shown : "hello");
 
-  // Hands glide to the new gesture, then play its little flourish once.
+  // Hands go to the new gesture, then play its little flourish once.
+  const hands = HANDS[shown] || {};
   useEffect(() => {
-    const pose = HANDS[shown] || {};
-    const spring = { type: "spring", stiffness: 170, damping: 18 };
-    const go = async (ctl, key) => {
-      const to = { ...REST, ...(pose[key] || {}) };
-      await ctl.start({ ...to, transition: spring });
-      const g = GESTURE[shown]?.[key];
-      if (g && !reduce) ctl.start(g);
-    };
-    go(left, "l"); go(right, "r");
+    left.stop(); right.stop(); left.set({ x: 0, y: 0, rotate: 0 }); right.set({ x: 0, y: 0, rotate: 0 });
+    if (reduce || !GESTURE[shown]) return undefined;
+    const t = setTimeout(() => {
+      if (GESTURE[shown].l) left.start(GESTURE[shown].l);
+      if (GESTURE[shown].r) right.start(GESTURE[shown].r);
+    }, 380);
+    return () => clearTimeout(t);
   }, [shown, left, right, reduce]);
   useEffect(() => {
     body.start({ rotate: typing === "secret" ? -4 : 0, transition: { type: "spring", stiffness: 200, damping: 16 } });
@@ -283,8 +298,8 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
                 style={{ left: `${(-BOX.x / BOX.w) * 100}%`, top: `${(-BOX.y / BOX.h) * 100}%`, width: `${(W / BOX.w) * 100}%` }}>
                 <image href="/mascot/body.webp" width={W} height={H} />
                 <Face face={face} look={typing === "secret" ? [0, 6] : look} blink={blink} />
-                <Hand side="l" controls={left} />
-                <Hand side="r" controls={right} />
+                <Hand spec={hands.l || L0} flourish={left} />
+                <Hand spec={hands.r || R0} flourish={right} />
               </svg>
             </span>
           </Tag>
