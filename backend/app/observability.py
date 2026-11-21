@@ -43,6 +43,8 @@ def setup_logging() -> None:
     # uvicorn's own access log would duplicate ours (which carries the request id and duration)
     logging.getLogger("uvicorn.access").disabled = True
     logging.getLogger("alembic.runtime.plugins").setLevel(logging.WARNING)
+    # httpx logs every request URL at INFO, and some AI providers take the API key in the URL (?key=): keep keys out of logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def setup_sentry() -> bool:
