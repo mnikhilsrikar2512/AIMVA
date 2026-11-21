@@ -69,14 +69,15 @@ const HANDS = {
   sit: { l: ["sit-l", 292, 557, 0], r: ["sit-r", 748, 554, 0] },
   shy: { l: ["up-l", 465, 390, 10], r: ["up-r", 600, 380, -10] },
   confused: { r: ["raise-r", 700, 220, -35] },
-  busy: { l: ["fist-r", 360, 570, 0, true], r: ["fist-r", 720, 570, 0] },
+  busy: { l: ["fist-r", 425, 735, 0, true], r: ["fist-r", 655, 735, 0] },  // typing at his floating screen
   peek: { l: ["raise-r", 300, 470, 0, true] },
 };
 // A small flourish played after the hand arrives (relative movement, about the wrist).
 const GESTURE = {
   hello: { r: { rotate: [0, 16, -8, 16, 0], transition: { duration: 1.4, ease: "easeInOut" } } },
   cheer: { l: { y: [0, -30, 0], transition: { duration: 0.5, repeat: 1 } }, r: { y: [0, -30, 0], transition: { duration: 0.5, repeat: 1 } } },
-  busy: { l: { y: [0, -16, 0], transition: { duration: 0.35, repeat: Infinity } }, r: { y: [0, 16, 0], transition: { duration: 0.35, repeat: Infinity } } },
+  busy: { l: { y: [0, 14, 0, 0], transition: { duration: 0.32, repeat: Infinity, times: [0, 0.3, 0.6, 1] } },
+    r: { y: [0, 0, 14, 0], transition: { duration: 0.32, repeat: Infinity, times: [0, 0.4, 0.7, 1] } } },
   cheeky: { r: { rotate: [0, 10, -6, 10, 0], transition: { duration: 0.8 } } },
   confused: { r: { x: [0, 14, 0, 14, 0], transition: { duration: 0.9 } } },
   pointing: { r: { x: [0, 14, 0], transition: { duration: 0.6, repeat: 1 } } },
@@ -126,6 +127,34 @@ function Face({ face, look = [0, 0], blink }) {
         </motion.g>
       ))}
     </g>
+  );
+}
+
+/** While something is being made he works at a floating screen: lines being written, a picture filling in, a bar
+ *  creeping along. It shows effort without promising a time. */
+const BLUE = "#5EE6F0";
+function Workbench() {
+  const lines = [[0, 150], [1, 210], [2, 120]];
+  return (
+    <motion.g initial={{ opacity: 0, scale: 0.6, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8, y: 20 }}
+      transition={{ type: "spring", stiffness: 220, damping: 20 }} style={{ transformBox: "fill-box", transformOrigin: "50% 100%" }}>
+      <g transform="translate(540 610) skewX(-4)">
+        <rect x={-190} y={-95} width={380} height={190} rx={22} fill={BLUE} fillOpacity={0.14} stroke={BLUE} strokeOpacity={0.75} strokeWidth={4}
+          style={{ filter: `drop-shadow(0 0 14px ${BLUE}88)` }} />
+        {/* a picture filling in */}
+        <rect x={-160} y={-65} width={110} height={110} rx={10} fill={BLUE} fillOpacity={0.12} stroke={BLUE} strokeOpacity={0.5} strokeWidth={3} />
+        <motion.rect x={-160} y={-65} width={110} rx={10} fill={BLUE} fillOpacity={0.35}
+          animate={{ height: [0, 110, 110, 0] }} transition={{ duration: 2.4, repeat: Infinity, times: [0, 0.6, 0.9, 1], ease: "easeInOut" }} />
+        {/* lines being written */}
+        {lines.map(([i, w]) => (
+          <motion.rect key={i} x={-30} y={-60 + i * 34} height={14} rx={7} fill={BLUE} fillOpacity={0.8}
+            animate={{ width: [0, w, w, 0] }} transition={{ duration: 2.4, repeat: Infinity, delay: i * 0.25, times: [0, 0.5, 0.9, 1], ease: "easeOut" }} />
+        ))}
+        {/* progress */}
+        <rect x={-160} y={62} width={320} height={8} rx={4} fill={BLUE} fillOpacity={0.2} />
+        <motion.rect x={-160} y={62} height={8} rx={4} fill={BLUE} animate={{ width: [20, 300, 20] }} transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }} />
+      </g>
+    </motion.g>
   );
 }
 
@@ -297,7 +326,14 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
               <svg viewBox={`0 0 ${W} ${H}`} className="absolute block overflow-visible"
                 style={{ left: `${(-BOX.x / BOX.w) * 100}%`, top: `${(-BOX.y / BOX.h) * 100}%`, width: `${(W / BOX.w) * 100}%` }}>
                 <image href="/mascot/body.webp" width={W} height={H} />
-                <Face face={face} look={typing === "secret" ? [0, 6] : look} blink={blink} />
+                {/* The AIMVA mark on his chest (owner 2026-11-21), printed on the glass so it moves with him. */}
+                <g transform="translate(478 540) scale(1.25)" opacity="0.9" aria-hidden>
+                  <path d="M10 52 30 10h6L22 46z" fill="#0f282f" fillOpacity="0.8" />
+                  <path d="M30 10h6l18 42h-8z" fill="#02eff0" style={{ filter: "drop-shadow(0 0 4px #02eff0aa)" }} />
+                  <path d="M22 46 36 38l10 14z" fill="#0f282f" fillOpacity="0.45" />
+                </g>
+                <Face face={face} look={typing === "secret" ? [0, 6] : shown === "busy" && !watch ? [-4, 12] : look} blink={blink} />
+                <AnimatePresence>{shown === "busy" && <Workbench key="bench" />}</AnimatePresence>
                 <Hand spec={hands.l || L0} flourish={left} />
                 <Hand spec={hands.r || R0} flourish={right} />
               </svg>
@@ -315,9 +351,10 @@ export function homeLine({ waiting = 0, live = 0, leads = 0, hour = new Date().g
   const lines = [];
   if (!live) lines.push({ mood: "cheeky", say: "Nothing's live yet. I'm getting bored here." }, { mood: "pointing", say: "Type anything in that box. I dare you." });
   else if (leads >= 10) lines.push({ mood: "happy", say: `${leads} leads this week. Show-off.` }, { mood: "wink", say: "Keep this up and I'll need a bigger desk." });
-  else if (leads > 0) lines.push({ mood: "happy", say: `${leads} ${leads === 1 ? "lead" : "leads"} this week. I want more.` }, { mood: "cheeky", say: "Not bad. A festival poster would help." });
+  else if (leads > 0) lines.push({ mood: "happy", say: `${leads} ${leads === 1 ? "lead" : "leads"} this week. I want more.` }, { mood: "data", say: "Want to see where they came from? Results has it." }, { mood: "cheeky", say: "Not bad. A festival poster would help." });
+  if (live) lines.push({ mood: "sit", say: "Nothing urgent. I'll sit here and watch your ad." }, { mood: "calm", say: "All quiet. That's a good thing." });
   else lines.push({ mood: "thinking", say: "Your ad is live. I'm watching it like a hawk." }, { mood: "cheeky", say: "Still waiting on lead number one. Patience is hard." });
   if (hour >= 22 || hour < 5) lines.unshift({ mood: "sleepy", say: "Working late? Me too, sort of." });
-  lines.push({ mood: "wink", say: "Stop poking me. Go make something." }, { mood: "cheer", say: "Fine, one jump. Happy now?" });
+  lines.push({ mood: "wink", say: "Stop poking me. Go make something." }, { mood: "confused", say: "You keep poking. Is something wrong?" }, { mood: "cheer", say: "Fine, one jump. Happy now?" });
   return lines[taps % lines.length];
 }

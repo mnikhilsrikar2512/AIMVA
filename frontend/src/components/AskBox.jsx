@@ -8,6 +8,7 @@ import { ArrowUp, Globe, Image as ImageIcon, Megaphone, Video } from "lucide-rea
 import { post } from "../lib/api";
 import { moduleHref } from "../lib/projects";
 import { readUiLang } from "../lib/setupCopy";
+import { Mascot } from "./Mascot";
 import { markAutoRun } from "./ModulePrompt";
 import { cx } from "./ui";
 
@@ -88,7 +89,7 @@ export function AskBox({ hasPage, waiting = 0, modules = [] }) {
 
       {unsure ? (
         <div className="mt-3" role="group" aria-label={w.which}>
-          <p className="mb-2 text-sm text-muted">{w.which}</p>
+          <p className="mb-2 flex items-center gap-2 text-sm text-muted"><Mascot mood="confused" size={34} arrive="pop" alive={false} /> {w.which}</p>
           <div className="flex flex-wrap gap-2">
             {CHOICES.filter((c) => !modules?.length || modules.includes(c.module) || c.module === "pictures").map((c) => (
               <button key={c.module} type="button" onClick={() => open(c.module, unsure)}

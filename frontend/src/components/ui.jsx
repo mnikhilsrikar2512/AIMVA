@@ -203,7 +203,8 @@ export function Empty({ icon: Icon, title, text, action, secondary, preview = "r
   );
   return (
     <div className={cx("flex flex-col items-center justify-center text-center", compact ? "px-4 py-10" : "px-6 py-14 sm:py-16", className)}>
-      {Icon && <div className="mb-4 grid size-10 place-items-center rounded-xl bg-surface-2 text-muted"><Icon className="size-5" /></div>}
+      {filtered ? <Mascot mood="peek" size={52} arrive="pop" className="mb-3" />
+        : Icon && <div className="mb-4 grid size-10 place-items-center rounded-xl bg-surface-2 text-muted"><Icon className="size-5" /></div>}
       <p className={cx(filtered || compact ? "text-[15px] font-semibold" : "text-lg font-semibold", "text-strong")}>{title}</p>
       {text && <p className="mt-1.5 max-w-sm text-sm text-muted">{text}</p>}
       {(action || secondary) && (
