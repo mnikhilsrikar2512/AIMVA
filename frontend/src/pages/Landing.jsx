@@ -6,7 +6,8 @@ import { ArrowRight, AudioLines, BarChart3, Check, ChevronDown, Globe, Image, Me
 import { Heading, MarketingLayout, cx, signupHref, useSeo } from "../components/marketing/Site";
 import { USE_CASES } from "../components/marketing/useCases";
 import { useAuth } from "../lib/auth";
-import MascotHero, { Finale, StoryFilm } from "../components/marketing/MascotHero";
+import { StoryFilm } from "../components/marketing/MascotHero";
+import SkyHero, { LanguageStrip, SkyFinale, useSmoothScroll } from "../components/marketing/SkyHero";
 import { Mascot } from "../components/Mascot";
 import ReplyScene from "../components/marketing/ReplyScene";
 
@@ -32,7 +33,6 @@ const FAQ = [
   ["Do I need API keys or a developer?", "No. Pages, pictures, practice calls and analytics work from the first minute on AIMVA's built-in AI. Sending WhatsApp messages and placing real phone calls need your own WhatsApp Business and Twilio numbers; connect them, and your ad accounts, whenever you're ready."],
   ["Which languages does the call assistant speak?", "Practice calls in your browser can use English (Indian and US), Hindi, Telugu, Tamil, Spanish, French, German or Arabic, where your browser has that voice. Real phone calls through Twilio are in English today; Hindi, Telugu and Tamil voices are coming."],
   ["Can I use my own domain?", "Yes. Publish on AIMVA, point your own domain at it, or deploy to Netlify or Vercel."],
-  ["I run an agency. Can each client have their own space?", "Yes. Each client gets a workspace with their own pages, campaigns, leads and results. Invite your team and the client, and turn on approvals so nothing goes live without their yes."],
   ["Where do my leads go?", "Into Leads, in your account. You can download them as Excel, CSV or a PDF report at any time, or sync them to Google Sheets or OneDrive."],
 ];
 
@@ -85,7 +85,6 @@ function Scene({ children }) {
 // corner who reacts to the part you are reading. He steps aside where he is already on stage (the hero, the film, the end).
 const BEATS = {
   how: { mood: "pointing", say: "Three steps. The middle one is me." },
-  reply: { mood: "happy", say: "Hindi, Telugu, Hinglish. I reply in theirs." },
   features: { mood: "data", say: "Every lead, one list. Tidy." },
   who: { mood: "wink", say: "If you'd rather do the work, I'm yours." },
   faq: { mood: "thinking", say: "Ask me anything. Really." },
@@ -133,10 +132,12 @@ function Faq() {
 export default function Landing() {
   useSeo(null, "AIMVA writes your landing page and ad drafts, welcomes every new lead on WhatsApp in seconds, calls them back with an AI assistant, and shows what's working. Free while in early access.");
   const { user } = useAuth();
+  useSmoothScroll();
   return (
     <MotionConfig reducedMotion="user">
       <MarketingLayout from="home">
-        <MascotHero user={user} />
+        <SkyHero user={user} />
+        <LanguageStrip />
         <Companion />
 
         {/* How it works */}
@@ -224,7 +225,7 @@ export default function Landing() {
           </Scene>
         </section>
 
-        <Finale user={user} />
+        <SkyFinale user={user} />
       </MarketingLayout>
     </MotionConfig>
   );
