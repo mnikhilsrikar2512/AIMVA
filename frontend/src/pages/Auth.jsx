@@ -22,7 +22,7 @@ function Shell({ title, subtitle, children, footer }) {
         <Logo />
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
           {/* He watches you type, and shuts his eyes for the password (owner 2026-11-21). */}
-          <Mascot face watch mood="hello" size={112} arrive="pop" className="-ml-3 mb-3" />
+          <Mascot watch mood="hello" size={112} arrive="pop" className="-ml-3 mb-3" />
           <h1 className="text-2xl font-semibold text-strong">{title}</h1>
           {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
           <div className="mt-7">{children}</div>

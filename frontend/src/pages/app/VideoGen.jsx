@@ -212,7 +212,7 @@ export default function VideoGen() {
     <>
       <PageHeader title="Videos" />
       <ModuleFrame toolbar={toolbar} panel={
-        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={versions} onSend={sel?.status === "done" ? change : null} sending={busy}
+        <ChangesPanel kind="video" open={panelOpen} onToggle={togglePanel} versions={versions} onSend={sel?.status === "done" ? change : null} sending={busy}
           placeholder="Change anything: “slower”, “more people smiling”" restoreLabel="Use this"
           onRestore={(v) => setSelId(v.id)} onCompare={(v) => setComparing(byId.get(v.id))} />
       }>

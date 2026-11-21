@@ -234,7 +234,7 @@ export default function ImageGen() {
       <PageHeader title="Pictures" />
       {hiddenUpload}
       <ModuleFrame toolbar={toolbar} panel={
-        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={making ? [] : versions} onSend={sel && !making ? change : null} sending={changing}
+        <ChangesPanel kind="pictures" open={panelOpen} onToggle={togglePanel} versions={making ? [] : versions} onSend={sel && !making ? change : null} sending={changing}
           placeholder="Change anything: “warmer light”, “remove the car”" restoreLabel="Use this"
           onRestore={(v) => setSelId(v.id)} onCompare={(v) => setComparing(pictures.find((a) => a.id === v.id))} />
       }>

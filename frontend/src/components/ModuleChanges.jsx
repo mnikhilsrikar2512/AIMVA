@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, ChevronDown, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { Tooltip } from "./shadcn/tooltip";
 import { Modal, Spinner, cx } from "./ui";
+import { Mascot } from "./Mascot";
 import { timeAgo } from "../lib/hooks";
 
 const PANEL_KEY = "aimva_changes_panel";
@@ -43,6 +44,69 @@ export function ToolbarTitle({ children, status }) {
   );
 }
 
+// He works with you (owner 2026-11-21: "when generating it should look like the mascot is working and seeing the result
+// along with the client and giving its view: is this good, or we can change this to make it better"). While it is
+// being made he concentrates; when it lands he looks over at it, then gives a view as a question with two or three
+// changes you can tap (a tap fills the box, so you can still edit before sending). He does not grade the result, so
+// his lines never claim it is good or bad: they ask, and suggest. Never cheeky when something failed.
+const VIEWS = {
+  pictures: [
+    { mood: "thinking", say: "Does this feel like you? I'd make the offer stand out more.", chips: ["Make the offer bigger", "Warmer colours", "Add our price"] },
+    { mood: "happy", say: "Here it is. Want to push it a bit further?", chips: ["Brighter", "Plainer background", "Add our logo"] },
+    { mood: "wink", say: "Is this the one, or shall we try a version for Stories?", chips: ["Make it tall for Stories", "Bigger text", "Try another look"] },
+  ],
+  campaign: [
+    { mood: "thinking", say: "Is this how you'd say it? A shorter headline often gets more taps.", chips: ["Shorter headline", "Mention the price", "Add a deadline"] },
+    { mood: "happy", say: "Have a look. Want to try a tighter area? It often brings cheaper leads.", chips: ["Within 5 km", "Ages 25 to 45", "₹800 a day"] },
+  ],
+  video: [
+    { mood: "thinking", say: "How does it feel? The first two seconds decide if people stay.", chips: ["Faster start", "Shorter, 10 seconds", "Add our offer at the end"] },
+    { mood: "happy", say: "Here it is. Shall we make it punchier?", chips: ["More energy", "Calmer music", "Bigger text"] },
+  ],
+  calls: [
+    { mood: "thinking", say: "Does this sound like your shop? It could ask one more question.", chips: ["Ask their budget", "Shorter greeting", "Offer a time to visit"] },
+    { mood: "happy", say: "Reads friendly. Want it to speak their language first?", chips: ["Speak Hindi first", "Speak Telugu first", "Mention our offer"] },
+  ],
+};
+
+function MascotReview({ kind, versions, sending, onPick }) {
+  const current = versions.find((v) => v.current) || versions[0];
+  const making = sending || versions.some((v) => v.state === "making");
+  const failed = current?.state === "failed";
+  const [phase, setPhase] = useState("view");  // "look" for a beat when a new version lands, then "view"
+  const seen = useRef(current?.id);
+  useEffect(() => {
+    if (!current || current.id === seen.current) return undefined;
+    seen.current = current.id;
+    setPhase("look");
+    const t = setTimeout(() => setPhase("view"), 1500);
+    return () => clearTimeout(t);
+  }, [current]);
+  if (!current && !making) return null;
+  const views = VIEWS[kind] || VIEWS.pictures;
+  const view = views[(current?.number || 1) % views.length];
+  const state = making ? { mood: "busy", say: "Working on it…", gaze: [-18, 8] }
+    : failed ? { mood: "sorry", say: "That one didn't finish. Shall we try again?", chips: current?.request ? [current.request] : [] }
+    : phase === "look" ? { mood: "focused", say: "Let me look…", gaze: [-18, 2] }
+    : { ...view, gaze: [-14, 0] };
+  return (
+    <div className="flex items-start gap-3 px-1 pb-3" role="status" aria-live="polite">
+      <Mascot mood={state.mood} size={52} gaze={state.gaze} className="mt-0.5" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-strong">{state.say}</p>
+        {!making && phase === "view" && state.chips?.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {state.chips.map((c) => (
+              <button key={c} type="button" onClick={() => onPick(c)}
+                className="rounded-full px-2.5 py-1 text-xs text-ink ring-1 ring-line-strong transition-colors hover:bg-surface-2 hover:text-strong">{c}</button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** The words a version shows: the request itself, else its plain label. */
 const said = (v) => (v.request || "").trim() || v.note || `Version ${v.number}`;
 
@@ -52,8 +116,9 @@ const said = (v) => (v.request || "").trim() || v.note || `Version ${v.number}`;
  * - onRestore(v), onCompare(v): Restore and Compare on older versions (Compare is left out when not given)
  * - onSend(text): the prompt box; resolves true when the text should clear
  * - extra: anything the module keeps above the list (a switch, a note)
+ * - kind: "pictures" | "campaign" | "video" | "calls" turns on the mascot working alongside you above the box
  */
-export function ChangesPanel({ open, onToggle, versions = [], loading, onRestore, onCompare, onSend, sending, placeholder = "Change anything…", extra, restoreLabel = "Restore" }) {
+export function ChangesPanel({ open, onToggle, versions = [], loading, onRestore, onCompare, onSend, sending, placeholder = "Change anything…", extra, restoreLabel = "Restore", kind }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(null);
   const [listOpen, setListOpen] = useState(false);  // phones: the list folds under one line, the prompt box stays
@@ -113,6 +178,7 @@ export function ChangesPanel({ open, onToggle, versions = [], loading, onRestore
       <div className={cx("min-h-0 flex-1 overflow-y-auto", !listOpen && "hidden lg:block")}>{list}</div>
       {onSend && (
         <form onSubmit={send} className="sticky bottom-0 shrink-0 border-t border-line bg-surface p-3">
+          {kind && <MascotReview kind={kind} versions={versions} sending={sending} onPick={(c) => { setText(c); ref.current?.focus(); }} />}
           <div className="flex items-end gap-2 rounded-[10px] ring-1 ring-line-strong focus-within:ring-2 focus-within:ring-brand/50">
             <textarea ref={ref} rows={2} value={text} onChange={(e) => setText(e.target.value)} maxLength={300} disabled={sending}
               aria-label="What should change?" placeholder={placeholder}

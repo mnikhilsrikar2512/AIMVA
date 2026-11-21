@@ -1,24 +1,24 @@
-// AIMVA's mascot (owner 2026-11-21: "add this, I like it" + "it should show emotions" + "it can turn small, big, jump on
-// boxes and grids; mischievous, taunting, but friendly"). One body picture, the face drawn on top so each mood is a few
-// lines of SVG instead of another image. Rules kept from the plan: small and calm by default, motion only to say
-// something (arrive, react, celebrate), still for people who ask their phone for less motion, never cheeky about money,
-// errors or customers waiting.
+// AIMVA's mascot (owner 2026-11-21: "it should show emotions", "mischievous, taunting, but friendly", and then "the
+// expressions should come from one mascot, not by changing the mascot"). So he is ONE picture split into three layers,
+// the body and his two detached glass hands, with the eyes drawn on the visor. Every mood is the same body: the eyes
+// close for a beat and open in the new shape, and the hands move to the new gesture. Nothing is ever swapped for a
+// different drawing. Rules from the plan: calm by default, motion only to say something, still for reduced motion,
+// never cheeky about money, errors or customers waiting.
 import { AnimatePresence, MotionConfig, motion, useAnimationControls, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import cx from "clsx";
 
-// One drawing space for every picture (owner 2026-11-21: "it should not look like two different mascots"). Each pose
-// and the plain face body were placed on the same 360x300 canvas at the same body height, so swapping mood never
-// changes his size or where he stands. BOX is the part of that canvas his body fills: `size` is that box's width, and
-// hands, beams and speed lines may reach outside it without pushing the layout around.
-const W = 360, H = 300;
-const BOX = { x: 80, y: 55, w: 200, h: 240 };
-const EYES = [[153.2, 121.1], [199.5, 117.4]];  // visor eye centres on face-body.webp
+// The drawing space (owner's art, upscaled 4x so he stays sharp up to about 600px wide). BOX is the part his body
+// fills: `size` is that box's width; hands may reach outside it without pushing the layout around.
+const W = 1080, H = 900;
+const BOX = { x: 240, y: 165, w: 600, h: 720 };
+const EYES = [[459.6, 363.3], [598.5, 352.2]];
+const HAND = { l: { x: 219, y: 542, w: 127, h: 176 }, r: { x: 721, y: 514, w: 120, h: 174 } };
 const GLOW = "#8BF6F1";
-const EYE_SCALE = 0.47;                         // owner 2026-11-21: "make the eyes big" (1.6x on the old 760 body)
-const LOOK = 0.3;                               // how far the eyes travel, in canvas units per pointer unit
+const EYE_SCALE = 1.41;  // owner 2026-11-21: "make the eyes big"
+const LOOK = 0.9;        // how far the eyes travel, in canvas units per pointer unit
 
-// One eye per mood, drawn around (0,0). `side` is -1 for the left eye, 1 for the right, so shapes can mirror.
+// One eye per face, drawn around (0,0). `side` is -1 for the left eye, 1 for the right, so shapes can mirror.
 const oval = (rx, ry, dx = 0, dy = 0) => <ellipse cx={dx} cy={dy} rx={rx} ry={ry} fill={GLOW} />;
 const arc = (d) => <path d={d} fill="none" stroke={GLOW} strokeWidth="13" strokeLinecap="round" />;
 const FACES = {
@@ -38,22 +38,50 @@ const FACES = {
   pointing: () => oval(18, 26, 12, 6),  // looking right, at the words and the button beside him
   sleepy: () => arc("M-20 4 Q0 14 20 4"),
   shy: () => arc("M-22 2 Q0 16 22 2"),  // eyes politely shut while you type a password
+  focused: () => <path d="M-20 -6 L20 -6 Q22 20 0 22 Q-22 20 -20 -6Z" fill={GLOW} />,  // concentrating while he works
+  confused: (side) => (side < 0 ? oval(15, 22) : oval(19, 30, 0, -6)),
 };
-// Real poses (owner's Gemini art, cut out 2026-11-21). For moods without a pose, while you type, and with `face`, he is
-// the idle body with the eyes drawn on the visor (which can follow the pointer). Pose swaps crossfade.
-const POSES = { hello: "wave", happy: "happy", cheer: "cheer", thinking: "thinking", sorry: "sorry", surprised: "surprised",
-  wink: "wink", cheeky: "giggle", pointing: "point", confused: "confused", sit: "sit", peek: "peek",
-  idle: "idle", calm: "calm", busy: "dash", focused: "focused", data: "hologram" };
-// Poses he can glance into for a moment while idle (a wink, a smile), then back.
-const GLANCE = { hello: "wink", happy: "wink", idle: "happy", calm: "wink", pointing: "happy" };
-const BLINKS = new Set(["hello", "thinking", "surprised", "pointing", "cheeky"]);
 
-/** Fetch every picture once, so the first swap to a new pose is a crossfade, not a blank frame. */
+// Moods without their own eyes borrow one.
+const FACE_OF = { idle: "hello", calm: "happy", busy: "focused", data: "pointing", sit: "sleepy", peek: "surprised" };
+
+// Where each hand rests for a mood (canvas units, from the hand's resting place). Rotation is about the wrist.
+const REST = { x: 0, y: 0, rotate: 0 };
+const HANDS = {
+  hello: { r: { x: 30, y: -190, rotate: -12 } },
+  happy: { l: { x: -10, y: -40, rotate: -12 }, r: { x: 10, y: -40, rotate: 12 } },
+  cheer: { l: { x: -40, y: -230, rotate: -25 }, r: { x: 40, y: -230, rotate: 25 } },
+  thinking: { l: { x: 135, y: -105, rotate: 30 } },
+  sorry: { l: { x: 100, y: -30, rotate: 25 }, r: { x: -100, y: -30, rotate: -25 } },
+  surprised: { l: { x: -30, y: -130, rotate: -30 }, r: { x: 30, y: -130, rotate: 30 } },
+  wink: { r: { x: 20, y: -80, rotate: 18 } },
+  cheeky: { r: { x: -170, y: -150, rotate: -35 } },
+  pointing: { r: { x: 90, y: -90, rotate: -80 } },
+  sleepy: { l: { x: 0, y: 25, rotate: 8 }, r: { x: 0, y: 25, rotate: -8 } },
+  shy: { l: { x: 175, y: -265, rotate: 20 }, r: { x: -180, y: -250, rotate: -20 } },
+  confused: { r: { x: -190, y: -360, rotate: -45 } },
+  busy: { l: { x: 70, y: -40, rotate: 15 }, r: { x: -70, y: -40, rotate: -15 } },
+  focused: { l: { x: 135, y: -105, rotate: 30 } },
+  data: { r: { x: 90, y: -90, rotate: -80 } },
+  peek: { l: { x: 175, y: -265, rotate: 20 } },
+};
+// A short gesture played once when the mood arrives (on top of the resting place above).
+const GESTURE = {
+  hello: { r: { rotate: [-12, 18, -12, 18, -12], transition: { duration: 1.4, ease: "easeInOut" } } },
+  cheer: { l: { y: [-230, -260, -230], transition: { duration: 0.5, repeat: 1 } }, r: { y: [-230, -260, -230], transition: { duration: 0.5, repeat: 1 } } },
+  busy: { l: { y: [-40, -55, -40], transition: { duration: 0.35, repeat: Infinity } }, r: { y: [-40, -25, -40], transition: { duration: 0.35, repeat: Infinity } } },
+  cheeky: { r: { rotate: [-35, -25, -35, -25, -35], transition: { duration: 0.8 } } },
+  confused: { r: { x: [-190, -175, -190, -175, -190], transition: { duration: 0.9 } } },
+};
+const BLINKS = new Set(["hello", "thinking", "surprised", "pointing", "cheeky", "idle", "confused"]);
+// Faces he can glance into for a moment while idle (a wink, a smile), then back.
+const GLANCE = { hello: "wink", happy: "wink", idle: "happy", calm: "wink", pointing: "happy" };
+
 let preloaded = false;
 function preload() {
   if (preloaded || typeof Image === "undefined") return;
   preloaded = true;
-  ["face-body", ...Object.values(POSES).map((p) => `poses/${p}`)].forEach((n) => { new Image().src = `/mascot/${n}.webp`; });
+  ["body", "hand-l", "hand-r"].forEach((n) => { new Image().src = `/mascot/${n}.webp`; });
 }
 
 /** Where the caret is on screen, near enough: the end of the typed text (or of the last line in a box). */
@@ -73,41 +101,59 @@ function caretPoint(el) {
   return { x, y };
 }
 
-/** The face on its own, for places too small for the body (a 24px badge, a toast). */
-function Face({ mood, look = [0, 0], blink }) {
-  const draw = FACES[mood] || FACES.hello;
+/** The eyes. A new face arrives with a quick blink: the old shape closes, the new one opens, so it reads as one face. */
+function Face({ face, look = [0, 0], blink }) {
+  const draw = FACES[face] || FACES.hello;
   return (
-    <g style={{ filter: `drop-shadow(0 0 3px ${GLOW}aa)` }}>
+    <g style={{ filter: `drop-shadow(0 0 8px ${GLOW}aa)` }}>
       {EYES.map(([x, y], i) => (
-        <motion.g key={i} initial={false} animate={{ x: x + look[0] * LOOK, y: y + look[1] * LOOK, scaleX: EYE_SCALE, scaleY: blink ? 0.05 : EYE_SCALE }}
-          transition={{ type: "spring", stiffness: 400, damping: 30, scaleY: { duration: 0.08 } }}>
-          {draw(i === 0 ? -1 : 1)}
+        <motion.g key={i} initial={false} animate={{ x: x + look[0] * LOOK, y: y + look[1] * LOOK }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
+          <motion.g initial={false} animate={{ scaleX: EYE_SCALE, scaleY: blink ? 0.08 : EYE_SCALE }} transition={{ duration: 0.08 }}>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.g key={face} initial={{ scaleY: 0.1 }} animate={{ scaleY: 1 }} exit={{ scaleY: 0.1 }} transition={{ duration: 0.09 }}>
+                {draw(i === 0 ? -1 : 1)}
+              </motion.g>
+            </AnimatePresence>
+          </motion.g>
         </motion.g>
       ))}
     </g>
   );
 }
 
+function Hand({ side, controls }) {
+  const h = HAND[side];
+  return (
+    <motion.g animate={controls} initial={false} style={{ transformBox: "fill-box", transformOrigin: "50% 75%" }}>
+      <image href={`/mascot/hand-${side}.webp`} x={h.x} y={h.y} width={h.w} height={h.h} />
+    </motion.g>
+  );
+}
+
 /**
  * <Mascot mood="hello" size={96} />
- *  mood     hello | happy | cheer | thinking | sorry | surprised | wink | cheeky | pointing | sleepy | confused | sit | peek
+ *  mood     hello | idle | calm | happy | cheer | thinking | sorry | surprised | wink | cheeky | pointing | sleepy |
+ *           confused | busy | focused | data | sit | peek
  *  alive    floats gently and fidgets now and then (default on; still for reduced motion)
- *  face     true = always the idle body with drawn eyes (so the eyes can follow you the whole time)
- *  size     width in px; changing it makes him grow or shrink (spring), which is how he "turns big or small"
- *  arrive   "hop" jumps in from below and lands with a squash (use when he lands on a card), "pop" scales in
- *  watch    eyes follow the pointer, and your typing anywhere on the page; eyes shut for passwords
+ *  size     width in px; changing it makes him grow or shrink, which is how he "turns big or small"
+ *  arrive   "hop" jumps in from below and lands with a squash, "pop" scales in
+ *  watch    eyes follow the pointer, and your typing anywhere on the page; eyes shut and hands up for passwords
+ *  gaze     [x, y] where to look when not watching (about -18..18, -14..14)
  *  say      a short line in a bubble; onTap makes him hop and lets the caller change mood or line
  */
-export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false, say = null, sayAlign = "left", onTap, className, label, face = false, alive = true }) {
+export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false, say = null, sayAlign = "left", onTap, className, label, alive = true, gaze = null }) {
   const reduce = useReducedMotion();
   const [glance, setGlance] = useState(null);
-  const [typingNow, setTypingNow] = useState(false);
-  const pose = !face && !typingNow ? (glance || POSES[mood]) : null;
-  useEffect(preload, []);
   const ref = useRef(null);
   const body = useAnimationControls();
+  const left = useAnimationControls();
+  const right = useAnimationControls();
   const [blink, setBlink] = useState(false);
   const [look, setLook] = useState([0, 0]);
+  useEffect(preload, []);
+  // Where he is looking when he is not following you (for example over at the result beside him).
+  const gx = gaze?.[0], gy = gaze?.[1];
+  useEffect(() => { if (!watch && gx !== undefined) setLook([gx, gy]); }, [watch, gx, gy]);
 
   // Blink now and then (every 3-6 s), only for open-eyed moods.
   useEffect(() => {
@@ -159,13 +205,27 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
       document.removeEventListener("click", follow);
     };
   }, [watch]);
-  useEffect(() => { setTypingNow(!!typing); }, [typing]);
+  // What he is showing right now: a password covers his eyes, typing makes him look, otherwise the mood.
+  const shown = typing === "secret" ? "shy" : typing ? "hello" : mood;
+  const face = glance || FACE_OF[shown] || (FACES[shown] ? shown : "hello");
+
+  // Hands glide to the new gesture, then play its little flourish once.
   useEffect(() => {
-    if (typing === "secret") body.start({ rotate: -8, x: -4, transition: { type: "spring", stiffness: 200, damping: 16 } });
-    else body.start({ rotate: 0, x: 0, transition: { type: "spring", stiffness: 200, damping: 16 } });
+    const pose = HANDS[shown] || {};
+    const spring = { type: "spring", stiffness: 170, damping: 18 };
+    const go = async (ctl, key) => {
+      const to = { ...REST, ...(pose[key] || {}) };
+      await ctl.start({ ...to, transition: spring });
+      const g = GESTURE[shown]?.[key];
+      if (g && !reduce) ctl.start(g);
+    };
+    go(left, "l"); go(right, "r");
+  }, [shown, left, right, reduce]);
+  useEffect(() => {
+    body.start({ rotate: typing === "secret" ? -4 : 0, transition: { type: "spring", stiffness: 200, damping: 16 } });
   }, [typing, body]);
 
-  // Arrival, and a celebration bounce whenever the mood turns to cheer.
+  // Arrival, and a whole-body reaction for the big moods.
   useEffect(() => {
     if (arrive === "hop") body.start({ y: [60, -36, 0, 0], scaleY: [1, 1.04, 0.86, 1], scaleX: [1, 0.97, 1.1, 1], opacity: [0, 1, 1, 1], transition: { duration: 0.75, times: [0, 0.45, 0.75, 1], ease: "easeOut" } });
     else if (arrive === "pop") body.start({ scale: [0.4, 1.08, 1], opacity: [0, 1, 1], transition: { duration: 0.45 } });
@@ -174,8 +234,8 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
     if (mood === "cheer") body.start({ y: [0, -28, 0, -12, 0], scaleY: [1, 1.03, 0.9, 1, 1], transition: { duration: 0.9 } });
     if (mood === "sorry") body.start({ rotate: [0, -4, 0], y: [0, 4, 0], transition: { duration: 0.8 } });
     if (mood === "surprised") body.start({ y: [0, -10, 0], transition: { duration: 0.35 } });
-    if (mood === "busy") body.start({ x: [0, 3, -1, 2, 0], transition: { duration: 0.6, repeat: Infinity } });
-    else body.start({ x: 0 });
+    if (mood === "thinking" || mood === "confused") body.start({ rotate: [0, 5, 5], transition: { duration: 0.5 } });
+    else if (mood !== "sorry") body.start({ rotate: 0, transition: { duration: 0.4 } });
   }, [mood, body]);
 
   // Alive: every 7-13 s a small fidget (a hop, a head tilt, a glance), never while someone asked for less motion.
@@ -187,14 +247,14 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
         const r = Math.random();
         if (r < 0.3) body.start({ y: [0, -14, 0], scaleY: [1, 1.03, 0.94, 1], transition: { duration: 0.55 } });
         else if (r < 0.6) body.start({ rotate: [0, -7, 3, 0], transition: { duration: 0.9, ease: "easeInOut" } });
-        else if (GLANCE[mood] && !face) { setGlance(POSES[GLANCE[mood]]); g = setTimeout(() => setGlance(null), 900); }
+        else if (GLANCE[mood]) { setGlance(GLANCE[mood]); g = setTimeout(() => setGlance(null), 900); }
         else { setBlink(true); setTimeout(() => setBlink(false), 120); }
         next();
       }, 7000 + Math.random() * 6000);
     };
     next();
     return () => { clearTimeout(t); clearTimeout(g); };
-  }, [alive, reduce, mood, face, body]);
+  }, [alive, reduce, mood, body]);
 
   const tap = () => {
     body.start({ y: [0, -30, 0], scaleY: [1, 1.04, 0.9, 1], transition: { duration: 0.5 } });
@@ -215,25 +275,19 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
         )}
         <motion.div animate={alive ? { y: [0, -5, 0], rotate: [0, 1.2, 0, -1.2, 0], scale: [1, 1.012, 1] } : undefined}
           transition={{ duration: 3.6, repeat: Infinity, ease: "easeInOut" }} style={{ originY: 0.9 }}>
-        <Tag ref={ref} type={onTap ? "button" : undefined} onClick={onTap ? tap : undefined} animate={body}
-          aria-label={onTap ? (label || "AIMVA") : undefined} aria-hidden={onTap ? undefined : true}
-          style={{ originY: 1 }} className={cx("block w-full", onTap && "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-2xl")}>
-          <span className="relative block" style={{ aspectRatio: `${BOX.w} / ${BOX.h}` }}>
-            <AnimatePresence initial={false}>
-              <motion.span key={pose || "face"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}
-                className="absolute block" style={{ left: `${(-BOX.x / BOX.w) * 100}%`, top: `${(-BOX.y / BOX.h) * 100}%`, width: `${(W / BOX.w) * 100}%` }}>
-                {pose ? (
-                  <img src={`/mascot/poses/${pose}.webp`} alt="" draggable={false} className="block h-auto w-full" />
-                ) : (
-                  <svg viewBox={`0 0 ${W} ${H}`} className="block w-full overflow-visible">
-                    <image href="/mascot/face-body.webp" width={W} height={H} />
-                    <Face mood={typing === "secret" ? "shy" : typing ? "hello" : FACES[mood] ? mood : "hello"} look={typing === "secret" ? [0, 6] : look} blink={blink} />
-                  </svg>
-                )}
-              </motion.span>
-            </AnimatePresence>
-          </span>
-        </Tag>
+          <Tag ref={ref} type={onTap ? "button" : undefined} onClick={onTap ? tap : undefined} animate={body}
+            aria-label={onTap ? (label || "AIMVA") : undefined} aria-hidden={onTap ? undefined : true}
+            style={{ originY: 1 }} className={cx("block w-full", onTap && "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-2xl")}>
+            <span className="relative block" style={{ aspectRatio: `${BOX.w} / ${BOX.h}` }}>
+              <svg viewBox={`0 0 ${W} ${H}`} className="absolute block overflow-visible"
+                style={{ left: `${(-BOX.x / BOX.w) * 100}%`, top: `${(-BOX.y / BOX.h) * 100}%`, width: `${(W / BOX.w) * 100}%` }}>
+                <image href="/mascot/body.webp" width={W} height={H} />
+                <Face face={face} look={typing === "secret" ? [0, 6] : look} blink={blink} />
+                <Hand side="l" controls={left} />
+                <Hand side="r" controls={right} />
+              </svg>
+            </span>
+          </Tag>
         </motion.div>
       </motion.div>
     </MotionConfig>

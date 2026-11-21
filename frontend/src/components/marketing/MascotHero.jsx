@@ -157,7 +157,7 @@ export default function MascotHero({ user }) {
         </motion.div>
 
         <motion.div style={him} className="relative order-1 flex justify-center lg:order-2">
-          <Mascot face={waved} watch={waved} mood="hello" size={size} arrive="pop" />
+          <Mascot watch={waved} mood={waved ? "idle" : "hello"} size={size} arrive="pop" />
           <span aria-hidden className="pointer-events-none absolute bottom-[2%] left-1/2 h-6 w-[30%] -translate-x-1/2 rounded-full opacity-30 blur-md" style={{ background: MARIGOLD }} />
         </motion.div>
       </div>

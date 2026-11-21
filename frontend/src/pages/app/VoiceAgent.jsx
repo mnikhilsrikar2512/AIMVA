@@ -209,7 +209,7 @@ export default function VoiceAgent() {
     <>
       <PageHeader title="Calls" />
       <ModuleFrame toolbar={toolbar} panel={
-        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={versions} loading={vLoading} onSend={agent ? change : null} sending={busy}
+        <ChangesPanel kind="calls" open={panelOpen} onToggle={togglePanel} versions={versions} loading={vLoading} onSend={agent ? change : null} sending={busy}
           placeholder="Change anything: “ask for their budget”, “speak Hindi first”" onRestore={restore} onCompare={compare} />
       }>
         {agent && (

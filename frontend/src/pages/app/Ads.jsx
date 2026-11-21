@@ -225,7 +225,7 @@ export default function Ads() {
     <>
       <PageHeader title="Campaigns" />
       <ModuleFrame toolbar={toolbar} panel={
-        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={versions} loading={vLoading} onSend={sel ? change : null} sending={busy}
+        <ChangesPanel kind="campaign" open={panelOpen} onToggle={togglePanel} versions={versions} loading={vLoading} onSend={sel ? change : null} sending={busy}
           placeholder="Change anything: “₹800 a day”, “within 5 km”, “shorter headline”" onRestore={restore} onCompare={compare} />
       }>
         {sel && (
