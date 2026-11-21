@@ -326,12 +326,6 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
               <svg viewBox={`0 0 ${W} ${H}`} className="absolute block overflow-visible"
                 style={{ left: `${(-BOX.x / BOX.w) * 100}%`, top: `${(-BOX.y / BOX.h) * 100}%`, width: `${(W / BOX.w) * 100}%` }}>
                 <image href="/mascot/body.webp" width={W} height={H} />
-                {/* The AIMVA mark on his chest (owner 2026-11-21), printed on the glass so it moves with him. */}
-                <g transform="translate(478 540) scale(1.25)" opacity="0.9" aria-hidden>
-                  <path d="M10 52 30 10h6L22 46z" fill="#0f282f" fillOpacity="0.8" />
-                  <path d="M30 10h6l18 42h-8z" fill="#02eff0" style={{ filter: "drop-shadow(0 0 4px #02eff0aa)" }} />
-                  <path d="M22 46 36 38l10 14z" fill="#0f282f" fillOpacity="0.45" />
-                </g>
                 <Face face={face} look={typing === "secret" ? [0, 6] : shown === "busy" && !watch ? [-4, 12] : look} blink={blink} />
                 <AnimatePresence>{shown === "busy" && <Workbench key="bench" />}</AnimatePresence>
                 <Hand spec={hands.l || L0} flourish={left} />
