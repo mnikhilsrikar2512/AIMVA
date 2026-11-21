@@ -1,8 +1,8 @@
 """Page score: every new page is marked against one checklist, and low marks get fixed before the owner sees it.
 
 Six parts, each out of 10: is the offer clear, can a visitor act, can they trust it, does it work on a phone, can
-everyone use it, and does it look and sound like this brand. A page passes when the average is 8 or more and no part
-is under 7. Most marks come from the launch checks in quality.py; the offer, action and brand parts add their own.
+everyone use it, and does it look and sound like this brand. A page passes when the average is 8 or more, no part
+is under 7 and nothing on it is a claim the owner never gave us. Most marks come from the launch checks in quality.py; the offer, action and brand parts add their own.
 
 `improve` applies the safe fixes (always free), then, only while the page still fails and only for a page the writer
 wrote, asks for a rewrite of exactly what is missing, up to three times. A rewrite is kept only when it scores higher.
@@ -74,11 +74,17 @@ def _own_checks(html: str, brief: dict, book: dict) -> list:
     out.append(("action", "cta_top", any(l and l in top for l in labels if len(l) > 2), "warning",
                 "There's a button on the first screen", "Visitors have to scroll to find a button."))
 
+    empty = len(re.findall(r"<img\b(?=[^>]*\bsrc\s*=\s*([\"'])\s*\1)[^>]*>|<img\b(?![^>]*\bsrc\s*=)[^>]*>", html or "", re.I))
+    out.append(("trust", "broken_images", not empty, "warning", "No broken pictures",
+                f"{empty} picture{'s' if empty != 1 else ''} on the page {'have' if empty != 1 else 'has'} nothing in {'them' if empty != 1 else 'it'} and will show as broken."))
     name = (book.get("name") or brief.get("business") or "").strip()
     if name:
         out.append(("brand", "name", name.lower() in low, "warning", "Your business name is on the page",
                     "Your business name doesn't appear on the page."))
     colors = [c.lower() for c in (book.get("colors") or []) if c] if book.get("colors_chosen", True) else []
+    page_cols = [c.lower() for c in (brief.get("primary"), brief.get("accent")) if c]
+    if colors and page_cols and page_cols[0] not in colors:
+        colors = page_cols  # the owner picked other colours for this page: hold it to those
     if colors:
         css = (html or "").lower()
         out.append(("brand", "colors", any(c in css for c in colors[:2]), "warning", "Uses your brand colours",
@@ -114,13 +120,24 @@ def score(html: str, brief: Optional[dict] = None, book: Optional[dict] = None, 
     low = min(x["score"] for x in parts)
     order = {"blocker": 0, "warning": 1, "tip": 2}
     todo.sort(key=lambda t: (order[t["level"]], t["part"]))
-    return {"parts": parts, "average": avg, "lowest": low, "passes": avg >= PASS_AVG and low >= PASS_MIN, "todo": todo}
+    # Something a visitor could doubt (a number or quote the owner never gave us) fails the page however high the rest is.
+    doubt = any(t["part"] == "trust" and t["level"] != "tip" for t in todo)
+    # So does breaking a rule the owner set: their chosen colours, or a word they never use.
+    doubt = doubt or any(t["key"] in ("colors", "never_say") for t in todo)
+    return {"parts": parts, "average": avg, "lowest": low, "passes": avg >= PASS_AVG and low >= PASS_MIN and not doubt, "todo": todo}
 
 
 def notes_for_writer(result: dict, book: Optional[dict] = None) -> str:
     """What a rewrite must fix, in the words of the checks. Only content problems a writer can solve."""
     keep = [t for t in result["todo"] if t["part"] in ("offer", "action", "trust", "brand") and t["level"] != "tip"]
-    lines = [f"- {t['detail'] or t['message']}" for t in keep[:8]]
+    def line(t):
+        if t["key"] in ("claims", "testimonials"):  # the owner never gave these: the writer must take them out
+            return "- Remove these, the owner never gave them (do not replace them with other numbers or quotes): " + (t["detail"] or t["message"])
+        if t["key"] == "colors" and book and book.get("colors"):
+            c = book["colors"]
+            return f"- Use the brand colours: {c[0]} as the main colour (buttons, links, highlights)" + (f" and {c[1]} as the second colour" if len(c) > 1 else "") + ". Replace the other accent colours with these."
+        return f"- {t['detail'] or t['message']}"
+    lines = [line(t) for t in keep[:8]]
     if book and book.get("never_say"):
         lines.append("- Never use these words: " + ", ".join(book["never_say"]) + ".")
     return "\n".join(lines)

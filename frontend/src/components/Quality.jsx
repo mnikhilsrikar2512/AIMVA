@@ -126,7 +126,7 @@ const ICON = { blocker: [XCircle, "text-danger"], warning: [AlertTriangle, "text
 function ScoreParts({ score }) {
   return (
     <div className="px-4 pb-3">
-      <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 sm:grid-cols-3">
+      <div className="grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
         {score.parts.map((p) => (
           <div key={p.key} className="min-w-0">
             <div className="flex items-baseline justify-between gap-2 text-xs">

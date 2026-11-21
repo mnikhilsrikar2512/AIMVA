@@ -765,8 +765,22 @@ def _generate(db: Session, user: User, b: Brief, slug: str) -> tuple:
         r = db.get(ReferenceFile, b.brochure)
         if not r or r.user_id != user.id or r.kind != "document":
             raise HTTPException(404, "The brochure wasn't found in your reference files. Upload it as a PDF first.")
+    _brand_colours(db, user, b)
     resolve_design(db, user, b, playbook)
     return build_html(b, slug, writer(db, user.id, b.writer, agent="page_writer"), _media(db, user.id, b), ref_text, playbook)
+
+
+def _brand_colours(db: Session, user: User, b: Brief) -> None:
+    """A page left on the default colours takes the owner's brand colours (Brand Kit or brand book edits)."""
+    from ..brand_book import build as brand_book
+    if b.primary.lower() != Brief.model_fields["primary"].default.lower() or b.match_colors:
+        return
+    book = brand_book(db, user)
+    cols = book.get("colors") or []
+    if book.get("colors_chosen") and cols:
+        b.primary = cols[0]
+        if len(cols) > 1:
+            b.accent = cols[1]
 
 
 @router.post("/api/sites/directions")

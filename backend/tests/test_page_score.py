@@ -89,3 +89,22 @@ def test_rewrite_rounds_stop_at_three():
         return html.replace("<p>", "<p>Acme ", 1)  # a tiny gain every time, never a pass
     page_score.improve(WEAK, {"business": "Acme", "offer": "Free trial"}, rewrite=rewrite)
     assert len(calls) <= page_score.ROUNDS
+
+
+def test_page_on_default_colours_takes_brand_kit_colours(auth_client):
+    auth_client.put("/api/brand", json={"colors": ["#b91c1c", "#111827"]})
+    s = auth_client.post("/api/sites", json=BRIEF).json()
+    assert s["brief"]["primary"].lower() == "#b91c1c" and "#b91c1c" in s["html"].lower()
+    brand = next(p for p in s["page_score"]["parts"] if p["key"] == "brand")
+    assert brand["score"] == 10
+    own = auth_client.post("/api/sites", json={**BRIEF, "business": "Other", "primary": "#123456"}).json()
+    assert own["brief"]["primary"] == "#123456"  # a colour the owner picked for this page wins
+
+
+def test_empty_picture_slots_fail_and_get_removed():
+    from app.agents.fixer import fix_html
+    page = STRONG.replace("<p>Acme gyms", '<img src="" alt="Gym"><img alt="x"><img src="/a.png" alt="ok"><p>Acme gyms')
+    r = page_score.score(page, {"business": "Acme"})
+    assert not r["passes"] and any(t["key"] == "broken_images" for t in r["todo"])
+    fixed, notes = fix_html(page, {"business": "Acme"})
+    assert 'src=""' not in fixed and 'alt="x"' not in fixed and "/a.png" in fixed and any("empty picture" in n for n in notes)

@@ -44,6 +44,10 @@ def fix_html(html: str, brief: dict) -> tuple:
     if n:
         fixed.append(f"Added alt text to {n} image{'s' if n != 1 else ''}")
 
+    # A picture slot with nothing in it shows as a broken image with its alt text: take the empty slot out.
+    html, empty = re.subn(r"<img\b(?=[^>]*\bsrc\s*=\s*([\"'])\s*\1)[^>]*>|<img\b(?![^>]*\bsrc\s*=)[^>]*>", "", html, flags=re.I)
+    if empty:
+        fixed.append(f"Removed {empty} empty picture slot{'s' if empty != 1 else ''} that would show as broken")
     html, dead = re.subn(r"(<a\b[^>]*href\s*=\s*)([\"'])\s*#?\s*\2", r'\1"#contact"', html, flags=re.I)
     if dead:
         fixed.append(f"Pointed {dead} empty link{'s' if dead != 1 else ''} at the enquiry form")
