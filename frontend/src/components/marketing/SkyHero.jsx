@@ -7,12 +7,15 @@
 //
 // Laptops and tablets get everything (owner: full power there). Phones get the same sky with four objects and no
 // scroll-linked scatter, so an ad click still paints fast. Reduced motion: everything sits still.
-import { useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { motion, useInView, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowRight, BadgeIndianRupee, Check, Phone, Sparkles, UserRound } from "lucide-react";
 import { Mascot } from "../Mascot";
 import { signupHref } from "./Site";
+import { canWebGL } from "./device";
+
+const SkyObjects3D = lazy(() => import("./SkyObjects3D"));
 
 const ease = [0.22, 1, 0.36, 1];
 
@@ -109,12 +112,12 @@ function Sale() {
 const THINGS = [
   { C: Reply, x: 14, y: 34, d: 0.9, rot: -6 },
   { C: Ad, x: 83, y: 30, d: 0.75, rot: 7 },
-  { C: Lead, x: 80, y: 70, d: 1, rot: -4, phone: { x: 70, y: 88 } },
+  { C: Lead, x: 80, y: 70, d: 1, rot: -4 },
   { C: Call, x: 16, y: 74, d: 0.6, rot: 5 },
   { C: Page, x: 28, y: 10, d: 0.35, rot: -10 },
   { C: () => <Coin size={84} />, x: 64, y: 9, d: 0.5, rot: 12, phone: { x: 80, y: 10 } },
-  { C: () => <Coin size={48} />, x: 6, y: 56, d: 0.3, rot: -18 },
-  { C: Sale, x: 62, y: 86, d: 0.45, rot: 3, phone: { x: 24, y: 9 } },
+  { C: () => <Coin size={48} />, x: 6, y: 56, d: 0.3, rot: -18, phone: { x: 14, y: 12 } },
+  { C: Sale, x: 62, y: 86, d: 0.45, rot: 3 },
 ];
 
 function Thing({ t, i, p, px, py, full, reduce }) {
@@ -160,7 +163,15 @@ export default function SkyHero({ user }) {
   };
   const [waved, setWaved] = useState(false);
   useEffect(() => { const t = setTimeout(() => setWaved(true), 3200); return () => clearTimeout(t); }, []);
-  const things = full ? THINGS : THINGS.filter((t) => t.phone);
+  // Laptops and tablets with WebGL: real lit 3D objects. Everyone else: two drawn coins (no app screenshots).
+  const [gl] = useState(() => typeof window !== "undefined" && canWebGL());
+  const three = full && gl;
+  const seen = useInView(ref, { margin: "100px 0px" });
+  const scrollRef = useRef(0), pointerRef = useRef({ x: 0, y: 0 });
+  useMotionValueEvent(p, "change", (v) => { scrollRef.current = v; });
+  useMotionValueEvent(px, "change", (v) => { pointerRef.current.x = v; });
+  useMotionValueEvent(py, "change", (v) => { pointerRef.current.y = v; });
+  const things = three ? [] : full ? THINGS : THINGS.filter((t) => t.phone);
   const HEAD = ["From", "ad", "to", "sale,"], TAIL = ["in", "one", "calm", "place."];
   const word = (w, i, base) => (
     <motion.span key={w + i} className="inline-block" initial={reduce ? false : { opacity: 0, y: 30, filter: "blur(12px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
@@ -183,6 +194,11 @@ export default function SkyHero({ user }) {
         </motion.div>
       ))}
 
+      {three && (
+        <motion.div aria-hidden className="pointer-events-none absolute inset-0 z-[5]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1.2, delay: 0.2 }}>
+          <Suspense fallback={null}><SkyObjects3D scroll={scrollRef} pointer={pointerRef} active={seen} /></Suspense>
+        </motion.div>
+      )}
       {things.map((t, i) => <Thing key={i} t={t} i={i} p={p} px={px} py={py} full={full} reduce={reduce} />)}
 
       <div className="relative z-10 mx-auto flex min-h-[calc(100svh-3.5rem)] max-w-4xl flex-col items-center justify-center px-4 pb-16 pt-10 text-center sm:min-h-[calc(100svh-4rem)]">
