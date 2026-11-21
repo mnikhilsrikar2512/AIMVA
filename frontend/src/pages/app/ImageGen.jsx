@@ -3,9 +3,10 @@
 // panel, point at a spot (C opens the comment editor), or edit directly (words, crop, colour in the same editor).
 // Engine, count, style and seed are hidden from owners; the platform admin finds them under ⋯ → Advanced.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useUrlView } from "../../lib/nav";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Download, Image as ImageIcon, LayoutGrid, MessageSquarePlus, MoreHorizontal, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { Download, Image as ImageIcon, Send, LayoutGrid, MessageSquarePlus, MoreHorizontal, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/shadcn/dropdown-menu";
 import { Tooltip } from "../../components/shadcn/tooltip";
 import { Button, Empty, Field, IconButton, JobProgress, ListSkeleton, Modal, PageHeader, cx } from "../../components/ui";
@@ -18,6 +19,7 @@ import AdSetDialog from "../../components/AdSet";
 import ImageEditor from "../../components/ImageEditor";
 import { api, del, post } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
+import { shareToWhatsApp } from "../../lib/utils";
 import { useAuth } from "../../lib/auth";
 
 const rootId = (a) => a?.params?.edit_root || a?.id;
@@ -58,10 +60,10 @@ export default function ImageGen() {
   const { data: ratings } = useApi("/api/feedback?kind=image", {});
   const admin = !!useAuth().user?.is_admin;
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const given = useRef(params.get("prompt") || "");
-  const [view, setView] = useState(given.current ? "prompt" : null);  // prompt | work | all; null until the list loads
-  const [selId, setSelId] = useState(null);
+  // prompt | work | all and the open picture, kept in the address so Back returns to the list (plan S7)
+  const [view, setView, selId, setSelId, setUrl] = useUrlView(given.current ? "prompt" : null);
   const [making, setMaking] = useState(null);  // {count, startedAt} while a new set is being made
   const [changing, setChanging] = useState(false);
   const [panelOpen, togglePanel] = usePanelOpen();
@@ -77,7 +79,7 @@ export default function ImageGen() {
     const want = Number(params.get("asset")) || null;
     const start = (want && assets.find((a) => a.id === want)) || assets.find((a) => !isAdSize(a));
     if (start) { setSelId(start.id); setView("work"); } else setView("prompt");
-    if (params.get("prompt") || params.get("asset")) setParams((p) => { const n = new URLSearchParams(p); n.delete("prompt"); n.delete("asset"); return n; }, { replace: true });
+    if (params.get("prompt") || params.get("asset")) setUrl({ prompt: null, asset: null }, { replace: true });
   }, [loading]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const pictures = assets.filter((a) => !isAdSize(a));
@@ -217,6 +219,7 @@ export default function ImageGen() {
           <IconButton label="Point and change (C)" onClick={() => setEditing(true)}><MessageSquarePlus className="size-4" /></IconButton>
           <IconButton label="Every ad size" onClick={() => setAdSet(true)}><LayoutGrid className="size-4" /></IconButton>
           <IconButton label="Download" href={sel.url} download target="_blank" rel="noreferrer"><Download className="size-4" /></IconButton>
+          <IconButton label="Send on WhatsApp" onClick={() => shareToWhatsApp(sel.url, "picture").then((r) => r === "downloaded" && toast("Saved. Attach it in the WhatsApp tab that just opened.")).catch((e) => toast.error(e.message))}><Send className="size-4" /></IconButton>
           <IconButton label="Delete" danger onClick={() => remove(sel)}><Trash2 className="size-4" /></IconButton>
         </span>
       )}

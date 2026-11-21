@@ -9,13 +9,11 @@ import { useLeadEvents } from "../lib/live";
 import { useIsClient } from "../lib/auth";
 import { ListSkeleton } from "./ui";
 
-const FILTERS = [["all", "All"], ["picture", "Pictures"], ["video", "Videos"], ["call", "Calls"], ["lead", "Leads"], ["campaign", "Campaigns"], ["page", "Pages"]];
 const LABEL = { picture: "Picture", video: "Video", call: "Call", lead: "Lead", campaign: "Campaign", page: "Page" };
 const ICON = { call: Phone, lead: UserRound, campaign: Megaphone, page: Globe };
 const firstLine = (t = "", n = 90) => { const s = String(t).replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 
 export function RecentWork({ limit: initialLimit = 8 }) {
-  const [kind, setKind] = useState("all");
   const [limit, setLimit] = useState(initialLimit);
   const isClient = useIsClient();  // a client can open leads and pages; the rest is the agency's side
   const assets = useApi("/api/content/assets", []);
@@ -32,32 +30,26 @@ export function RecentWork({ limit: initialLimit = 8 }) {
   const rows = useMemo(() => {
     const out = [];
     (assets.data || []).forEach((a) => out.push(a.kind === "video"
-      ? { kind: "video", id: `v${a.id}`, at: a.created_at, to: "/app/videos", thumb: a.status === "done" ? null : null, title: firstLine(a.prompt) || "Video",
-          meta: a.status === "done" ? a.model : a.status === "failed" ? "Didn't finish" : "Making it", go: a.status === "done" ? "Open" : null }
-      : { kind: "picture", id: `i${a.id}`, at: a.created_at, to: "/app/images", thumb: a.url, title: firstLine(a.prompt) || "Picture", meta: a.model, go: "Edit" }));
+      ? { kind: "video", id: `v${a.id}`, at: a.created_at, to: `/app/videos?asset=${a.id}`, thumb: null, title: firstLine(a.prompt) || "Video",
+          meta: a.status === "done" ? "Video" : a.status === "failed" ? "Didn't finish" : "Making it", go: a.status === "done" ? "Open" : null }
+      : { kind: "picture", id: `i${a.id}`, at: a.created_at, to: `/app/images?asset=${a.id}`, thumb: a.url, title: firstLine(a.prompt) || "Picture", meta: "Picture", go: "Edit" }));
     (calls.data || []).forEach((c) => out.push({ kind: "call", id: `c${c.id}`, at: c.created_at, to: "/app/voice", title: `${c.channel === "phone" ? "Call to" : "Call with"} ${c.to_number || "a visitor"}`,
       meta: c.status === "completed" ? firstLine(c.transcript?.[c.transcript.length - 1]?.text || "Finished", 70) : c.status, go: "Transcript" }));
     (leads.data || []).slice(0, 30).forEach((l) => out.push({ kind: "lead", id: `l${l.id}`, at: l.created_at, to: `/app/leads?lead=${l.id}`, title: l.name || l.email || l.phone,
       meta: `${l.score >= 70 ? "Hot · " : ""}${l.source}${l.message ? ` · ${firstLine(l.message, 60)}` : ""}`, go: l.stage === "new" ? "Call" : "Open", hot: l.score >= 70 }));
-    (camps.data || []).forEach((c) => out.push({ kind: "campaign", id: `k${c.id}`, at: c.created_at, to: `/app/ads/${c.platform}`, thumb: c.creative?.image_url, title: c.name,
+    (camps.data || []).forEach((c) => out.push({ kind: "campaign", id: `k${c.id}`, at: c.created_at, to: `/app/ads/${c.platform}?view=work&id=${c.id}`, thumb: c.creative?.image_url, title: c.name,
       meta: `${c.status === "draft" ? "Draft" : c.status === "paused" ? "Paused" : "Running"} on ${c.platform}`, go: c.status === "draft" ? "Finish" : "Open" }));
-    (sites.data || []).forEach((s) => out.push({ kind: "page", id: `s${s.id}`, at: s.updated_at, to: "/app/websites", title: s.name,
+    (sites.data || []).forEach((s) => out.push({ kind: "page", id: `s${s.id}`, at: s.updated_at, to: `/app/websites?site=${s.id}`, title: s.name,
       meta: s.published ? `Live · ${s.visits} visits` : "Not published yet", go: s.published ? "Open" : "Publish" }));
     return out.sort((a, b) => (a.at < b.at ? 1 : -1));
   }, [assets.data, calls.data, leads.data, camps.data, sites.data]);
 
-  const all = rows.filter((r) => kind === "all" || r.kind === kind);
+  const all = rows;
   const shown = all.slice(0, limit);
   return (
     <section aria-labelledby="recent-h">
       <div className="mb-2 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
-        <h2 id="recent-h" className="text-sm font-semibold text-strong">Activity</h2>
-        <div role="group" aria-label="Show" className="-mx-1 flex max-w-full gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">
-          {FILTERS.map(([k, l]) => (
-            <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}
-              className={cx("h-7 shrink-0 rounded-md px-2.5 text-xs font-medium transition", kind === k ? "bg-surface-2 text-strong" : "text-muted hover:text-strong")}>{l}</button>
-          ))}
-        </div>
+        <h2 id="recent-h" className="text-sm font-semibold text-strong">Recent</h2>
       </div>
       {loading ? <ListSkeleton rows={6} /> : (
         <>
@@ -66,7 +58,7 @@ export function RecentWork({ limit: initialLimit = 8 }) {
           )}
           {shown.length === 0 && failed.length > 0 ? null : shown.length === 0 ? (
             <p className="border-y border-line py-6 text-center text-sm text-muted">
-              {kind === "all" ? "Everything that happens shows up here: new leads, calls, pages, pictures and campaigns, newest first." : `No ${FILTERS.find((f) => f[0] === kind)[1].toLowerCase()} yet.`}
+              Everything that happens shows up here: new leads, calls, pages, pictures and campaigns, newest first.
             </p>
           ) : (
             <ul className="border-t border-line">

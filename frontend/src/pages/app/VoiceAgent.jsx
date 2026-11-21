@@ -2,6 +2,7 @@
 // canvas as the call it will make, and the changes panel takes every change after that. Lines can also be edited in
 // place. "Turn on" lets the assistant call back anyone who leaves a number.
 import { useEffect, useRef, useState } from "react";
+import { useUrlView } from "../../lib/nav";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Mic, MicOff, MoreHorizontal, Phone, PhoneOff, Plus, Send, X } from "lucide-react";
@@ -118,12 +119,12 @@ export default function VoiceAgent() {
   const { data: languages } = useApi("/api/voice/languages", {});
   const { data: calls, reload: reloadCalls } = useApi("/api/voice/calls", []);
   const { data: integrations } = useApi("/api/integrations", []);
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const given = useRef(params.get("prompt") || "");
   const [selId, setSelId] = useState(null);
   const agent = agents.find((a) => a.id === selId) || agents[0] || null;
   const { data: versions, setData: setVersions, reload: reloadVersions, loading: vLoading } = useApi(agent ? `/api/versions/call_script/${agent.id}` : null, []);
-  const [view, setView] = useState(null);  // prompt | work
+  const [view, setView, , , setUrl] = useUrlView(null);  // prompt | work, in the address (plan S7)
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [panelOpen, togglePanel] = usePanelOpen();
@@ -136,7 +137,7 @@ export default function VoiceAgent() {
   useEffect(() => {  // first visit: the prompt; once a script was written from one, the script
     if (loading || view || (agent && vLoading)) return;
     setView(given.current || !agent || !versions.length ? "prompt" : "work");
-    if (params.get("prompt")) setParams((p) => { const n = new URLSearchParams(p); n.delete("prompt"); return n; }, { replace: true });
+    if (params.get("prompt")) setUrl({ prompt: null }, { replace: true });
   }, [loading, vLoading, agent?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const replaced = (a) => { setAgents((all) => (all.some((x) => x.id === a.id) ? all.map((x) => (x.id === a.id ? a : x)) : [...all, a])); setSelId(a.id); reloadVersions(); };

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { useUrlState } from "../../lib/nav";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Code2, ExternalLink, Eye, FileText, Globe, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Megaphone, Code2, ExternalLink, Eye, FileText, Globe, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, IconButton, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
 import { ChangesList } from "../../components/ChangesPanel";
 import { ModulePrompt } from "../../components/ModulePrompt";
@@ -597,6 +598,8 @@ function Editor({ site, onClose, onChange, feedback }) {
   const right = (
     <>
       <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={async () => { await flush(); setChecks(true); }}>Checks</Button>
+      {site.published && <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={async () => { await flush(); navigate(`/app/ads/meta?prompt=${encodeURIComponent(`An ad that brings people to my page "${site.name}"`)}`); }}>
+        <Megaphone className="size-3.5" /> Run an ad to it</Button>}
       <div className="relative">
         <button type="button" className="btn-subtle btn-sm" aria-label="More" aria-expanded={menu} onClick={() => setMenu((m) => !m)}><MoreHorizontal className="size-4" /></button>
         {menu && (
@@ -753,7 +756,8 @@ export default function Websites() {
   const { data: sites, reload, loading, error: sitesError } = useApi("/api/sites", []);
   const { data: feedback } = useApi("/api/feedback?kind=site", {});
   const isClient = useIsClient();  // view-only: the client sees their pages, never the builder
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
   const givenPrompt = useRef(params.get("prompt") || "");
   // First visit: the one prompt. With pages already made, History comes first and "New page" opens the prompt.
   const [tab, setTab] = useState(isClient ? "history" : "create");
@@ -764,12 +768,22 @@ export default function Websites() {
     setSettled(true);
     if (sites.length && !givenPrompt.current && !params.get("site")) setTab("history");
   }, [loading, settled, sites.length, params]);
-  useEffect(() => {  // opened from the reveal (?site=) or Home (?prompt=): use it once, then tidy the address
-    const site = params.get("site");
-    if (site) get(`/api/sites/${site}`).then(setCurrent).catch((e) => toast.error(e.message));
-    if (site || params.get("prompt")) setParams((p) => { const n = new URLSearchParams(p); n.delete("site"); n.delete("prompt"); return n; }, { replace: true });
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
   const [current, setCurrent] = useState(null);  // the page being worked on in Create
+  // The open page lives in the address (?site=), so Back closes the editor and returns to the list (plan S7).
+  const [, setUrl] = useUrlState();
+  const openedHere = useRef(false);
+  const siteParam = params.get("site");
+  useEffect(() => {
+    if (params.get("prompt")) setUrl({ prompt: null }, { replace: true });
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (siteParam && String(current?.id) !== siteParam) get(`/api/sites/${siteParam}`).then(setCurrent).catch((e) => toast.error(e.message));
+    if (!siteParam && current) { setCurrent(null); setTab("history"); }
+  }, [siteParam]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const showSite = (site) => { setCurrent(site); if (String(site.id) !== new URLSearchParams(window.location.search).get("site")) { openedHere.current = true; setUrl({ site: site.id }); } };
+  const closeSite = () => {
+    if (openedHere.current) { openedHere.current = false; navigate(-1); } else { setCurrent(null); setTab("history"); setUrl({ site: null }, { replace: true }); }
+  };
   const [formKey, setFormKey] = useState(0);
   const [q, setQ] = useState("");
   const [busy, run] = useAction();
@@ -783,8 +797,8 @@ export default function Websites() {
   } : {};
   const starter = { ...BLANK, business: user.workspace?.name || user.company || "", industry: onboarding?.template?.label || "", ...(onboarding?.industry && tpl ? tpl : {}), ...fromBrand };
 
-  const startNew = () => { setCurrent(null); setDetails(false); setFormKey((k) => k + 1); setTab("create"); };
-  const open = (id) => run(async () => { setCurrent(await get(`/api/sites/${id}`)); });
+  const startNew = () => { if (current) setUrl({ site: null }, { replace: true }); setCurrent(null); setDetails(false); setFormKey((k) => k + 1); setTab("create"); };
+  const open = (id) => run(async () => { showSite(await get(`/api/sites/${id}`)); });
   const filtered = sites.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
@@ -795,10 +809,10 @@ export default function Websites() {
       {!isClient && <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${sites.length ? ` (${sites.length})` : ""}` }]} /></div>}
 
       {current && !isClient && <Editor key={current.id} site={current} feedback={feedback} onChange={(s) => { setCurrent(s); reload(); }}
-        onClose={() => { setCurrent(null); setTab("history"); }} />}
+        onClose={closeSite} />}
       {tab === "create" && !isClient && !current && !details && (
         <PageFromPrompt given={givenPrompt.current} onDetails={() => setDetails(true)}
-          onReady={(id) => { reload(); get(`/api/sites/${id}`).then(setCurrent).catch((e) => toast.error(e.message)); }} />
+          onReady={(id) => { reload(); get(`/api/sites/${id}`).then(showSite).catch((e) => toast.error(e.message)); }} />
       )}
       {tab === "create" && !isClient && details && (
         <Card className="mx-auto max-w-4xl">
@@ -806,7 +820,7 @@ export default function Websites() {
           <p className="mb-5 text-sm text-muted">Fill in what you know. Your earlier pages stay safe in History.</p>
           <BriefForm key={`${formKey}-${onboarding ? 1 : 0}-${brandKit ? 1 : 0}`} initial={starter} busy={busy} submitLabel="Generate page" onSubmit={(b) => run(async () => {
             const s = await post("/api/sites", b);
-            setCurrent(s);
+            showSite(s);
             reload();
             if (s.auto_fixed?.length) toast(`Page Fixer tidied ${s.auto_fixed.length} thing${s.auto_fixed.length === 1 ? "" : "s"}`, { description: s.auto_fixed.join(" · ") });
           }, "Page ready. Click anything on it to change it.")} />
@@ -828,7 +842,7 @@ export default function Websites() {
                 <SiteRow key={s.id} s={s} viewOnly={isClient} onOpen={() => open(s.id)} onDelete={() => {
                   if (confirm(`Delete "${s.name}" and all its versions? This removes the live page too.`)) run(async () => {
                     await del(`/api/sites/${s.id}`);
-                    if (current?.id === s.id) setCurrent(null);
+                    if (current?.id === s.id) closeSite();
                     reload();
                   }, "Deleted");
                 }} />

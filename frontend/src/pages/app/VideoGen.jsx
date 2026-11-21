@@ -2,9 +2,11 @@
 // change after that. A typed change makes a new version of the whole clip; C opens the frame-by-frame comment view
 // to point at a moment and a spot. Engine and fine-tuning stay hidden from owners.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useUrlView } from "../../lib/nav";
+import { shareToWhatsApp } from "../../lib/utils";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Download, LayoutGrid, MessageSquarePlus, MoreHorizontal, Plus, SlidersHorizontal, Trash2, Video } from "lucide-react";
+import { Download, Send, LayoutGrid, MessageSquarePlus, MoreHorizontal, Plus, SlidersHorizontal, Trash2, Video } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/shadcn/dropdown-menu";
 import { Tooltip } from "../../components/shadcn/tooltip";
 import { Button, Empty, IconButton, JobProgress, ListSkeleton, Modal, PageHeader, cx } from "../../components/ui";
@@ -33,10 +35,9 @@ export default function VideoGen() {
   const { data: ratings } = useApi("/api/feedback?kind=video", {});
   const admin = !!useAuth().user?.is_admin;
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const given = useRef(params.get("prompt") || "");
-  const [view, setView] = useState(given.current ? "prompt" : null);
-  const [selId, setSelId] = useState(null);
+  const [view, setView, selId, setSelId, setUrl] = useUrlView(given.current ? "prompt" : null);  // in the address (plan S7)
   const [busy, setBusy] = useState(false);
   const [panelOpen, togglePanel] = usePanelOpen();
   const [comparing, setComparing] = useState(null);
@@ -50,7 +51,7 @@ export default function VideoGen() {
     const want = Number(params.get("asset")) || null;
     const start = (want && assets.find((a) => a.id === want)) || assets[0];
     if (start) { setSelId(start.id); setView("work"); } else setView("prompt");
-    if (params.get("prompt") || params.get("asset")) setParams((p) => { const n = new URLSearchParams(p); n.delete("prompt"); n.delete("asset"); return n; }, { replace: true });
+    if (params.get("prompt") || params.get("asset")) setUrl({ prompt: null, asset: null }, { replace: true });
   }, [loading]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Renders take minutes: check the unfinished ones every 6 seconds (also picks up the sound stage).
@@ -197,6 +198,7 @@ export default function VideoGen() {
           <span className="hidden sm:inline-flex"><Rate kind="video" id={sel.id} initial={ratings[sel.id]} /></span>
           <IconButton label="Point and change (C)" onClick={() => setStudio(true)}><MessageSquarePlus className="size-4" /></IconButton>
           <IconButton label="Download" href={sel.url} download target="_blank" rel="noreferrer"><Download className="size-4" /></IconButton>
+          <IconButton label="Send on WhatsApp" onClick={() => shareToWhatsApp(sel.url, "video").then((r) => r === "downloaded" && toast("Saved. Attach it in the WhatsApp tab that just opened.")).catch((e) => toast.error(e.message))}><Send className="size-4" /></IconButton>
         </span>
       )}
       {sel && sel.status !== "queued" && <IconButton label="Delete" danger onClick={() => remove(sel)}><Trash2 className="size-4" /></IconButton>}

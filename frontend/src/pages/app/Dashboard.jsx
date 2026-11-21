@@ -12,6 +12,7 @@ import { LaunchCard } from "../../components/Agents";
 import { RecentWork } from "../../components/RecentWork";
 import { answersFrom } from "../../lib/onboardingAnswers";
 import { LoadErrorBar } from "../../components/LoadError";
+import { AskBox } from "../../components/AskBox";
 
 export const SOURCE_TONE = { website: "pink", meta: "blue", google: "green", linkedin: "cyan", whatsapp: "green", voice: "violet", manual: "slate" };
 
@@ -117,7 +118,7 @@ export default function Dashboard() {
   const isClient = user?.workspace?.role === "client";
   const since = useLastVisit(user.id);
   const { data, reload, error } = useApi(starting || !ob || projectsLoading ? null : `/api/today?since=${encodeURIComponent(since)}`);
-  const sites = useApi(starting ? "/api/sites" : null, []);
+  const sites = useApi("/api/sites", []);
   useLeadEvents(() => { reload(); });
   const [launch, setLaunch] = useState(false);
   useEffect(() => { if (params.get("launch")) { setLaunch(true); params.delete("launch"); setParams(params, { replace: true }); } }, [params, setParams]);
@@ -134,6 +135,12 @@ export default function Dashboard() {
           <h1 className="mt-1 text-[28px] font-semibold leading-tight text-strong">{starting ? `Welcome, ${first}` : `${greet}, ${first}`}</h1>
         </div>
       </div>
+
+      {!isClient && ob && !projectsLoading && (
+        <div className="mb-10">
+          <AskBox hasPage={(sites.data || []).length > 0} waiting={data?.waiting?.count || 0} modules={active?.modules || []} />
+        </div>
+      )}
 
       {!ob && onboarding?.error ? (
         <LoadErrorBar what="your home page" onRetry={onboarding.reload} className="max-w-3xl" />

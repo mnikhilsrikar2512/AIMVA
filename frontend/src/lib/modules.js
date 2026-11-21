@@ -5,6 +5,7 @@ import {
 
 // Single source of truth for the app's modules. The rail keeps only the main jobs (2026-11-08 owner rule:
 // "main options only, no more no less"): Home, Leads, WhatsApp, Pages, Pictures, Videos, Campaigns, Results, Settings.
+// Calls came back on 2026-11-21 (plan S5): call-back is part of the product's edge and was only findable by search.
 // WhatsApp came back to the rail the same day: it is where owners answer leads, so it can't be a search away. The rail follows the journey (make → reach → see);
 // pages left out of the rail (`rail: false`) are still one keystroke away in the Ctrl/Cmd+K palette.
 // `client: true` marks what a view-only client of an agency can see.
@@ -25,7 +26,7 @@ export const NAV = [
     { to: "/app/ads/meta", match: "/app/ads", label: "Campaigns", icon: Megaphone, desc: "Meta, Google and LinkedIn ads", keywords: "ads facebook instagram" },
     { to: "/app/ads/google", label: "Google campaigns", icon: Search, rail: false, keywords: "ads google search" },
     { to: "/app/ads/linkedin", label: "LinkedIn campaigns", icon: Linkedin, rail: false, keywords: "ads linkedin b2b" },
-    { to: "/app/voice", label: "Calls", icon: AudioLines, rail: false, desc: "Your AI call assistant", keywords: "voice agent phone" },
+    { to: "/app/voice", label: "Calls", icon: AudioLines, desc: "Your AI call assistant", keywords: "voice agent phone" },
   ]},
   { group: "See", items: [
     { to: "/app/command", label: "Results", icon: Compass, client: true, desc: "Spend, leads and sales per campaign", keywords: "command center roi" },

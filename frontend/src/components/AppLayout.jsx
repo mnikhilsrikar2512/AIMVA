@@ -1,7 +1,7 @@
-import { Component, createContext, useContext, useEffect, useState } from "react";
-import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
+import { Component, createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { ForYou } from "./ForYou";
-import { Compass, LayoutDashboard, LayoutGrid, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, SquareStack, Users, X } from "lucide-react";
+import { ArrowLeft, Compass, LayoutDashboard, LayoutGrid, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, SquareStack, Users, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "./shadcn/dialog";
 import { Sheet, SheetContent, SheetTitle } from "./shadcn/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./shadcn/dropdown-menu";
@@ -14,6 +14,7 @@ import { Celebrations } from "./Celebrate";
 import { useProjectGuards, useProjects, MODULE_ROUTES } from "../lib/projects";
 import { PageTitleContext, cx } from "./ui";
 import { useApi } from "../lib/hooks";
+import { recordOrigin, useGoToOrigin } from "../lib/nav";
 import { LiveProvider, useLeadEvents, useLive } from "../lib/live";
 
 const OnboardingContext = createContext(null);
@@ -53,34 +54,39 @@ function usePinned() {
   return [pinned, setPinned];
 }
 
-/** A rail entry: icon always, label when the rail is pinned open. Tooltip only when the label is hidden. */
+/**
+ * A rail entry. Open rail: icon and label in a row. Narrow rail: icon with a small word under it (owner decision
+ * 2026-11-21: phones and first-time owners can't rely on hover tooltips). `state.rail` marks a fresh start, so the
+ * header shows no "back to" link after a rail click.
+ */
 function RailLink({ it, expanded, onNavigate, badge }) {
   const { pathname } = useLocation();
   // Active state is worked out here, not through NavLink's className function: the tooltip wrapper merges classes
   // as strings, which turned that function into text and left the marker unpositioned (a cyan line down the rail).
   const isActive = it.match ? pathname.startsWith(it.match) : !!matchPath({ path: it.to, end: !!it.end }, pathname);
   const link = (
-    <Link to={it.to} onClick={onNavigate} aria-label={expanded ? undefined : it.label} aria-current={isActive ? "page" : undefined}
-      className={cx("relative flex h-10 items-center gap-3 rounded-md px-3.5 text-sm font-medium",
+    <Link to={it.to} state={{ rail: true }} onClick={onNavigate} aria-current={isActive ? "page" : undefined}
+      className={cx("relative flex rounded-md font-medium",
+        expanded ? "h-10 items-center gap-3 px-3.5 text-sm" : "flex-col items-center justify-center gap-1 px-0 py-2 text-[12px] leading-none tracking-[-0.01em]",
         isActive ? "bg-white/[0.06] text-bg" : "text-bg/70 hover:bg-white/[0.06] hover:text-bg")}>
       {/* Active: a still 3px cyan bar on the left edge (bright cyan is allowed on the dark rail only). */}
-      {isActive && <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-peach" />}
+      {isActive && <span aria-hidden className={cx("absolute left-0 w-[3px] rounded-r bg-peach", expanded ? "top-2 bottom-2" : "top-3 bottom-3")} />}
       <span className="relative shrink-0">
         <it.icon className={cx("size-[18px]", isActive && "text-brand-on-dark")} />
         {badge > 0 && !expanded && <span className="absolute -right-1 -top-1 size-2 rounded-full bg-accent-on-dark ring-2 ring-strong" aria-hidden />}
       </span>
-      {expanded && <span className="flex-1 truncate">{it.label}</span>}
+      <span className={expanded ? "flex-1 truncate" : "w-full truncate text-center"}>{expanded ? it.label : (it.short || it.label)}</span>
       {badge > 0 && expanded && <span className="min-w-5 rounded-full bg-accent-on-dark px-1.5 text-center text-xs font-bold leading-5 text-strong" aria-label={`${badge} new`}>{badge > 99 ? "99+" : badge}</span>}
       {badge > 0 && !expanded && <span className="sr-only">, {badge} new</span>}
     </Link>
   );
-  return expanded ? link : <Tooltip content={it.label} side="right">{link}</Tooltip>;
+  return link;
 }
 
 function RailButton({ icon: Icon, label, expanded, onClick, pressed }) {
   const btn = (
     <button type="button" onClick={onClick} aria-label={expanded ? undefined : label} aria-pressed={pressed}
-      className="flex h-10 w-full items-center gap-3 rounded-md px-3.5 text-sm font-medium text-bg/70 hover:bg-white/[0.06] hover:text-bg">
+      className={cx("flex h-10 w-full items-center gap-3 rounded-md text-sm font-medium text-bg/70 hover:bg-white/[0.06] hover:text-bg", expanded ? "px-3.5" : "justify-center")}>
       <Icon className="size-[18px] shrink-0" />{expanded && <span className="flex-1 truncate text-left">{label}</span>}
     </button>
   );
@@ -97,8 +103,8 @@ function Sidebar({ onNavigate, expanded = true, pinned, onPin }) {
   const { list, active } = useProjectsContext();
   const groups = railGroups(user, active);
   return (
-    <div className="flex h-full flex-col bg-strong px-2 text-bg [&_:focus-visible]:outline-brand-on-dark">
-      <div className="flex h-14 shrink-0 items-center px-2.5">
+    <div className={cx("flex h-full flex-col bg-strong text-bg [&_:focus-visible]:outline-brand-on-dark", expanded ? "px-2" : "px-1")}>
+      <div className={cx("flex h-14 shrink-0 items-center", expanded ? "px-2.5" : "justify-center")}>
         <Link to="/app" className="flex items-center gap-2.5" aria-label="AIMVA home" onClick={onNavigate}>
           <img src="/logo-on-dark.svg" alt="" className="size-7 shrink-0" />
           {expanded && <span className="font-display text-base font-bold tracking-tight text-bg">AIMVA</span>}
@@ -128,7 +134,7 @@ function Sidebar({ onNavigate, expanded = true, pinned, onPin }) {
 
 function Rail({ pinned, setPinned }) {
   return (
-    <aside className={cx("fixed inset-y-0 left-0 z-40 hidden md:block", pinned ? "w-60" : "w-16")} aria-label="Main navigation">
+    <aside className={cx("fixed inset-y-0 left-0 z-40 hidden md:block", pinned ? "w-60" : "w-20")} aria-label="Main navigation">
       <Sidebar expanded={pinned} pinned={pinned} onPin={() => setPinned(!pinned)} />
     </aside>
   );
@@ -211,7 +217,7 @@ function MobileTabBar({ onMore }) {
   const createActive = create.some((it) => pathname.startsWith(it.match || it.to));
   const tab = "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 pb-1 text-[12px] font-medium leading-none";
   const Item = ({ to, end, icon: Icon, label, badge }) => (
-    <NavLink to={to} end={end} className={({ isActive }) => cx(tab, isActive ? "text-strong" : "text-muted")}>
+    <NavLink to={to} end={end} state={{ rail: true }} className={({ isActive }) => cx(tab, isActive ? "text-strong" : "text-muted")}>
       {({ isActive }) => (<>
         <span className={cx("relative grid h-7 w-12 place-items-center rounded-full", isActive && "bg-lavender")}>
           <Icon className={cx("relative size-[19px]", isActive && "text-brand")} strokeWidth={isActive ? 2.2 : 1.8} />
@@ -246,7 +252,7 @@ function MobileTabBar({ onMore }) {
           <ul className="px-2 pb-3">
             {create.map((it) => (
               <li key={it.to}>
-                <Link to={it.to} onClick={() => setCreating(false)} className="flex items-center gap-3.5 rounded-md px-3 py-2.5 active:bg-ink/[0.05]">
+                <Link to={it.to} state={{ rail: true }} onClick={() => setCreating(false)} className="flex items-center gap-3.5 rounded-md px-3 py-2.5 active:bg-ink/[0.05]">
                   <it.icon className="size-5 shrink-0 text-muted" strokeWidth={1.8} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-medium text-strong">{it.label}</span>
@@ -298,6 +304,51 @@ function sectionTitle(pathname) {
   return hit ? hit.label : pathname === "/app" || pathname === "/app/" ? "Home" : "";
 }
 
+/**
+ * Where you came from and where the scroll was (plan S7, 2026-11-21). Opening another screen from a link (not the
+ * rail) remembers the screen you were on, so the header can offer "← Home". Back restores the list's scroll position;
+ * a new screen starts at the top; a step inside the same screen (a tab, a filter, an open item) keeps the scroll.
+ */
+const SCROLL_KEY = "aimva_scroll";
+function useNavMemory() {
+  const location = useLocation();
+  const navType = useNavigationType();
+  const prev = useRef(null);
+  const prevIdx = useRef(null);
+  const [origin, setOrigin] = useState(null);
+  useLayoutEffect(() => {
+    const el = document.getElementById("app-scroll");
+    const p = prev.current;
+    let saved = {};
+    try { saved = JSON.parse(sessionStorage.getItem(SCROLL_KEY) || "{}"); } catch { /* storage blocked */ }
+    if (p && el) { saved[p.key] = el.scrollTop; try { sessionStorage.setItem(SCROLL_KEY, JSON.stringify(saved)); } catch { /* storage blocked */ } }
+    setOrigin(recordOrigin({ prev: p, prevIdx: prevIdx.current, location, navType, sectionOf: sectionTitle, labelOf: (path) => sectionTitle(path) || "Back" }));
+    if (el && p && p.pathname !== location.pathname) {
+      const to = navType === "POP" ? saved[location.key] || 0 : 0;
+      el.scrollTo({ top: to });
+      if (to) {  // lists load after the screen: keep trying for a moment until they are tall enough
+        let n = 0;
+        const again = () => { if (el.scrollTop < to - 2 && n++ < 20) { el.scrollTo({ top: to }); setTimeout(again, 50); } };
+        setTimeout(again, 50);
+      }
+    }
+    prev.current = location;
+    prevIdx.current = window.history.state?.idx ?? null;
+  }, [location, navType]);
+  return origin;
+}
+
+/** "← Home": back to exactly where you came from, scroll and open item included. Hidden after a rail click. */
+function BackTo({ origin, className }) {
+  const go = useGoToOrigin();
+  if (!origin) return null;
+  return (
+    <button type="button" onClick={() => go(origin)} className={cx("inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-sm font-medium text-muted hover:bg-surface-2 hover:text-strong", className)}>
+      <ArrowLeft className="size-4" /> {origin.label}
+    </button>
+  );
+}
+
 /** "Dr. Rao's Dental / Leads": which business, then which page. The only title on the page (design.md v3 section 4). */
 function HeaderTitle({ title }) {
   const { list, active } = useProjectsContext();
@@ -320,7 +371,8 @@ export default function AppLayout() {
   const onboarding = useApi("/api/onboarding");
   const projects = useProjects();
   const { reload: reloadOnboarding } = onboarding;
-  useEffect(() => { setOpen(false); document.getElementById("app-scroll")?.scrollTo({ top: 0 }); }, [location.pathname]);
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+  const origin = useNavMemory();
   // While inside the app the browser window itself never scrolls (no rubber-band, no sideways drift).
   useEffect(() => {
     document.documentElement.classList.add("app-locked");
@@ -328,7 +380,7 @@ export default function AppLayout() {
   }, []);
   // Re-check progress whenever the user moves between modules.
   useEffect(() => { reloadOnboarding(); }, [location.pathname, reloadOnboarding]);
-  const railW = focus ? "" : pinned ? "md:pl-60" : "md:pl-16";
+  const railW = focus ? "" : pinned ? "md:pl-60" : "md:pl-20";
   const [pageTitle, setPageTitle] = useState(null);
 
   return (
@@ -359,7 +411,7 @@ export default function AppLayout() {
       <div className={cx("relative flex min-w-0 flex-1 flex-col", railW)}>
         {/* Phones: slim top bar (logo, search, bell); navigation lives in the bottom tab bar. */}
         <header className="z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-bg px-4 md:hidden">
-          <img src="/logo.svg" alt="" className="size-7 shrink-0" />
+          {origin ? <BackTo origin={origin} className="-ml-1.5" /> : <img src="/logo.svg" alt="" className="size-7 shrink-0" />}
           <span className="min-w-0 truncate text-base font-semibold text-strong">{pageTitle || sectionTitle(location.pathname)}</span>
           <button type="button" className="btn-subtle btn-sm ml-auto px-2" aria-label="Search" title="Search"
             onClick={() => window.dispatchEvent(new CustomEvent("aimva:palette"))}>
@@ -370,10 +422,11 @@ export default function AppLayout() {
         {/* Desktop: 56px header, no border. Project name left; search, bell and account right. */}
         {!focus && (
           <header className="z-20 hidden h-14 shrink-0 items-center gap-2 border-b border-line px-8 md:flex">
+            <BackTo origin={origin} className="-ml-2 mr-1" />
             <HeaderTitle title={pageTitle} />
             <div className="ml-auto flex items-center gap-1">
-              <Tooltip content="Search (Ctrl/Cmd+K)">
-                <button type="button" className="grid size-9 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-strong" aria-label="Search"
+              <Tooltip content="Ask or search (Ctrl/Cmd+K)">
+                <button type="button" className="grid size-9 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-strong" aria-label="Ask or search"
                   onClick={() => window.dispatchEvent(new CustomEvent("aimva:palette"))}><Search className="size-[18px]" /></button>
               </Tooltip>
               <ForYou />

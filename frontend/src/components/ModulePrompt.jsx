@@ -5,6 +5,13 @@ import { ArrowRight } from "lucide-react";
 import { get } from "../lib/api";
 import { Button, cx } from "./ui";
 
+const AUTO_KEY = "aimva_autorun";
+/** Home calls this before opening a module with ?prompt=: that module then runs the sentence without a second press. */
+export function markAutoRun(prompt) { try { sessionStorage.setItem(AUTO_KEY, prompt); } catch { /* storage blocked */ } }
+function takeAutoRun() {
+  try { const v = sessionStorage.getItem(AUTO_KEY); sessionStorage.removeItem(AUTO_KEY); return v; } catch { return null; }
+}
+
 /** The pre-written prompt for a module key, unless the page was opened with one (?prompt= from Home or the reveal). */
 export function useModulePrompt(key, given) {
   const [state, setState] = useState({ prompt: given || "", line: "", loading: !given });
@@ -30,6 +37,11 @@ export function ModulePrompt({ moduleKey, given, outcome, submitLabel, onSubmit,
     if (el && !loading) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
   }, [loading]);
   const submit = (e) => { e?.preventDefault(); if (prompt.trim() && !busy && !disabled) onSubmit(prompt.trim()); };
+  // Asked from Home: run it straight away instead of asking twice (plan S3). Only the exact sentence Home sent, once.
+  useEffect(() => {
+    if (loading || !given || disabled || busy || takeAutoRun() !== given) return;
+    onSubmit(given.trim());
+  }, [loading]);  // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <form onSubmit={submit} className={cx("max-w-3xl", className)}>
       <div className="rounded-[10px] bg-surface ring-1 ring-line-strong focus-within:ring-2 focus-within:ring-brand/50">
