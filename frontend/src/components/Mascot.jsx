@@ -3,7 +3,7 @@
 // lines of SVG instead of another image. Rules kept from the plan: small and calm by default, motion only to say
 // something (arrive, react, celebrate), still for people who ask their phone for less motion, never cheeky about money,
 // errors or customers waiting.
-import { MotionConfig, motion, useAnimationControls } from "framer-motion";
+import { MotionConfig, motion, useAnimationControls, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import cx from "clsx";
 
@@ -31,12 +31,33 @@ const FACES = {
   ),
   pointing: () => oval(18, 26, 12, 6),  // looking right, at the words and the button beside him
   sleepy: () => arc("M-20 4 Q0 14 20 4"),
+  shy: () => arc("M-22 2 Q0 16 22 2"),  // eyes politely shut while you type a password
 };
 // Real poses (owner's Gemini art, cut out 2026-11-21), used up to 200px wide where the art stays sharp. Above that, and
 // for moods without a pose, he is the front body with eyes drawn on the visor (which can also follow the pointer).
 const POSES = { hello: "wave", happy: "happy", cheer: "cheer", thinking: "thinking", sorry: "sorry", surprised: "surprised",
-  wink: "wink", cheeky: "giggle", pointing: "point", confused: "confused", sit: "sit", peek: "peek" };
+  wink: "wink", cheeky: "giggle", pointing: "point", confused: "confused", sit: "sit", peek: "peek",
+  idle: "idle", calm: "calm", busy: "dash", focused: "focused", data: "hologram" };
+// Poses he can glance into for a moment while idle (a wink, a smile), then back.
+const GLANCE = { hello: "wink", happy: "wink", idle: "happy", calm: "wink", pointing: "happy" };
 const BLINKS = new Set(["hello", "thinking", "surprised", "pointing", "cheeky"]);
+
+/** Where the caret is on screen, near enough: the end of the typed text (or of the last line in a box). */
+let measure;
+function caretPoint(el) {
+  const r = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  measure = measure || document.createElement("canvas").getContext("2d");
+  measure.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  let pos = el.value.length;
+  try { if (typeof el.selectionStart === "number") pos = el.selectionStart; } catch { /* email inputs */ }
+  const before = el.value.slice(0, pos);
+  const lines = before.split("\n");
+  const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4;
+  const x = r.left + parseFloat(cs.paddingLeft) + Math.min(measure.measureText(lines[lines.length - 1]).width, r.width - 20);
+  const y = el.tagName === "TEXTAREA" ? Math.min(r.bottom - 8, r.top + parseFloat(cs.paddingTop) + (lines.length - 0.5) * lh) : r.top + r.height / 2;
+  return { x, y };
+}
 
 /** The face on its own, for places too small for the body (a 24px badge, a toast). */
 function Face({ mood, look = [0, 0], blink }) {
@@ -56,14 +77,18 @@ function Face({ mood, look = [0, 0], blink }) {
 /**
  * <Mascot mood="hello" size={96} />
  *  mood     hello | happy | cheer | thinking | sorry | surprised | wink | cheeky | pointing | sleepy | confused | sit | peek
+ *  alive    floats gently and fidgets now and then (default on; still for reduced motion)
  *  face     true = always the drawn face (the landing hero, where he is too big for the pose art)
  *  size     width in px; changing it makes him grow or shrink (spring), which is how he "turns big or small"
  *  arrive   "hop" jumps in from below and lands with a squash (use when he lands on a card), "pop" scales in
- *  watch    eyes follow the pointer around the page (Home only; it's the mischievous bit)
+ *  watch    eyes follow the pointer, and your typing anywhere on the page; eyes shut for passwords
  *  say      a short line in a bubble; onTap makes him hop and lets the caller change mood or line
  */
-export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false, say = null, sayAlign = "left", onTap, className, label, face = false }) {
-  const pose = !face && size <= 200 ? POSES[mood] : null;
+export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false, say = null, sayAlign = "left", onTap, className, label, face = false, alive = true }) {
+  const reduce = useReducedMotion();
+  const [glance, setGlance] = useState(null);
+  const [typingNow, setTypingNow] = useState(false);
+  const pose = !face && !typingNow && size <= 200 ? (glance || POSES[mood]) : null;
   const ref = useRef(null);
   const body = useAnimationControls();
   const [blink, setBlink] = useState(false);
@@ -78,19 +103,52 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
     return () => clearTimeout(t);
   }, [mood]);
 
-  // Eyes follow the pointer, a few pixels at most.
+  // Watching with you (owner 2026-11-21): the eyes follow the pointer, and while you type anywhere on the page they
+  // follow your words as they appear. While you type a password he shuts his eyes and turns away a little.
+  const [typing, setTyping] = useState(null);  // null | "text" | "secret"
   useEffect(() => {
     if (!watch) return undefined;
-    const move = (e) => {
+    const aim = (x, y) => {
       const r = ref.current?.getBoundingClientRect();
       if (!r) return;
-      const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height * 0.33);
-      const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 400);
-      setLook([(dx / d) * 16 * k, (dy / d) * 12 * k]);
+      const dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height * 0.33);
+      const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 300);
+      setLook([(dx / d) * 18 * k, (dy / d) * 14 * k]);
+    };
+    const move = (e) => { if (!typingRef.current) aim(e.clientX, e.clientY); };
+    const typingRef = { current: null };
+    const follow = () => {
+      const el = document.activeElement;
+      const field = el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !["checkbox", "radio", "button", "submit", "range", "file"].includes(el.type)));
+      if (!field) { typingRef.current = null; setTyping(null); return; }
+      const secret = el.type === "password";
+      typingRef.current = secret ? "secret" : "text";
+      setTyping(typingRef.current);
+      if (secret) return;
+      const p = caretPoint(el);
+      aim(p.x, p.y);
     };
     window.addEventListener("pointermove", move);
-    return () => window.removeEventListener("pointermove", move);
+    document.addEventListener("focusin", follow);
+    const out = () => setTimeout(follow, 0);
+    document.addEventListener("focusout", out);
+    document.addEventListener("input", follow);
+    document.addEventListener("keyup", follow);
+    document.addEventListener("click", follow);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      document.removeEventListener("focusin", follow);
+      document.removeEventListener("focusout", out);
+      document.removeEventListener("input", follow);
+      document.removeEventListener("keyup", follow);
+      document.removeEventListener("click", follow);
+    };
   }, [watch]);
+  useEffect(() => { setTypingNow(!!typing); }, [typing]);
+  useEffect(() => {
+    if (typing === "secret") body.start({ rotate: -8, x: -4, transition: { type: "spring", stiffness: 200, damping: 16 } });
+    else body.start({ rotate: 0, x: 0, transition: { type: "spring", stiffness: 200, damping: 16 } });
+  }, [typing, body]);
 
   // Arrival, and a celebration bounce whenever the mood turns to cheer.
   useEffect(() => {
@@ -101,7 +159,27 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
     if (mood === "cheer") body.start({ y: [0, -28, 0, -12, 0], scaleY: [1, 1.03, 0.9, 1, 1], transition: { duration: 0.9 } });
     if (mood === "sorry") body.start({ rotate: [0, -4, 0], y: [0, 4, 0], transition: { duration: 0.8 } });
     if (mood === "surprised") body.start({ y: [0, -10, 0], transition: { duration: 0.35 } });
+    if (mood === "busy") body.start({ x: [0, 3, -1, 2, 0], transition: { duration: 0.6, repeat: Infinity } });
+    else body.start({ x: 0 });
   }, [mood, body]);
+
+  // Alive: every 7-13 s a small fidget (a hop, a head tilt, a glance), never while someone asked for less motion.
+  useEffect(() => {
+    if (!alive || reduce) return undefined;
+    let t, g;
+    const next = () => {
+      t = setTimeout(() => {
+        const r = Math.random();
+        if (r < 0.3) body.start({ y: [0, -14, 0], scaleY: [1, 1.03, 0.94, 1], transition: { duration: 0.55 } });
+        else if (r < 0.6) body.start({ rotate: [0, -7, 3, 0], transition: { duration: 0.9, ease: "easeInOut" } });
+        else if (GLANCE[mood] && !face) { setGlance(POSES[GLANCE[mood]]); g = setTimeout(() => setGlance(null), 900); }
+        else { setBlink(true); setTimeout(() => setBlink(false), 120); }
+        next();
+      }, 7000 + Math.random() * 6000);
+    };
+    next();
+    return () => { clearTimeout(t); clearTimeout(g); };
+  }, [alive, reduce, mood, face, body]);
 
   const tap = () => {
     body.start({ y: [0, -30, 0], scaleY: [1, 1.04, 0.9, 1], transition: { duration: 0.5 } });
@@ -120,6 +198,8 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
             {say}
           </motion.p>
         )}
+        <motion.div animate={alive ? { y: [0, -5, 0], rotate: [0, 1.2, 0, -1.2, 0], scale: [1, 1.012, 1] } : undefined}
+          transition={{ duration: 3.6, repeat: Infinity, ease: "easeInOut" }} style={{ originY: 0.9 }}>
         <Tag ref={ref} type={onTap ? "button" : undefined} onClick={onTap ? tap : undefined} animate={body}
           aria-label={onTap ? (label || "AIMVA") : undefined} aria-hidden={onTap ? undefined : true}
           style={{ originY: 1 }} className={cx("block w-full", onTap && "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-2xl")}>
@@ -128,10 +208,11 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
           ) : (
             <svg viewBox={`0 0 ${W} ${H}`} className="block w-full overflow-visible">
               <image href="/mascot/body.webp" width={W} height={H} />
-              <Face mood={FACES[mood] ? mood : "hello"} look={look} blink={blink} />
+              <Face mood={typing === "secret" ? "shy" : typing ? "hello" : FACES[mood] ? mood : "hello"} look={typing === "secret" ? [0, 6] : look} blink={blink} />
             </svg>
           )}
         </Tag>
+        </motion.div>
       </motion.div>
     </MotionConfig>
   );

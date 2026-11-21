@@ -9,6 +9,7 @@ import { Button, Field, Notice } from "../components/ui";
 import { post } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { rememberSignupHint } from "../lib/signupHint";
+import { Mascot } from "../components/Mascot";
 
 /**
  * Sign-in, sign-up and verify keep their flow and take the new colours (design.md v3). Form on white on the left;
@@ -20,6 +21,8 @@ function Shell({ title, subtitle, children, footer }) {
       <div className="flex flex-col px-4 py-8 sm:px-10">
         <Logo />
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
+          {/* He watches you type, and shuts his eyes for the password (owner 2026-11-21). */}
+          <Mascot face watch mood="hello" size={112} arrive="pop" className="-ml-3 mb-3" />
           <h1 className="text-2xl font-semibold text-strong">{title}</h1>
           {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
           <div className="mt-7">{children}</div>

@@ -37,6 +37,14 @@ export function ModulePrompt({ moduleKey, given, outcome, submitLabel, onSubmit,
     const el = ref.current;
     if (el && !loading) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
   }, [loading]);
+  // When something finishes making, he is pleased for a moment (owner: "react when the result is shown").
+  const [done, setDone] = useState(false);
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy) { setDone(true); const t = setTimeout(() => setDone(false), 3200); wasBusy.current = false; return () => clearTimeout(t); }
+    wasBusy.current = !!busy;
+    return undefined;
+  }, [busy]);
   const submit = (e) => { e?.preventDefault(); if (prompt.trim() && !busy && !disabled) onSubmit(prompt.trim()); };
   // Asked from Home: run it straight away instead of asking twice (plan S3). Only the exact sentence Home sent, once.
   useEffect(() => {
@@ -51,7 +59,9 @@ export function ModulePrompt({ moduleKey, given, outcome, submitLabel, onSubmit,
           placeholder={loading ? "" : "Say what you want, the way you'd tell a friend."}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); }} />
         <div className="flex items-center justify-end gap-3 px-3 pb-3">
-          {busy && <span className="mr-auto flex items-center gap-2 text-sm text-muted" role="status"><Mascot mood="thinking" size={40} arrive="pop" /> On it…</span>}
+          {busy ? <span className="mr-auto flex items-center gap-2 text-sm text-muted" role="status"><Mascot mood="busy" size={44} arrive="pop" /> On it…</span>
+            : done ? <span className="mr-auto flex items-center gap-2 text-sm text-muted" role="status"><Mascot mood="cheer" size={44} arrive="hop" /> Here it is.</span>
+            : <span className="mr-auto"><Mascot watch mood="idle" size={40} /></span>}
           <Button type="submit" variant="accent" busy={busy} disabled={!prompt.trim() || loading || disabled}>{submitLabel} <ArrowRight className="size-4" /></Button>
         </div>
       </div>
