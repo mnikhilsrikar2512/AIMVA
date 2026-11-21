@@ -72,6 +72,14 @@ def build(db: Session, ws: User) -> dict:
     if isinstance(langs, str):
         langs = [langs]
     colors = list(kit.colors or []) if kit and kit.colors else [c for c in (brief.get("primary"), brief.get("accent")) if c]
+    # No kit and no page yet: the colours and fonts proven for this kind of business, the same default new pages use.
+    fit = None
+    if not colors or not brief.get("font_heading"):
+        from .design_intel import match_design
+        fit = match_design(ws.industry or profile.get("industry") or "", ws.company or profile.get("name") or "",
+                           profile.get("offer") or answers.get("idea") or "")
+    if not colors and fit:
+        colors = [c for c in (fit.get("primary"), fit.get("accent")) if c]
     found = {
         "name": (kit.name if kit and kit.name else "") or ws.company or profile.get("name") or "",
         "tagline": (kit.tagline if kit else "") or brief.get("subheadline", ""),
@@ -83,8 +91,8 @@ def build(db: Session, ws: User) -> dict:
         "voice": (kit.voice if kit else "") or "friendly",
         "voice_notes": (kit.voice_notes if kit else "") or "",
         "colors": colors,
-        "font_heading": brief.get("font_heading", ""),
-        "font_body": brief.get("font_body", ""),
+        "font_heading": brief.get("font_heading") or (fit or {}).get("font_heading", ""),
+        "font_body": brief.get("font_body") or (fit or {}).get("font_body", ""),
         "style": list(kit.style or []) if kit else [],
         "say": [],
         "never_say": [],
@@ -100,6 +108,8 @@ def build(db: Session, ws: User) -> dict:
         if k in FIELDS:
             book[k] = v
     book["edited"] = sorted(k for k in edits if k in FIELDS)
+    # Where the colours came from: the page score only holds a page to colours the owner chose (kit or edit).
+    book["colors_chosen"] = bool("colors" in edits or (kit and kit.colors))
     filled = sum(bool(book[k]) for k in FIELDS)
     book["complete"] = round(filled / len(FIELDS), 2)
     return book

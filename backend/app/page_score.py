@@ -78,7 +78,7 @@ def _own_checks(html: str, brief: dict, book: dict) -> list:
     if name:
         out.append(("brand", "name", name.lower() in low, "warning", "Your business name is on the page",
                     "Your business name doesn't appear on the page."))
-    colors = [c.lower() for c in (book.get("colors") or []) if c]
+    colors = [c.lower() for c in (book.get("colors") or []) if c] if book.get("colors_chosen", True) else []
     if colors:
         css = (html or "").lower()
         out.append(("brand", "colors", any(c in css for c in colors[:2]), "warning", "Uses your brand colours",

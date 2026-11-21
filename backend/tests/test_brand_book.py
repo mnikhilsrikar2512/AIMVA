@@ -56,3 +56,16 @@ def test_effective_kit_none_without_brand(auth_client):
     with SessionLocal() as db:
         u = db.query(User).filter_by(email="owner@example.com").first()
         assert brand_book.effective_kit(db, u) is None
+
+
+def test_no_kit_no_page_gets_colours_for_the_kind_of_business(auth_client, db):
+    from app import brand_book
+    from app.design_intel import match_design
+    from app.models import User
+    u = db.query(User).filter_by(email="owner@example.com").one()
+    u.industry = "dental clinic"
+    db.commit()
+    m = match_design("dental clinic")
+    book = auth_client.get("/api/brand/book").json()
+    assert book["colors"][0].lower() == m["primary"].lower() and book["font_heading"] == m["font_heading"]
+    assert brand_book.effective_kit(db, u).colors  # pictures pick them up too
