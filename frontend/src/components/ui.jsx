@@ -24,7 +24,7 @@ export const Button = forwardRef(function Button({ variant = "primary", size, bu
   const [self, setSelf] = useState(false);
   const [slow, setSlow] = useState(false);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const working = busy || self;
   useEffect(() => {
     if (!working) { setSlow(false); return; }

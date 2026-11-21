@@ -393,7 +393,7 @@ def apply_design_match(b: Brief) -> Optional[dict]:
         return None
     m = match_design(b.industry, b.business, b.offer)
     b.design_match = m["category"] if m else ""
-    if b.font == "auto":
+    if b.font == "auto" and not b.font_heading:  # fonts from the brand book (or a past match) stay put
         b.font_heading, b.font_body = (m["font_heading"], m["font_body"]) if m else ("", "")
     if m and b.match_colors:
         b.primary, b.accent = m["primary"], m["accent"]

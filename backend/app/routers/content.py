@@ -23,7 +23,8 @@ from ..config import settings
 from ..db import get_db
 from ..prompt_sense import read_prompt
 from .. import providers as P
-from ..brand import BadImage, brand_prompt, composite_logo, data_uri, fetch_image, get_kit, primary_logo, save_generated, save_media
+from ..brand import BadImage, brand_prompt, composite_logo, data_uri, fetch_image, primary_logo, save_generated, save_media
+from ..brand_book import effective_kit
 from ..models import Asset, BrandAsset, User
 from ..security import current_user, rate_limit
 from ..services import integration_secret
@@ -284,7 +285,7 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
     if body.size_auto and sense["format"] in SIZES and not (body.width and body.height):
         body = body.model_copy(update={"size": sense["format"]})
     w, h = (_snap(body.width), _snap(body.height)) if body.width and body.height else SIZES.get(body.size, SIZES["1:1"])
-    kit = get_kit(db, user.id) if body.use_brand else None
+    kit = effective_kit(db, user) if body.use_brand else None
     logo = primary_logo(db, user.id) if body.add_logo else None
     if body.add_logo and not logo:
         raise HTTPException(400, "Upload a logo in Brand Kit first, or turn off “Add my logo”.")
@@ -465,7 +466,7 @@ def _where(x: float, y: float) -> str:
 
 
 def _video_prompt(db: Session, user: User, body: VideoIn) -> str:
-    prompt = brand_prompt(body.prompt, get_kit(db, user.id) if body.use_brand else None)
+    prompt = brand_prompt(body.prompt, effective_kit(db, user) if body.use_brand else None)
     prompt = _styled(prompt, body.style)
     if body.camera:
         prompt += f", {CAMERA_PRESETS[body.camera]}"
@@ -705,7 +706,7 @@ class CopyIn(BaseModel):
 def ad_copy(body: CopyIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Headline/primary text variants for ads, in the Brand Kit's voice. Gemini when configured, templates otherwise."""
     from ..brand import VOICE_HINT
-    kit = get_kit(db, user.id)
+    kit = effective_kit(db, user)
     tone = VOICE_HINT.get(kit.voice, body.tone) if kit else body.tone
     if kit and kit.voice_notes:
         tone += f" ({kit.voice_notes[:200]})"
@@ -763,7 +764,7 @@ def enhance_prompt(body: EnhanceIn, user: User = Depends(current_user), db: Sess
     """Turn a short idea into a detailed, brand-aware prompt the user can read and edit before generating."""
     from ..quality import PLAYBOOKS, match_playbook
     rate_limit(f"enhance:{user.id}", 30, 300)
-    kit = get_kit(db, user.id) if body.use_brand else None
+    kit = effective_kit(db, user) if body.use_brand else None
     hint = PLAYBOOKS[match_playbook(fallback=user.industry)]["image_hint"]
     write = writer(db, user.id, agent="prompt_artist")
     out, source = None, "rules"
@@ -830,7 +831,7 @@ def make_adset(asset_id: int, body: AdSetIn, user: User = Depends(current_user),
     logo = primary_logo(db, user.id) if body.add_logo else None
     if body.add_logo and not logo:
         raise HTTPException(400, "Upload a logo in Brand Kit first, or turn off “Add my logo”.")
-    kit = get_kit(db, user.id)
+    kit = effective_kit(db, user)
     accent = body.accent or (kit.colors[0] if kit and kit.colors else "#6d5dfc")
     data = _asset_bytes(src)
     batch = uuid.uuid4().hex[:12]

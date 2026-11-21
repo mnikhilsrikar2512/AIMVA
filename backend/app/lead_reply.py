@@ -456,6 +456,8 @@ def draft(db: Session, user: User, lead: Lead, intent: str = "auto") -> dict:
               "name. Never invent prices, dates, addresses, discounts or promises that are not given below. "
               f"Write in {language_instruction(language)}.")
     brief = owner_brief(db, user)
+    from .brand_book import build, copy_rules
+    system += " " + copy_rules(build(db, user))
     prompt = "\n".join(filter(None, [
         f"Business: {business or 'our business'}" + (f" ({user.industry})" if getattr(user, "industry", "") else ""),
         f"The business owner's instructions for replies (follow them; facts here may be used): {brief}" if brief else "",

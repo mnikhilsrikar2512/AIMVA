@@ -4,6 +4,7 @@ import { Check, ImagePlus, Palette, Plus, Sparkles, Star, Trash2, UploadCloud, X
 import { toast } from "sonner";
 import { Button, Card, Field, PageHeader, Spinner, cx } from "../../components/ui";
 import { LoadError } from "../../components/LoadError";
+import { BrandBook } from "../../components/BrandBook";
 import { api, del, post, put } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 
@@ -91,6 +92,7 @@ export default function Brand() {
   const { data: loaded, loading, error, reload } = useApi("/api/brand");
   const [kit, setKit] = useState(null);
   const [saved, setSaved] = useState(null);
+  const [bookKey, setBookKey] = useState(0);
   const [suggested, setSuggested] = useState([]);
   const [styleText, setStyleText] = useState("");
   const [uploading, setUploading] = useState("");
@@ -108,7 +110,7 @@ export default function Brand() {
     setSaving(true);
     try {
       const k = await put("/api/brand", Object.fromEntries(FIELDS.map((f) => [f, kit[f]])));
-      setKit(k); setSaved(k);
+      setKit(k); setSaved(k); setBookKey((n) => n + 1);
       toast.success("Brand Kit saved. It will be used in your next generations.");
     } catch (e) {
       toast.error(e.message);
@@ -266,6 +268,8 @@ export default function Brand() {
 
         <div className="lg:sticky lg:top-8 lg:self-start"><Preview kit={kit} /></div>
       </div>
+
+      <BrandBook refreshKey={bookKey} />
 
       {dirty && (
         <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-4 md:bottom-5 lg:pl-64">
