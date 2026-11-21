@@ -4,10 +4,10 @@ import { useInView } from "framer-motion";
 import { MotionConfig, motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowRight, AudioLines, BarChart3, Check, ChevronDown, Globe, Image, Megaphone, MessageCircle, Users } from "lucide-react";
-import { FinalCta, Heading, MarketingLayout, cx, signupHref, useSeo } from "../components/marketing/Site";
+import { Heading, MarketingLayout, cx, signupHref, useSeo } from "../components/marketing/Site";
 import { USE_CASES } from "../components/marketing/useCases";
 import { useAuth } from "../lib/auth";
-import MascotHero, { Story } from "../components/marketing/MascotHero";
+import MascotHero, { Finale, Story } from "../components/marketing/MascotHero";
 import { Mascot } from "../components/Mascot";
 import ReplyScene from "../components/marketing/ReplyScene";
 
@@ -175,7 +175,7 @@ export default function Landing() {
           </div>
         </section>
 
-        <FinalCta from="home" />
+        <Finale user={user} />
       </MarketingLayout>
     </MotionConfig>
   );

@@ -5,7 +5,7 @@
 // different drawing. Rules from the plan: calm by default, motion only to say something, still for reduced motion,
 // never cheeky about money, errors or customers waiting.
 import { AnimatePresence, MotionConfig, motion, useAnimationControls, useReducedMotion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import cx from "clsx";
 
 // The drawing space (owner's art, upscaled 4x so he stays sharp up to about 600px wide). BOX is the part his body
@@ -115,17 +115,46 @@ function Face({ face, look = [0, 0], blink }) {
   const draw = FACES[face] || FACES.hello;
   return (
     <g style={{ filter: `drop-shadow(0 0 8px ${GLOW}aa)` }}>
+      {/* the eyes light up the visor glass around them */}
+      <ellipse cx={529} cy={358} rx={125} ry={62} fill={GLOW} opacity={0.1} style={{ filter: "blur(18px)" }} />
       {EYES.map(([x, y], i) => (
         <motion.g key={i} initial={false} animate={{ x: x + look[0] * LOOK, y: y + look[1] * LOOK }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
           <motion.g initial={false} animate={{ scaleX: EYE_SCALE, scaleY: blink ? 0.08 : EYE_SCALE }} transition={{ duration: 0.08 }}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.g key={face} initial={{ scaleY: 0.1 }} animate={{ scaleY: 1 }} exit={{ scaleY: 0.1 }} transition={{ duration: 0.09 }}>
                 {draw(i === 0 ? -1 : 1)}
+                {/* a hotter core, so the eyes read as light, not paint */}
+                <g transform="scale(0.55) translate(-3 -4)" style={{ filter: "brightness(1.45) saturate(0.6)" }} opacity={0.9}>{draw(i === 0 ? -1 : 1)}</g>
               </motion.g>
             </AnimatePresence>
           </motion.g>
         </motion.g>
       ))}
+    </g>
+  );
+}
+
+/** His marigold light ring, drawn (not painted) so it stays smooth at any size. It breathes slowly, glows brighter
+ *  while he works, and flares when he cheers. */
+const MARIGOLD = "#F2A33A";
+function Ring({ busy, cheer }) {
+  const id = useId().replace(/:/g, "");
+  return (
+    <g aria-hidden>
+      <defs>
+        <linearGradient id={`rg${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#FBE3BF" />
+          <stop offset="0.55" stopColor="#F3C083" />
+          <stop offset="1" stopColor="#D9934A" />
+        </linearGradient>
+        <filter id={`rb${id}`} x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="18" /></filter>
+      </defs>
+      {/* light thrown on the floor below him */}
+      <motion.ellipse cx={526} cy={815} rx={175} ry={28} fill={MARIGOLD} filter={`url(#rb${id})`}
+        animate={{ opacity: cheer ? [0.35, 0.8, 0.35] : busy ? [0.3, 0.55, 0.3] : [0.18, 0.3, 0.18] }}
+        transition={{ duration: busy ? 1.2 : 3.6, repeat: Infinity, ease: "easeInOut" }} />
+      <ellipse cx={526} cy={782} rx={166} ry={39} fill="none" stroke={`url(#rg${id})`} strokeWidth={24} />
+      <ellipse cx={526} cy={778} rx={166} ry={38} fill="none" stroke="#FFF6E6" strokeOpacity={0.55} strokeWidth={4} />
     </g>
   );
 }
@@ -325,6 +354,7 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
             <span className="relative block" style={{ aspectRatio: `${BOX.w} / ${BOX.h}` }}>
               <svg viewBox={`0 0 ${W} ${H}`} className="absolute block overflow-visible"
                 style={{ left: `${(-BOX.x / BOX.w) * 100}%`, top: `${(-BOX.y / BOX.h) * 100}%`, width: `${(W / BOX.w) * 100}%` }}>
+                <Ring busy={shown === "busy"} cheer={shown === "cheer"} />
                 <image href="/mascot/body.webp" width={W} height={H} />
                 <Face face={face} look={typing === "secret" ? [0, 6] : shown === "busy" && !watch ? [-4, 12] : look} blink={blink} />
                 <AnimatePresence>{shown === "busy" && <Workbench key="bench" />}</AnimatePresence>
