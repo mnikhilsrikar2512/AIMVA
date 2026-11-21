@@ -321,7 +321,9 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
     setTab(t);
     if (window.matchMedia("(min-width: 1024px)").matches) setPanelOpen(true); else setSheet(true);
   };
-  useImperativeHandle(ref, () => ({ flush: () => flushRef.current(), dirty: () => dirtyN.current !== savedN.current, showPanel }), []);
+  useImperativeHandle(ref, () => ({ flush: () => flushRef.current(), dirty: () => dirtyN.current !== savedN.current, showPanel,
+    // A suggestion fills the box for the whole page; the owner still reads it and presses Enter.
+    suggest: (t) => { send({ type: "clear-target" }); setAsk(t); setSheet(false); setTimeout(() => askBox.current?.focus(), 0); } }), []);
 
   useEffect(() => {
     const onMessage = (e) => {

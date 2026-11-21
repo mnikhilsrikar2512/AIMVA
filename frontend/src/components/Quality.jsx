@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Globe2, Lightbulb, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, Globe2, Lightbulb, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Spinner, cx } from "./ui";
 import { get, post } from "../lib/api";
@@ -144,7 +144,59 @@ function ScoreParts({ score }) {
 }
 
 /** The automatic quality pass on a generated page: what passed, and the few things worth a human look. */
-export function ReadinessPanel({ siteId, version, onFixed, inPanel }) {
+// Ready-to-send asks for the page editor's box. The ones for what this page is missing come first, so each tap moves the
+// score; then a few that make most enquiry pages better. Nothing here asks the writer to invent reviews or numbers.
+const FIX_PROMPTS = {
+  offer_top: "Put my offer in the headline at the top",
+  h1_length: "Make the main headline shorter, under 10 words",
+  headline: "Rewrite the headline so it says what I offer and for whom",
+  cta: "Add one clear button that says what happens next",
+  cta_top: "Add the main button to the first screen, next to the headline",
+  cta_twice: "Add the main button again lower down, after the benefits",
+  phone: "Add a tap-to-call phone button at the top",
+  contact: "Add a tap-to-call phone button at the top",
+  name: "Show my business name clearly at the top",
+  placeholders: "Replace any placeholder text with real details from my brief",
+  claims: "Remove numbers and claims I never gave you",
+  testimonials: "Remove the customer reviews I never gave you",
+  risky: "Tone down promises that sound too good to be true",
+  small_text: "Make the small text bigger and easier to read on phones",
+};
+const IDEAS = [
+  [/how it works|step 1|3 steps|three steps/i, "Add a 3-step 'how it works' section"],
+  [/faq|frequently asked|questions/i, "Add 4 short questions customers ask, with answers"],
+  [/timings|opening hours|open (?:mon|daily|every)/i, "Add our timings and how to reach us"],
+  [/wa\.me|whatsapp/i, "Add a WhatsApp chat button"],
+  [null, "Keep a call-back button stuck to the bottom on phones"],
+  [null, "Make the page shorter: keep only what helps someone enquire"],
+];
+
+function Suggestions({ failed, html, onSuggest }) {
+  const fixes = [...new Set(failed.map((c) => FIX_PROMPTS[c.key]).filter(Boolean))];
+  const ideas = IDEAS.filter(([has]) => !has || !has.test(html || "")).map(([, t]) => t);
+  const list = [...fixes, ...ideas.filter((t) => !fixes.includes(t))].slice(0, 5);
+  if (!list.length) return null;
+  return (
+    <div className="mt-5 px-1">
+      <h3 className="text-sm font-semibold text-strong">Ideas to make it better</h3>
+      <p className="mt-0.5 text-xs text-muted">Tap one to put it in the box below. Change it if you like, then press Enter.</p>
+      <ul className="mt-3 space-y-1.5">
+        {list.map((t, i) => (
+          <li key={t}>
+            <button type="button" onClick={() => onSuggest(t)}
+              className="group flex w-full items-start gap-2.5 rounded-xl bg-surface-2/60 px-3 py-2.5 text-left text-sm text-ink transition hover:bg-lavender">
+              <Sparkles className={cx("mt-0.5 size-4 shrink-0", i < fixes.length ? "text-warm" : "text-brand")} />
+              <span className="min-w-0 flex-1">{t}{i < fixes.length && <span className="block text-xs text-muted">Raises your score</span>}</span>
+              <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-faint transition group-hover:text-strong" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function ReadinessPanel({ siteId, version, onFixed, inPanel, html, onSuggest }) {
   const [audit, setAudit] = useState(null);
   const [open, setOpen] = useState(false);
   const first = useRef(true);
@@ -176,6 +228,7 @@ export function ReadinessPanel({ siteId, version, onFixed, inPanel }) {
     }
   };
   return (
+    <>
     <div className={cx("rounded-2xl bg-surface-2/60", !inPanel && "mb-4")}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left">
         <span className={cx("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold", tone)}><Icon className="size-3.5" /> {label}</span>
@@ -204,6 +257,8 @@ export function ReadinessPanel({ siteId, version, onFixed, inPanel }) {
         </ul>
       )}
     </div>
+    {onSuggest && <Suggestions failed={failed} html={html} onSuggest={onSuggest} />}
+    </>
   );
 }
 

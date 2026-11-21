@@ -624,7 +624,8 @@ function Editor({ site, onClose, onChange, feedback }) {
     <>
       <VisualEditor key={rev} ref={ed} html={base} siteId={site.id} page={pageSlug} onSave={autosave} onPageReplaced={replaced} left={left} right={right}
         changes={<ChangesList site={site} page={pageSlug} onRestore={replaced} />}
-        checks={<div className="p-3"><ReadinessPanel siteId={site.id} version={site.html} onFixed={replaced} inPanel /></div>} />
+        checks={<div className="p-3"><ReadinessPanel siteId={site.id} version={site.html} onFixed={replaced} inPanel
+          html={htmlOf(site, pageSlug)} onSuggest={(t) => ed.current?.suggest(t)} /></div>} />
       <Modal open={!!adding} onClose={() => setAdding(null)} title="Add a page">
         <form onSubmit={addPage} className="space-y-4">
           <div className="flex flex-wrap gap-1.5">
