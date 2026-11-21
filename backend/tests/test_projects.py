@@ -84,9 +84,11 @@ def test_module_prompts_come_from_the_profile(auth_client, monkeypatch):
 
 def test_home_routing(auth_client):
     assert auth_client.post("/api/route", json={"text": "make a Diwali offer poster"}).json() == {
-        "module": "pictures", "prompt": "make a Diwali offer poster"}
+        "module": "pictures", "prompt": "make a Diwali offer poster", "sure": True}
     assert auth_client.post("/api/route", json={"text": "ads chalao 2000 ka budget"}).json()["module"] == "campaigns"
-    assert set(auth_client.post("/api/route", json={"text": "hmm"}).json()) == {"module", "prompt"}  # no explanation field
+    unsure = auth_client.post("/api/route", json={"text": "naa shop ki emaina cheyyi"}).json()
+    assert unsure["sure"] is False and unsure["module"]  # Home offers choices; the fallback module is still given
+    assert set(auth_client.post("/api/route", json={"text": "hmm"}).json()) == {"module", "prompt", "sure"}  # no explanation field
 
 
 # ---- projects ---------------------------------------------------------------------------------------------

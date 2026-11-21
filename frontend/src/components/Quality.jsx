@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Globe2, Lightbulb, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, Globe2, Lightbulb, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Spinner, cx } from "./ui";
 import { get, post } from "../lib/api";
@@ -122,8 +122,70 @@ const STATUS = {
 };
 const ICON = { blocker: [XCircle, "text-danger"], warning: [AlertTriangle, "text-warm"], tip: [Lightbulb, "text-brand"] };
 
+/** Six marks out of 10. A page passes at an average of 8 with nothing under 7. */
+function ScoreParts({ score }) {
+  return (
+    <div className="@container px-4 pb-3">
+      <div className="grid gap-x-6 gap-y-2.5 @md:grid-cols-2">
+        {score.parts.map((p) => (
+          <div key={p.key} className="min-w-0">
+            <div className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="truncate text-muted">{p.label}</span>
+              <span className={cx("font-semibold tabular-nums", p.score >= 8 ? "text-strong" : p.score >= 7 ? "text-warm" : "text-danger")}>{p.score}/10</span>
+            </div>
+            <div className="mt-1 h-1 overflow-hidden rounded-full bg-ink/[0.06]">
+              <div className={cx("h-full rounded-full transition-[width] duration-300", p.score >= 8 ? "bg-brand" : p.score >= 7 ? "bg-warm" : "bg-danger")} style={{ width: `${p.score * 10}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** The automatic quality pass on a generated page: what passed, and the few things worth a human look. */
-export function ReadinessPanel({ siteId, version, onFixed }) {
+// Ready-to-send asks for the page editor's box, written by the server for this business and this page: the ones
+// that fix what the page is missing come first (they raise the score), then what this kind of business usually needs.
+function Suggestions({ siteId, page, version, business, onSuggest }) {
+  const [list, setList] = useState(null);
+  // Every save makes a new version: ask again at most once a minute, so typing doesn't spend AI calls.
+  const last = useRef({ key: "", at: 0 });
+  useEffect(() => {
+    const key = `${siteId}:${page || ""}`;
+    if (last.current.key === key && Date.now() - last.current.at < 60_000) return undefined;
+    let live = true;
+    const got = () => { last.current = { key, at: Date.now() }; };  // only once an answer arrived, so a cancelled ask is retried
+    if (last.current.key !== key) setList(null);
+    const url = `/api/sites/${siteId}/ideas?${page ? `page=${encodeURIComponent(page)}&` : ""}`;
+    // The quick list (from this business's facts) shows at once; the one written from the page's own words replaces it.
+    let better = false;
+    get(url + "quick=true").then((r) => { if (live && !better) { got(); setList(r.ideas || []); } }).catch(() => live && !better && setList([]));
+    get(url).then((r) => { if (live && r.source === "ai") { better = true; got(); setList(r.ideas); } }).catch(() => {});
+    return () => { live = false; };
+  }, [siteId, page, version]);
+  if (list && !list.length) return null;
+  return (
+    <div className="mt-5 px-1">
+      <h3 className="text-sm font-semibold text-strong">Ideas for {business || "this page"}</h3>
+      <p className="mt-0.5 text-xs text-muted">Tap one to put it in the box below. Change it if you like, then press Enter.</p>
+      <ul className="mt-3 space-y-1.5" aria-busy={!list}>
+        {!list && [0, 1, 2].map((i) => <li key={i} className="h-11 animate-pulse rounded-xl bg-surface-2/60" />)}
+        {list?.map(({ text, raises_score: raises }) => (
+          <li key={text}>
+            <button type="button" onClick={() => onSuggest(text)}
+              className="group flex w-full items-start gap-2.5 rounded-xl bg-surface-2/60 px-3 py-2.5 text-left text-sm text-ink transition hover:bg-lavender">
+              <Sparkles className={cx("mt-0.5 size-4 shrink-0", raises ? "text-warm" : "text-brand")} />
+              <span className="min-w-0 flex-1">{text}{raises && <span className="block text-xs text-muted">Raises your score</span>}</span>
+              <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-faint transition group-hover:text-strong" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function ReadinessPanel({ siteId, version, onFixed, inPanel, page, business, onSuggest }) {
   const [audit, setAudit] = useState(null);
   const [open, setOpen] = useState(false);
   const first = useRef(true);
@@ -132,20 +194,22 @@ export function ReadinessPanel({ siteId, version, onFixed }) {
     get(`/api/sites/${siteId}/audit`).then((a) => {
       if (!live) return;
       setAudit(a);
-      if (first.current) { setOpen(a.readiness.status !== "ready"); first.current = false; }
+      if (first.current) { setOpen(inPanel || a.readiness.status !== "ready"); first.current = false; }
     }).catch(() => {});
     return () => { live = false; };
   }, [siteId, version]);
   if (!audit) return <div className="mb-4 flex h-12 items-center gap-2 rounded-2xl bg-surface-2/60 px-4 text-sm text-muted"><Spinner className="size-4" /> Checking the page…</div>;
   const { readiness: r, checks } = audit;
   const [Icon, label, tone] = STATUS[r.status];
-  const failed = checks.filter((c) => !c.ok).sort((a, b) => ["blocker", "warning", "tip"].indexOf(a.level) - ["blocker", "warning", "tip"].indexOf(b.level));
+  // The page score adds a few checks of its own (offer near the top, a button on the first screen, brand words).
+  const extra = (audit.page_score?.todo || []).filter((t) => !checks.some((c) => c.key === t.key)).map((t) => ({ ...t, ok: false, fix: "" }));
+  const failed = [...checks.filter((c) => !c.ok), ...extra].sort((a, b) => ["blocker", "warning", "tip"].indexOf(a.level) - ["blocker", "warning", "tip"].indexOf(b.level));
   const passed = checks.length - failed.length;
   const fixable = failed.filter((c) => c.autofix).length;
   const fixAll = async () => {
     try {
       const out = await post(`/api/sites/${siteId}/autofix`);
-      setAudit({ checks: out.checks, readiness: out.readiness });
+      setAudit({ checks: out.checks, readiness: out.readiness, page_score: out.page_score });
       onFixed?.(out.site);
       toast.success(out.fixed.length ? `Fixed ${out.fixed.length} thing${out.fixed.length === 1 ? "" : "s"}. Undo from Versions if you don't like it.` : "Nothing left to fix automatically.");
     } catch (e) {
@@ -153,12 +217,14 @@ export function ReadinessPanel({ siteId, version, onFixed }) {
     }
   };
   return (
-    <div className="mb-4 rounded-2xl bg-surface-2/60">
+    <>
+    <div className={cx("rounded-2xl bg-surface-2/60", !inPanel && "mb-4")}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-        <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", tone)}><Icon className="size-3.5" /> {label}</span>
-        <span className="text-sm text-muted">{r.score}/100 · {passed} of {checks.length} checks passed</span>
+        <span className={cx("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold", tone)}><Icon className="size-3.5" /> {label}</span>
+        <span className="text-sm text-muted">{audit.page_score ? `Score ${audit.page_score.average}/10` : `${r.score}/100`} · {passed} of {checks.length} checks passed</span>
         <ChevronDown className={cx("ml-auto size-4 text-muted transition", open && "rotate-180")} />
       </button>
+      {open && audit.page_score && <ScoreParts score={audit.page_score} />}
       {open && fixable > 0 && (
         <div className="flex flex-wrap items-center gap-3 px-4 pb-3">
           <Button type="button" size="sm" onClick={fixAll}><Sparkles className="size-3.5" /> Fix {fixable} automatically</Button>
@@ -180,6 +246,8 @@ export function ReadinessPanel({ siteId, version, onFixed }) {
         </ul>
       )}
     </div>
+    {onSuggest && <Suggestions siteId={siteId} page={page} version={version} business={business} onSuggest={onSuggest} />}
+    </>
   );
 }
 

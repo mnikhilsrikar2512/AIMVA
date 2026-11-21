@@ -1,6 +1,6 @@
 // Milestones: real outcomes (first page live, first lead, first sale, 10/50/100 leads…), each once per project, at
-// most one every 4 hours, never over open work. Big ones are one still, typeset moment: no confetti, no animation
-// (design.md 9.2). Smaller ones are a plain toast.
+// most one every 4 hours, never over open work. Big ones are a short scene made for that goal (MomentScenes.jsx, owner 2026-11-21:
+// "different cinematic animations for different goals"), then the words. Still no confetti. Smaller ones are a plain toast.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
@@ -9,6 +9,8 @@ import { useAuth } from "../lib/auth";
 import { get } from "../lib/api";
 import { parseServerDate } from "../lib/hooks";
 import { useLeadEvents } from "../lib/live";
+import { MomentScene } from "./MomentScenes";
+import { Mascot } from "./Mascot";
 
 /* ---- milestones ----------------------------------------------------------------------------------- */
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -18,9 +20,9 @@ const LEAD_STEPS = [10, 50, 100, 250, 500, 1000];
 export const MILESTONES = [
   { id: "setup_done", size: "small", reached: (f) => f.setupDone,
     words: () => ({ title: pick(["Setup done.", "You're all set up."]), text: "Everything is ready. Leads from your page, calls and WhatsApp land in one place." }) },
-  { id: "first_page_live", size: "medium", reached: (f) => f.pagesLive > 0,
+  { id: "first_page_live", size: "big", reached: (f) => f.pagesLive > 0,
     words: () => ({ title: pick(["Your page is live.", "You're on the internet.", "Page published."]), text: pick(["Share the link and the first lead can come in today.", "Anyone with the link can now ask you for a call."]) }) },
-  { id: "first_call", size: "medium", reached: (f) => f.calls > 0,
+  { id: "first_call", size: "big", reached: (f) => f.calls > 0,
     words: () => ({ title: pick(["Your assistant took its first call.", "First call done."]), text: "It will greet every new lead the same way, day or night." }) },
   { id: "first_lead", size: "big", reached: (f) => f.leads > 0,
     words: (f) => ({ title: pick(["Your first lead.", "Someone wants to hear from you.", "The first one is in."]),
@@ -33,7 +35,7 @@ export const MILESTONES = [
       action: { label: "See what worked", to: "/app/command" } }) },
   { id: "won_5", size: "medium", reached: (f) => f.won >= 5,
     words: () => ({ title: "Five sales.", text: "You have a pattern now. Results shows which campaign brought them." }) },
-  ...LEAD_STEPS.map((n) => ({ id: `leads_${n}`, size: n === 10 ? "medium" : "big", reached: (f) => f.leads >= n,
+  ...LEAD_STEPS.map((n) => ({ id: `leads_${n}`, size: "big", reached: (f) => f.leads >= n,
     words: () => ({ title: pick([`${n} leads.`, `That's ${n} people who asked.`, `${n} and counting.`]), text: pick(["Every one of them is in Leads, scored and ready to call.", "Keep the pages and campaigns that brought them running."]) }) })),
 ];
 
@@ -63,7 +65,8 @@ async function readFacts(onboarding, user) {
   return {
     leads: leads.length, hot: leads.filter((l) => l.score >= 70).length, won: leads.filter((l) => l.stage === "won").length,
     pagesLive: s.publish ? 1 : 0, calls: s.voice ? 1 : 0, setupDone: !!onboarding?.all_done,
-    firstLeadId: first?.id, firstLeadName: first?.name?.split(" ")[0],
+    firstLeadId: first?.id, firstLeadName: first?.name?.split(" ")[0], firstLeadMessage: first?.message || "",
+    wonValue: leads.filter((l) => l.stage === "won").reduce((t, l) => t + (Number(l.value) || 0), 0),
     daysSinceSignup: signup && firstAt ? Math.floor((firstAt - signup) / 86400000) : null,
   };
 }
@@ -79,7 +82,7 @@ export function Celebrations({ onboarding }) {
     const st = load(key) || { seen: [], last: 0 };
     st.seen = [...new Set([...st.seen, m.id])]; st.last = Date.now(); save(key, st);
     const w = m.words(facts);
-    if (m.size === "big") { setMoment({ ...w, id: m.id }); return; }
+    if (m.size === "big") { setMoment({ ...w, id: m.id, facts }); return; }
     toast(w.title, { description: w.text, duration: m.size === "medium" ? 6000 : 4000 });
   }, [key]);
 
@@ -106,6 +109,14 @@ export function Celebrations({ onboarding }) {
   }, [user, onboarding, key, show]);
 
   useEffect(() => { check(); }, [check]);
+  // Development only: /app?moment=first_lead plays that moment with sample facts, without marking anything seen.
+  useEffect(() => {
+    const id = import.meta.env.DEV && new URLSearchParams(window.location.search).get("moment");
+    const m = id && MILESTONES.find((x) => x.id === id);
+    if (!m) return;
+    const facts = { firstLeadName: "Priya", firstLeadMessage: "Namaste, do you have a Sankranti offer? Please call me after 6.", daysSinceSignup: 2, wonValue: 18000, domain: "khans-fitness.aimva.in" };
+    setMoment({ ...m.words(facts), id: m.id, facts });
+  }, []);
   useLeadEvents(() => { setTimeout(check, 800); });
   // A moment that waited for the person to finish what they were doing.
   useEffect(() => {
@@ -124,6 +135,8 @@ export function Celebrations({ onboarding }) {
   return createPortal(
     <div className="fixed inset-0 z-[70] grid place-items-center bg-bg p-6" onClick={() => setMoment(null)} role="status" aria-live="polite">
       <div className="max-w-md text-center" onClick={(e) => e.stopPropagation()}>
+        <Mascot mood="cheer" size={72} arrive="pop" className="mb-4" />
+        <MomentScene id={moment.id} facts={moment.facts} />
         <p className="serif-moment text-[40px] leading-tight text-strong">{moment.title}</p>
         <p className="mt-4 inline-block rounded-md bg-accent-soft px-3 py-1.5 text-base text-strong">{moment.text}</p>
         <div className="mt-8 flex items-center justify-center gap-2">

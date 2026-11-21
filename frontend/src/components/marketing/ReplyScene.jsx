@@ -1,13 +1,13 @@
 // The reply moment: a lead writes in their own language and the WhatsApp hello comes back in the same one, while the
-// AI assistant's call orb (the same one the app shows during calls) breathes beside it. The WebGL orb only loads
-// when this section is on screen and the device can afford it; everyone else sees a still orb drawn in CSS.
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+// mascot calls her back beside it (owner 2026-11-21: "i dont like the orb"). He sits in a call card, talks (his voice
+// shows as bars that move with his words) and looks at you between sentences. No WebGL, so nothing heavy loads.
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useInView } from "framer-motion";
+import { Phone } from "lucide-react";
 import { ease } from "../Motion";
-import { canWebGL, prefersReducedMotion } from "./device";
+import { Mascot } from "../Mascot";
+import { prefersReducedMotion } from "./device";
 import { cx } from "./Site";
-
-const VoiceOrb = lazy(() => import("../VoiceOrb"));
 
 // Example conversation. Names and business are examples.
 const TALK = [
@@ -26,38 +26,59 @@ const TALK = [
 ];
 const HOLD = 7000;
 
-function StillOrb() {
-  return (
-    <div className="relative grid size-full place-items-center" aria-hidden>
-      <span className="absolute size-[58%] rounded-full border border-brand/30" style={{ animation: "mk-ring 3.2s ease-out infinite" }} />
-      <span className="size-[52%] rounded-full" style={{ background: "radial-gradient(circle at 34% 30%, #ffffff, #02eff0 42%, #00696b 78%, #0f282f)", boxShadow: "0 24px 60px -18px rgb(11 107 103 / 0.55)" }} />
-    </div>
-  );
-}
-
-/** Word-like pulses so the orb looks like it is speaking. Only runs while on screen. */
+/** Word-like pulses while he speaks, with a short pause between sentences. Only runs while on screen. */
 function useSpeech(on) {
-  const level = useRef({ current: 0 }).current;
+  const [bars, setBars] = useState(() => Array(14).fill(0.15));
+  const [talking, setTalking] = useState(false);
   useEffect(() => {
-    if (!on) return;
-    let t;
-    const word = () => { level.current = 0.45 + Math.random() * 0.55; t = setTimeout(word, 140 + Math.random() * 260); };
+    if (!on) { setTalking(false); return undefined; }
+    let t, n = 0;
+    const word = () => {
+      n += 1;
+      const pause = n % 9 === 0;
+      setTalking(!pause);
+      setBars((b) => b.map(() => (pause ? 0.12 : 0.2 + Math.random() * 0.8)));
+      t = setTimeout(word, pause ? 1100 : 130 + Math.random() * 180);
+    };
     word();
     return () => clearTimeout(t);
-  }, [on, level]);
-  return level;
+  }, [on]);
+  return [bars, talking];
+}
+
+function CallCard({ on, still }) {
+  const [bars, talking] = useSpeech(on && !still);
+  const [secs, setSecs] = useState(14);
+  useEffect(() => { if (!on || still) return undefined; const t = setInterval(() => setSecs((s) => s + 1), 1000); return () => clearInterval(t); }, [on, still]);
+  return (
+    <div className="relative overflow-hidden rounded-3xl bg-[#0f2a30] px-5 pb-5 pt-6 text-white shadow-[0_30px_70px_-30px_rgba(15,40,47,0.7)]">
+      <div aria-hidden className="pointer-events-none absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(94,230,240,0.28),transparent)]" />
+      <div className="relative flex justify-center">
+        {/* soft rings while he speaks, like sound leaving */}
+        {!still && talking && [0, 1].map((k) => (
+          <span key={k} aria-hidden className="absolute left-1/2 top-[44%] size-40 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#5EE6F0]/30" style={{ animation: `mk-ring 2.4s ${k * 1.2}s ease-out infinite` }} />
+        ))}
+        <Mascot mood={talking ? "happy" : "hello"} size={150} watch={!talking} label="AIMVA's assistant on a call" />
+      </div>
+      <div className="relative mt-3 flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-sm"><span className="grid size-7 place-items-center rounded-full bg-[#5EE6F0]/15 text-[#5EE6F0]"><Phone className="size-3.5" /></span>
+          <span><b className="font-semibold">Calling Lakshmi back</b><span className="block text-xs text-white/60">0:{String(secs % 60).padStart(2, "0")} · in English</span></span></span>
+        <span className="flex h-7 items-center gap-[3px]" aria-hidden>
+          {bars.map((h, k) => <span key={k} className="w-[3px] rounded-full bg-[#5EE6F0] transition-[height] duration-150" style={{ height: `${Math.round(h * 100)}%` }} />)}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export default function ReplyScene() {
   const ref = useRef(null);
   const near = useInView(ref, { margin: "200px 0px" });
   const visible = useInView(ref, { amount: 0.35 });
-  const [gl] = useState(canWebGL);
   const [still] = useState(prefersReducedMotion);
   const [i, setI] = useState(0);
   const [typing, setTyping] = useState(false);
   const [held, setHeld] = useState(false);
-  const level = useSpeech(gl && visible);
   const t = TALK[i];
 
   // The lead's message lands, the reply "types" for a moment, then arrives in the same language.
@@ -76,14 +97,9 @@ export default function ReplyScene() {
   return (
     <div ref={ref} className="mt-8 grid items-center gap-8 sm:mt-12 md:grid-cols-[0.9fr_1.1fr] md:gap-12"
       onPointerEnter={(e) => e.pointerType === "mouse" && setHeld(true)} onPointerLeave={() => setHeld(false)}>
-      {/* Call orb */}
-      <div className="mx-auto w-full max-w-[230px] sm:max-w-[280px] md:max-w-[320px]">
-        <div className="aspect-square w-full">
-          {gl && near ? <Suspense fallback={<StillOrb />}><VoiceOrb level={level} state="speaking" className="size-full" /></Suspense> : <StillOrb />}
-        </div>
-        <p className="mt-2 text-center text-xs text-muted">
-          <span className="font-semibold text-strong">AI assistant</span> · calling Lakshmi back
-        </p>
+      {/* The mascot on the call */}
+      <div className="mx-auto w-full max-w-[300px] md:max-w-[340px]">
+        {near ? <CallCard on={visible} still={still} /> : <div className="aspect-[4/5] rounded-3xl bg-[#0f2a30]" />}
       </div>
 
       {/* WhatsApp thread */}

@@ -12,7 +12,8 @@ the workspace a request works in, so projects stay closed worlds without a proje
   GET    /api/modules/{key}/prompt         the pre-written prompt for a module, from the profile
   GET    /api/projects/{id}/modules        revealed modules (the rail order)
   PUT    /api/projects/{id}/modules
-  POST   /api/route                        a sentence typed on Home -> the module it belongs to, and the prompt
+  POST   /api/route                        a sentence typed on Home -> the module it belongs to, the prompt, and
+                                           whether anything in it pointed there (sure); never why
 
 No response explains how an idea or prompt was read, and none names an AI provider (project rules).
 """
@@ -429,4 +430,5 @@ class RouteIn(BaseModel):
 @router.post("/api/route")
 def route_prompt(body: RouteIn, user: User = Depends(current_user)):
     revealed = (user.onboarding_answers or {}).get("modules") or ["page"]
-    return {"module": idea_sense.route(body.text, fallback=revealed[0]), "prompt": body.text.strip()}
+    module, sure = idea_sense.route_sure(body.text, fallback=revealed[0])
+    return {"module": module, "prompt": body.text.strip(), "sure": sure}

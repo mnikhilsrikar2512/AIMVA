@@ -135,8 +135,10 @@ def _ad_copy(db: Session, user: User, facts: dict, playbook: str, product: str =
     copy = {"headline": _headline(facts, product), "text": "\n".join(bits)[:500], "cta": CTA.get(playbook, "Learn more")}
     write = writer(db, user.id, agent="copywriter")
     if write:
+        from ..brand_book import build, copy_rules
         out = write("Write one Meta lead ad for this business as JSON {\"headline\": max 40 chars, \"text\": max 300 chars}. "
-                    "Use only these facts; no invented numbers, awards or claims; no exclamation marks. Facts: "
+                    "Use only these facts; no invented numbers, awards or claims; no exclamation marks. "
+                    + copy_rules(build(db, user)) + " Facts: "
                     + json.dumps({k: facts[k] for k in facts if k in ("business", "offer", "features", "price_from", "location_line", "audience")},
                                  ensure_ascii=False), max_tokens=400)
         m = re.search(r"\{.*\}", out or "", re.S)
@@ -191,7 +193,8 @@ def run(db: Session, job_row: AgentJob) -> None:
             job.step("Using your existing product", detail=f"“{name}”")
         result["product_id"] = product.id
 
-        kit = db.scalar(select(BrandKit).where(BrandKit.user_id == user.id))
+        from ..brand_book import effective_kit
+        kit = effective_kit(db, user)
         brief = {**{k: v for k, v in facts.items() if k in sites.Brief.model_fields}, "use_ai": True, "layout": "auto",
                  "page_type": playbook if playbook in ("real_estate", "restaurant") else "lead_gen",
                  "hero_image": _hero(db, user, body), "references": [body.reference_id] if body.reference_id else [],
@@ -200,6 +203,8 @@ def run(db: Session, job_row: AgentJob) -> None:
             brief["headline"] = name  # the project / product name reads better than "Business: whole description"
         if kit and kit.colors:
             brief.update(primary=kit.colors[0], accent=(kit.colors[1] if len(kit.colors) > 1 else kit.colors[0]))
+        if kit and kit.font_heading:
+            brief.update(font="auto", font_heading=kit.font_heading, font_body=kit.font_body or kit.font_heading)
         if facts.get("phone"):
             brief["contact_mode"] = "both"
         try:

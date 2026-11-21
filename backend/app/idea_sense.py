@@ -350,11 +350,17 @@ _ROUTES = [(m, re.compile(p, re.I)) for m, p in ROUTES]
 
 
 def route(text: str, fallback: str = "page") -> str:
+    return route_sure(text, fallback)[0]
+
+
+def route_sure(text: str, fallback: str = "page") -> tuple:
+    """(module, sure). sure is False when nothing in the sentence pointed anywhere and the fallback was used, so Home can
+    offer a few choices instead of quietly making the wrong thing."""
     t = text or ""
     # "show my leads" / "reply to leads on WhatsApp": WhatsApp beats leads, leads beats a bare "call".
     if re.search(r"^\s*(?:show|list|see|who)\b", t, re.I) and re.search(r"\bleads?\b|\benquir", t, re.I) and not re.search(r"whats ?app", t, re.I):
-        return "leads"
+        return "leads", True
     for module, rx in _ROUTES:
         if rx.search(t):
-            return module
-    return fallback
+            return module, True
+    return fallback, False

@@ -98,7 +98,8 @@ def fingerprint(module: str, payload: dict) -> str:
 
 
 def user_ctx(db: Session, user: User) -> dict:
-    kit = db.query(BrandKit).filter_by(user_id=user.id).first()
+    from .brand_book import effective_kit
+    kit = effective_kit(db, user)
     key = match_playbook("", user.industry)
     return {"business": user.company or "your business", "industry": PLAYBOOKS[key]["label"],
             "tagline": (kit.tagline if kit and kit.tagline else "")}

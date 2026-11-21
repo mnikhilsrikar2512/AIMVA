@@ -2,9 +2,10 @@
 // the ad and its settings fill the canvas, and the changes panel takes every change after that. Each setting can also
 // be edited in place. Nothing is spent until Launch, which always asks first because it spends money.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useUrlView } from "../../lib/nav";
 import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { MoreHorizontal, Pause, Play, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { MoreHorizontal, Pause, Play, Plus, RefreshCw, Trash2, X, BarChart3 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/shadcn/dropdown-menu";
 import { Tooltip } from "../../components/shadcn/tooltip";
 import { Button, IconButton, ListSkeleton, Modal, PageHeader, cx } from "../../components/ui";
@@ -45,7 +46,7 @@ function Setting({ label, value, shown, onSave, type = "text", placeholder }) {
 export default function Ads() {
   const { platform = "meta" } = useParams();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const { data: campaigns, setData, loading, reload, error } = useApi(`/api/campaigns?platform=${platform}`, []);
   const { data: integrations, reload: reloadInteg } = useApi("/api/integrations", []);
   const { data: sites } = useApi("/api/sites", []);
@@ -53,8 +54,7 @@ export default function Ads() {
   const { user } = useAuth();
   const given = useRef(params.get("prompt") || "");
   const [media, setMedia] = useState(null);  // a picture or video from "Use in a campaign"
-  const [view, setView] = useState(null);  // prompt | work | all
-  const [selId, setSelId] = useState(null);
+  const [view, setView, selId, setSelId, setUrl] = useUrlView(null);  // prompt | work | all, in the address (plan S7)
   const sel = campaigns.find((c) => c.id === selId) || null;
   const { data: versions, reload: reloadVersions, loading: vLoading } = useApi(sel ? `/api/versions/campaign/${sel.id}` : null, []);
   const [busy, setBusy] = useState(false);
@@ -82,9 +82,14 @@ export default function Ads() {
       }).catch(() => {});
       setView("prompt");
     }
-    if (image || video || params.get("prompt")) setParams((p) => { const n = new URLSearchParams(p); ["image", "video", "prompt"].forEach((k) => n.delete(k)); return n; }, { replace: true });
+    if (image || video || params.get("prompt")) setUrl({ image: null, video: null, prompt: null }, { replace: true });
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setSelId(null); if (view !== "prompt" || !media) setView(null); }, [platform]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const firstPlatform = useRef(platform);
+  useEffect(() => {  // switching platform starts that platform fresh (not on first load: the address may name an open campaign)
+    if (firstPlatform.current === platform) return;
+    firstPlatform.current = platform;
+    setSelId(null); if (view !== "prompt" || !media) setView(null);
+  }, [platform]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {  // first visit: the prompt; with campaigns, the newest one
     if (loading || view) return;
     if (!given.current && campaigns.length) { setSelId(campaigns[0].id); setView("work"); } else setView("prompt");
@@ -120,6 +125,7 @@ export default function Ads() {
     if (!c.external_id) c = await post(`/api/campaigns/${c.id}/publish`);
     c = await patch(`/api/campaigns/${c.id}`, { status: "active" });
     replace(c); setLaunching(false);
+    navigate(`/app/command?campaign=${c.id}`);  // straight to this campaign's overview (owner, 2026-11-21)
     return c;
   }, `Launched on ${PLATFORMS[platform]}.`);
   const remove = () => {
@@ -208,6 +214,7 @@ export default function Ads() {
         </DropdownMenuContent>
       </DropdownMenu>
       <Button variant="ghost" size="sm" onClick={() => setView("prompt")}><Plus className="size-3.5" /> New</Button>
+      {sel && sel.status !== "draft" && <Link to={`/app/command?campaign=${sel.id}`} className="btn-ghost btn-sm"><BarChart3 className="size-3.5" /> See results</Link>}
       {sel && sel.status !== "active" && (connected
         ? <Button variant="accent" size="sm" onClick={() => setLaunching(true)}>{sel.status === "paused" ? <><Play className="size-3.5" /> Resume</> : "Launch"}</Button>
         : <Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect {PLATFORMS[platform]} to launch</Link>)}
@@ -218,7 +225,7 @@ export default function Ads() {
     <>
       <PageHeader title="Campaigns" />
       <ModuleFrame toolbar={toolbar} panel={
-        <ChangesPanel open={panelOpen} onToggle={togglePanel} versions={versions} loading={vLoading} onSend={sel ? change : null} sending={busy}
+        <ChangesPanel kind="campaign" open={panelOpen} onToggle={togglePanel} versions={versions} loading={vLoading} onSend={sel ? change : null} sending={busy}
           placeholder="Change anything: “₹800 a day”, “within 5 km”, “shorter headline”" onRestore={restore} onCompare={compare} />
       }>
         {sel && (

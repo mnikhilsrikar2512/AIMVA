@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { useUrlState } from "../../lib/nav";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Code2, ExternalLink, Eye, FileText, Globe, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Megaphone, Code2, ExternalLink, Eye, FileText, Globe, MoreHorizontal, Plus, RefreshCw, Rocket, ShieldCheck, Trash2 } from "lucide-react";
 import { Button, Card, Chip, Empty, Field, IconButton, Modal, PageHeader, Spinner, Tabs, cx, ListSkeleton, JobProgress } from "../../components/ui";
 import { ChangesList } from "../../components/ChangesPanel";
 import { ModulePrompt } from "../../components/ModulePrompt";
@@ -26,7 +27,7 @@ const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefin
 
 const BLANK = {
   business: "", industry: "", audience: "", offer: "", headline: "", subheadline: "", cta: "Get a free quote",
-  features: "", contact_mode: "voice_agent", voice_agent_id: null, country_code: "+91", phone: "", whatsapp: "", primary: "#6366f1", accent: "#22d3ee", hero_image: "", use_ai: true,
+  features: "", contact_mode: "voice_agent", voice_agent_id: null, country_code: "+91", phone: "", whatsapp: "", primary: "#4f46e5", accent: "#22d3ee", hero_image: "", use_ai: true,
   writer: "auto", page_type: "lead_gen", layout: "auto", decor: "auto", look: "modern", theme: "light", font: "auto", match_colors: true, language: "English",
   sections: ["features"], about: "", testimonials: [], faqs: [], pricing: [], gallery: [],
   form_fields: ["name", "phone", "email", "message"], form_title: "", thank_you: "Thanks! We'll be in touch shortly.",
@@ -521,7 +522,6 @@ function Editor({ site, onClose, onChange, feedback }) {
   const [publishing, setPublishing] = useState(false);
   const [menu, setMenu] = useState(false);
   const [code, setCode] = useState(null);  // HTML being edited by hand
-  const [checks, setChecks] = useState(false);
   const [busy, run] = useAction();
 
   // Regenerate, restore, HTML edits and whole-page AI edits replace the page: reload the editor with it.
@@ -596,7 +596,9 @@ function Editor({ site, onClose, onChange, feedback }) {
   );
   const right = (
     <>
-      <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={async () => { await flush(); setChecks(true); }}>Checks</Button>
+      <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={async () => { await flush(); ed.current?.showPanel("checks"); }}>Checks</Button>
+      {site.published && <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={async () => { await flush(); navigate(`/app/ads/meta?prompt=${encodeURIComponent(`An ad that brings people to my page "${site.name}"`)}`); }}>
+        <Megaphone className="size-3.5" /> Run an ad to it</Button>}
       <div className="relative">
         <button type="button" className="btn-subtle btn-sm" aria-label="More" aria-expanded={menu} onClick={() => setMenu((m) => !m)}><MoreHorizontal className="size-4" /></button>
         {menu && (
@@ -604,7 +606,7 @@ function Editor({ site, onClose, onChange, feedback }) {
             {[
               [RefreshCw, "Start over from brief", async () => { await flush(); setShowBrief(true); }],
               [Code2, "Edit HTML code", async () => { await flush(); setCode(htmlOf(site, pageSlug)); }],
-              [ShieldCheck, "Launch checks", async () => { await flush(); setChecks(true); }],
+              [ShieldCheck, "Launch checks", async () => { await flush(); ed.current?.showPanel("checks"); }],
               ...(site.published ? [[ExternalLink, "Open live page", () => window.open(liveUrl, "_blank", "noopener")],
                 [Globe, "Domains & deploys", async () => { await flush(); navigate("/app/hosting"); }]] : []),
             ].map(([I, l, fn]) => (
@@ -621,7 +623,9 @@ function Editor({ site, onClose, onChange, feedback }) {
   return (
     <>
       <VisualEditor key={rev} ref={ed} html={base} siteId={site.id} page={pageSlug} onSave={autosave} onPageReplaced={replaced} left={left} right={right}
-        changes={<ChangesList site={site} page={pageSlug} onRestore={replaced} />} />
+        changes={<ChangesList site={site} page={pageSlug} onRestore={replaced} />}
+        checks={<div className="p-3"><ReadinessPanel siteId={site.id} version={site.html} onFixed={replaced} inPanel
+          page={pageSlug} business={site.brief?.business || site.name} onSuggest={(t) => ed.current?.suggest(t)} /></div>} />
       <Modal open={!!adding} onClose={() => setAdding(null)} title="Add a page">
         <form onSubmit={addPage} className="space-y-4">
           <div className="flex flex-wrap gap-1.5">
@@ -639,9 +643,6 @@ function Editor({ site, onClose, onChange, feedback }) {
           </Field>
           <div className="flex justify-end"><Button type="submit" busy={busy}>Add page</Button></div>
         </form>
-      </Modal>
-      <Modal open={checks} onClose={() => setChecks(false)} title="Launch checks">
-        <ReadinessPanel siteId={site.id} version={site.html} onFixed={replaced} />
       </Modal>
       <Modal open={code !== null} onClose={() => setCode(null)} title="Edit HTML code" wide="xl">
         <p className="mb-3 text-sm text-muted">For developers. Saving creates a new version, so you can always go back.</p>
@@ -753,7 +754,8 @@ export default function Websites() {
   const { data: sites, reload, loading, error: sitesError } = useApi("/api/sites", []);
   const { data: feedback } = useApi("/api/feedback?kind=site", {});
   const isClient = useIsClient();  // view-only: the client sees their pages, never the builder
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
   const givenPrompt = useRef(params.get("prompt") || "");
   // First visit: the one prompt. With pages already made, History comes first and "New page" opens the prompt.
   const [tab, setTab] = useState(isClient ? "history" : "create");
@@ -764,12 +766,22 @@ export default function Websites() {
     setSettled(true);
     if (sites.length && !givenPrompt.current && !params.get("site")) setTab("history");
   }, [loading, settled, sites.length, params]);
-  useEffect(() => {  // opened from the reveal (?site=) or Home (?prompt=): use it once, then tidy the address
-    const site = params.get("site");
-    if (site) get(`/api/sites/${site}`).then(setCurrent).catch((e) => toast.error(e.message));
-    if (site || params.get("prompt")) setParams((p) => { const n = new URLSearchParams(p); n.delete("site"); n.delete("prompt"); return n; }, { replace: true });
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
   const [current, setCurrent] = useState(null);  // the page being worked on in Create
+  // The open page lives in the address (?site=), so Back closes the editor and returns to the list (plan S7).
+  const [, setUrl] = useUrlState();
+  const openedHere = useRef(false);
+  const siteParam = params.get("site");
+  useEffect(() => {
+    if (params.get("prompt")) setUrl({ prompt: null }, { replace: true });
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (siteParam && String(current?.id) !== siteParam) get(`/api/sites/${siteParam}`).then(setCurrent).catch((e) => toast.error(e.message));
+    if (!siteParam && current) { setCurrent(null); setTab("history"); }
+  }, [siteParam]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const showSite = (site) => { setCurrent(site); if (String(site.id) !== new URLSearchParams(window.location.search).get("site")) { openedHere.current = true; setUrl({ site: site.id }); } };
+  const closeSite = () => {
+    if (openedHere.current) { openedHere.current = false; navigate(-1); } else { setCurrent(null); setTab("history"); setUrl({ site: null }, { replace: true }); }
+  };
   const [formKey, setFormKey] = useState(0);
   const [q, setQ] = useState("");
   const [busy, run] = useAction();
@@ -783,8 +795,8 @@ export default function Websites() {
   } : {};
   const starter = { ...BLANK, business: user.workspace?.name || user.company || "", industry: onboarding?.template?.label || "", ...(onboarding?.industry && tpl ? tpl : {}), ...fromBrand };
 
-  const startNew = () => { setCurrent(null); setDetails(false); setFormKey((k) => k + 1); setTab("create"); };
-  const open = (id) => run(async () => { setCurrent(await get(`/api/sites/${id}`)); });
+  const startNew = () => { if (current) setUrl({ site: null }, { replace: true }); setCurrent(null); setDetails(false); setFormKey((k) => k + 1); setTab("create"); };
+  const open = (id) => run(async () => { showSite(await get(`/api/sites/${id}`)); });
   const filtered = sites.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
@@ -795,10 +807,10 @@ export default function Websites() {
       {!isClient && <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ value: "create", label: "Create" }, { value: "history", label: `History${sites.length ? ` (${sites.length})` : ""}` }]} /></div>}
 
       {current && !isClient && <Editor key={current.id} site={current} feedback={feedback} onChange={(s) => { setCurrent(s); reload(); }}
-        onClose={() => { setCurrent(null); setTab("history"); }} />}
+        onClose={closeSite} />}
       {tab === "create" && !isClient && !current && !details && (
         <PageFromPrompt given={givenPrompt.current} onDetails={() => setDetails(true)}
-          onReady={(id) => { reload(); get(`/api/sites/${id}`).then(setCurrent).catch((e) => toast.error(e.message)); }} />
+          onReady={(id) => { reload(); get(`/api/sites/${id}`).then(showSite).catch((e) => toast.error(e.message)); }} />
       )}
       {tab === "create" && !isClient && details && (
         <Card className="mx-auto max-w-4xl">
@@ -806,7 +818,7 @@ export default function Websites() {
           <p className="mb-5 text-sm text-muted">Fill in what you know. Your earlier pages stay safe in History.</p>
           <BriefForm key={`${formKey}-${onboarding ? 1 : 0}-${brandKit ? 1 : 0}`} initial={starter} busy={busy} submitLabel="Generate page" onSubmit={(b) => run(async () => {
             const s = await post("/api/sites", b);
-            setCurrent(s);
+            showSite(s);
             reload();
             if (s.auto_fixed?.length) toast(`Page Fixer tidied ${s.auto_fixed.length} thing${s.auto_fixed.length === 1 ? "" : "s"}`, { description: s.auto_fixed.join(" · ") });
           }, "Page ready. Click anything on it to change it.")} />
@@ -828,7 +840,7 @@ export default function Websites() {
                 <SiteRow key={s.id} s={s} viewOnly={isClient} onOpen={() => open(s.id)} onDelete={() => {
                   if (confirm(`Delete "${s.name}" and all its versions? This removes the live page too.`)) run(async () => {
                     await del(`/api/sites/${s.id}`);
-                    if (current?.id === s.id) setCurrent(null);
+                    if (current?.id === s.id) closeSite();
                     reload();
                   }, "Deleted");
                 }} />

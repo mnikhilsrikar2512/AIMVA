@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useUrlState } from "../../lib/nav";
+import { CampaignFocus } from "../../components/CampaignFocus";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowDownRight, ArrowUpRight, BadgeIndianRupee, Check, ChevronDown, Clock, Copy, ExternalLink, Facebook, Globe,
@@ -571,6 +573,10 @@ export default function Command() {
   const campaigns = useMemo(() => (data ? [...products.flatMap((p) => p.campaigns), ...data.unassigned.campaigns] : []), [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const pages = useMemo(() => (data ? [...products.flatMap((p) => p.pages), ...data.unassigned.pages] : []), [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const empty = data && !products.length && !campaigns.length;
+  // ?campaign=ID: open on that one campaign's overview (after Launch, "See results", Home's "Live now").
+  const [urlParams, setUrl] = useUrlState();
+  const focusId = Number(urlParams.get("campaign")) || null;
+  const focus = focusId ? campaigns.find((c) => c.id === focusId) : null;
 
   return (
     <div>
@@ -582,6 +588,7 @@ export default function Command() {
           <Tabs value={days} onChange={setDays} tabs={[{ value: "7", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }]} />
           <Button onClick={() => setProductModal({ open: true, product: null })}><Plus className="size-4" /> Add product</Button>
         </div>} />
+      {focus && <div className="mb-10"><CampaignFocus c={focus} days={days} onAll={() => setUrl({ campaign: null })} /></div>}
       <StoryLine module="results" />
       <div className="mb-6">
         <AgentSwitch kind="autopilot" title="Campaign Autopilot" modes={{ suggest: "Suggest", auto: "Fix safely" }}
@@ -595,6 +602,7 @@ export default function Command() {
           action={<Button onClick={() => setProductModal({ open: true, product: null })}><Plus className="size-4" /> Add your first product</Button>} />
       ) : (
         <div className="space-y-8">
+          {focus && <h2 className="border-t border-line pt-6 text-sm font-semibold text-strong">All results</h2>}
           <Pulse k={data.kpis} summary={data.summary} brief={brief} onBrief={loadBrief} briefBusy={briefBusy} />
 
           {/* Next steps live only in the For you panel (design.md: nothing said twice); this line points there. */}

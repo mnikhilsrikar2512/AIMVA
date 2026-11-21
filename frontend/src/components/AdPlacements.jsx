@@ -338,20 +338,6 @@ function engagement(seed) {
   return { likes: k(n(180, 2400)), comments: n(12, 140), shares: n(4, 60), followers: k(n(1200, 48000)) };
 }
 
-function StatusBar({ dark }) {
-  return (
-    <div className={cx("flex items-center justify-between px-6 pb-1 pt-2.5 text-[12px] font-semibold", dark ? "bg-black text-white" : "bg-white text-black")} style={SYSTEM_FONT} aria-hidden>
-      <span>9:41</span>
-      <span className="h-[18px] w-[72px] rounded-full bg-black" />
-      <span className="flex items-center gap-1">
-        <svg width="16" height="10" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1" /><rect x="4.5" y="5" width="3" height="6" rx="1" /><rect x="9" y="2.5" width="3" height="8.5" rx="1" /><rect x="13.5" y="0" width="3" height="11" rx="1" /></svg>
-        <svg width="15" height="11" viewBox="0 0 16 12" fill="currentColor"><path d="M8 2.4c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .7 10.2 10.2 0 0 0 .8 3.6L2 4.8a8.5 8.5 0 0 1 6-2.4Zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4.1C6.2 4.1 4.5 4.8 3.2 6l1.2 1.2c1-.9 2.2-1.4 3.6-1.4Zm0 3.4c-.5 0-1 .2-1.3.5L8 11l1.3-1.3c-.3-.3-.8-.5-1.3-.5Z" /></svg>
-        <svg width="25" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor"><rect x=".5" y=".5" width="22" height="11" rx="3.5" opacity=".4" /><rect x="2" y="2" width="17" height="8" rx="2" fill="currentColor" stroke="none" /><path d="M24 4v4" strokeWidth="1.5" opacity=".5" /></svg>
-      </span>
-    </div>
-  );
-}
-
 /**
  * @param creative {headline, text, image_url, cta}
  * @param connected Set of connected provider keys ("meta" | "google" | "linkedin")
@@ -367,17 +353,20 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(reduceMotion);
   const [hover, setHover] = useState(false);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const frame = useRef(null);
   const screen = useRef(null);
+  // Owner 2026-11-21: scrolls, with no scrollbar and no hint; touching the scroll pauses the rotation so the ad doesn't
+  // swap mid-read.
+  const [held, setHeld] = useState(false);
   const current = available[Math.min(index, available.length - 1)] || PLACEMENTS[0];
 
   useEffect(() => { setIndex(0); }, [platform, available.length]);
   useEffect(() => {
-    if (paused || hover || available.length < 2) return;
+    if (paused || hover || held || available.length < 2) return;
     const t = setTimeout(() => setIndex((i) => (i + 1) % available.length), DWELL_MS);
     return () => clearTimeout(t);
-  }, [index, paused, hover, available.length]);
+  }, [index, paused, hover, held, available.length]);
+  useEffect(() => { setHeld(false); }, [current.key]);
 
   useEffect(() => {  // after a beat, scroll the feed like a person would, so the headline and button come into view
     const el = screen.current;
@@ -403,12 +392,6 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
   };
   const Render = RENDER[current.key];
 
-  const onMove = (e) => {
-    if (reduceMotion) return;
-    const r = frame.current.getBoundingClientRect();
-    setTilt({ x: ((e.clientY - r.top) / r.height - 0.5) * -6, y: ((e.clientX - r.left) / r.width - 0.5) * 8 });
-  };
-
   return (
     <div className="flex flex-col items-center">
       <div className="mb-3 flex w-full items-center justify-between gap-2">
@@ -420,31 +403,29 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
         )}
       </div>
 
-      <div className="w-full [perspective:1200px]">
+      {/* The ad on its own (owner, 2026-11-21: no 3D tilt, and "remove the phone"): no handset frame, status bar or home
+          bar, just the placement as people will see it. Hovering only pauses the rotation. */}
+      <div className="w-full">
         <div
           ref={frame}
-          onMouseMove={onMove}
           onMouseEnter={() => setHover(true)}
-          onMouseLeave={() => { setHover(false); setTilt({ x: 0, y: 0 }); }}
-          className="mx-auto w-full max-w-[300px] rounded-[2.6rem] bg-[#1b1b1f] p-[9px] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.55),inset_0_0_0_1.5px_#3a3a40] transition-transform duration-200 ease-out"
-          style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` }}
+          onMouseLeave={() => setHover(false)}
+          className={cx("relative mx-auto w-full max-w-[320px] overflow-hidden rounded-2xl ring-1 ring-line shadow-[0_12px_32px_-18px_rgba(0,0,0,0.3)]", current.dark ? "bg-black" : "bg-white")}
+          style={SYSTEM_FONT}
         >
-          <div className={cx("relative overflow-hidden rounded-[2.1rem]", current.dark ? "bg-black" : "bg-white")} style={SYSTEM_FONT}>
-            <StatusBar dark={current.dark} />
-            <div ref={screen} className={cx("relative h-[540px] overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", current.dark ? "overflow-hidden" : "overflow-y-auto")} style={{ scrollbarWidth: "none" }}>
-              <div key={current.key} className={cx("flex min-h-full flex-col [&>*]:flex-1", !reduceMotion && "animate-[adin_450ms_cubic-bezier(.2,.8,.2,1)]")}>
-                <Render ad={ad} />
-              </div>
-            </div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-1.5 z-20 flex justify-center" aria-hidden>
-              <span className={cx("h-[4px] w-[110px] rounded-full", current.dark ? "bg-white/80" : "bg-black/85")} />
+          <div ref={screen} onWheel={() => setHeld(true)} onTouchStart={() => setHeld(true)} tabIndex={current.dark ? undefined : 0}
+            aria-label={current.dark ? undefined : `${current.label} preview, scrollable`}
+            className={cx("relative overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-brand",
+              current.dark ? "h-[540px] overflow-hidden" : "max-h-[560px] overflow-y-auto")}>
+            <div key={current.key} className={cx("flex min-h-full flex-col [&>*]:flex-1", !reduceMotion && "animate-[adin_450ms_cubic-bezier(.2,.8,.2,1)]")}>
+              <Render ad={ad} />
             </div>
           </div>
         </div>
       </div>
 
       {available.length > 1 && (
-        <div className="mt-4 flex w-full max-w-[300px] gap-1.5" role="tablist" aria-label="Ad placements">
+        <div className="mt-4 flex w-full max-w-[320px] gap-1.5" role="tablist" aria-label="Ad placements">
           {available.map((p, i) => (
             <button
               key={p.key}

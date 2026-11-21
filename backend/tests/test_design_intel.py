@@ -39,7 +39,7 @@ def test_owner_colours_win_unless_matching_is_on(auth_client):
 
 def test_auto_font_without_a_match_falls_back(auth_client):
     s = auth_client.post("/api/sites", json={**BRIEF, "industry": "coaching institute", "font": "auto", "match_colors": True}).json()
-    assert "Plus+Jakarta+Sans" in s["html"] and s["brief"]["primary"] == "#6366f1"
+    assert "Plus+Jakarta+Sans" in s["html"] and s["brief"]["primary"] == "#4f46e5"
 
 
 def test_directions_lead_with_the_matched_design(auth_client):

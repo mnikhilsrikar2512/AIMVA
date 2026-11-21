@@ -168,7 +168,7 @@ export default function Leads() {
             <Empty filtered icon={Users} title="No leads match" text="Try fewer words, or clear the filters."
               action={<Button variant="ghost" onClick={() => { setQ(""); setSource(""); setStage(""); }}>Clear filters</Button>} />
           ) : (
-            <Empty icon={Users} title="Your leads will land here" text="Everyone who fills your page form, answers an ad form, messages on WhatsApp or talks to your call assistant shows up here, ready to call."
+            <Empty className="px-4 sm:px-6 lg:px-8" icon={Users} title="Your leads will land here" text="Everyone who fills your page form, answers an ad form, messages on WhatsApp or talks to your call assistant shows up here, ready to call."
               action={<Link to="/app/websites" className="btn-primary">Make a page with a lead form</Link>}
               secondary={<Button variant="ghost" onClick={() => setAdding(true)}><Plus className="size-4" /> Add one yourself</Button>} />
           )

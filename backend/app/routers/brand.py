@@ -3,7 +3,7 @@ import re
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -75,6 +75,30 @@ def save_brand(body: BrandIn, user: User = Depends(current_user), db: Session = 
     db.add(kit)
     db.commit()
     return kit_out(kit, _assets(db, user.id))
+
+
+# ---- the brand book: one page every generator reads (see app/brand_book.py) -------------------------------
+@router.get("/api/brand/book")
+def brand_book(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .. import brand_book as bb
+    book = bb.build(db, user)
+    return {**book, "markdown": bb.markdown(book), "voices": list(bb.VOICES)}
+
+
+@router.put("/api/brand/book")
+def save_brand_book(body: dict, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .. import brand_book as bb
+    if len(str(body)) > 8000:
+        raise HTTPException(400, "That's too much for a brand book.")
+    book = bb.save_edits(db, user, body)
+    return {**book, "markdown": bb.markdown(book), "voices": list(bb.VOICES)}
+
+
+@router.get("/api/brand/book.md", response_class=PlainTextResponse)
+def brand_book_md(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .. import brand_book as bb
+    return PlainTextResponse(bb.markdown(bb.build(db, user)), media_type="text/markdown; charset=utf-8",
+                             headers={"Content-Disposition": 'attachment; filename="brand-book.md"'})
 
 
 @router.post("/api/brand/assets")

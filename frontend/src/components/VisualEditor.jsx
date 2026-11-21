@@ -250,10 +250,11 @@ function ImageChooser({ value, onChange }) {
  * The full-screen page editor: the page itself is the editor. Edits autosave (and merge into one version while you
  * keep working). `left` and `right` are the host's own top-bar items (back, name, publish…).
  */
-const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSave, onPageReplaced, left, right, changes }, ref) {
+const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSave, onPageReplaced, left, right, changes, checks }, ref) {
   // The changes panel stays folded or open the way the owner left it (per browser).
   const [panelOpen, setPanelOpen] = useState(() => { try { return localStorage.getItem("aimva_changes_panel") !== "folded"; } catch { return true; } });
   const togglePanel = () => setPanelOpen((o) => { try { localStorage.setItem("aimva_changes_panel", o ? "folded" : "open"); } catch { /* private window */ } return !o; });
+  const [tab, setTab] = useState("changes");  // the side panel holds Changes and, when given, Launch checks
   const [sheet, setSheet] = useState(false);  // phones: the changes list as a sheet; the prompt box stays visible
   const frame = useRef(null);
   const askBox = useRef(null);
@@ -315,7 +316,14 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
   }, [request, onSave, schedule]);
   const flushRef = useRef(flush);
   flushRef.current = flush;
-  useImperativeHandle(ref, () => ({ flush: () => flushRef.current(), dirty: () => dirtyN.current !== savedN.current }), []);
+  // Opens a side panel tab in the page itself (on phones, the same list as a sheet), never a browser window.
+  const showPanel = (t) => {
+    setTab(t);
+    if (window.matchMedia("(min-width: 1024px)").matches) setPanelOpen(true); else setSheet(true);
+  };
+  useImperativeHandle(ref, () => ({ flush: () => flushRef.current(), dirty: () => dirtyN.current !== savedN.current, showPanel,
+    // A suggestion fills the box for the whole page; the owner still reads it and presses Enter.
+    suggest: (t) => { send({ type: "clear-target" }); setAsk(t); setSheet(false); setTimeout(() => askBox.current?.focus(), 0); } }), []);
 
   useEffect(() => {
     const onMessage = (e) => {
@@ -552,13 +560,20 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
         {changes && (
           <aside aria-label="Changes" className={cx("hidden shrink-0 flex-col border-l border-line bg-surface lg:flex", panelOpen ? "w-[360px]" : "w-12")}>
             <div className={cx("flex h-11 shrink-0 items-center border-b border-line", panelOpen ? "justify-between pl-4 pr-2" : "justify-center")}>
-              {panelOpen && <h2 className="text-sm font-semibold text-strong">Changes</h2>}
+              {panelOpen && (checks ? (
+                <div role="tablist" aria-label="Side panel" className="flex gap-1">
+                  {[["changes", "Changes"], ["checks", "Launch checks"]].map(([k, l]) => (
+                    <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                      className={cx("rounded-lg px-2.5 py-1 text-sm font-semibold", tab === k ? "bg-surface-2 text-strong" : "text-muted hover:text-strong")}>{l}</button>
+                  ))}
+                </div>
+              ) : <h2 className="text-sm font-semibold text-strong">Changes</h2>)}
               <button type="button" className="btn-subtle btn-sm w-8 px-0" onClick={togglePanel} aria-expanded={panelOpen}
-                aria-label={panelOpen ? "Fold the changes panel" : "Open the changes panel"} title={panelOpen ? "Fold" : "Changes"}>
+                aria-label={panelOpen ? "Fold the side panel" : "Open the side panel"} title={panelOpen ? "Fold" : "Changes"}>
                 {panelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
               </button>
             </div>
-            {panelOpen && <div className="min-h-0 flex-1 overflow-y-auto">{changes}</div>}
+            {panelOpen && <div className="min-h-0 flex-1 overflow-y-auto">{checks && tab === "checks" ? checks : changes}</div>}
             {panelOpen && askForm(true)}
           </aside>
         )}
@@ -572,7 +587,8 @@ const VisualEditor = forwardRef(function VisualEditor({ html, siteId, page, onSa
         )}
         {askForm(false)}
       </div>
-      {changes && <Modal open={sheet} onClose={() => setSheet(false)} title="Changes"><div className="-mx-6">{changes}</div></Modal>}
+      {changes && <Modal open={sheet} onClose={() => setSheet(false)} title={checks && tab === "checks" ? "Launch checks" : "Changes"}>
+        <div className="-mx-6">{checks && tab === "checks" ? checks : changes}</div></Modal>}
 
       <Modal open={!!picking} onClose={() => setPicking(null)} title={picking?.sid ? "Add an image" : "Replace image"} wide>
         <div className="space-y-4">

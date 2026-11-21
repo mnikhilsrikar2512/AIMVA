@@ -74,7 +74,7 @@ def test_ai_gets_playbook_rules(auth_client, mock_http):
             '<form data-aimva-lead><input name="phone"></form></body></html>')
     route = mock_http.post("https://api.openai.com/v1/chat/completions").respond(json={"choices": [{"message": {"content": page}}]})
     auth_client.post("/api/sites", json={"business": "Smile", "industry": "dental clinic", "offer": "First check-up"})
-    prompt = json.loads(route.calls.last.request.content)["messages"][-1]["content"]
+    prompt = json.loads(route.calls[0].request.content)["messages"][-1]["content"]
     assert "Clinic / healthcare" in prompt and "placeholder" in prompt
 
 
@@ -259,7 +259,7 @@ def test_ai_follows_the_chosen_layout(auth_client, mock_http):
     page = '<html><body><h1>Hi</h1><form data-aimva-lead><input name="phone"></form></body></html>'
     route = mock_http.post("https://api.openai.com/v1/chat/completions").respond(json={"choices": [{"message": {"content": page}}]})
     auth_client.post("/api/sites", json={**BASE, "use_ai": True, "layout": "editorial"})
-    prompt = json.loads(route.calls.last.request.content)["messages"][-1]["content"]
+    prompt = json.loads(route.calls[0].request.content)["messages"][-1]["content"]
     assert "Magazine style" in prompt and "Do not show any business phone number" in prompt and 'name=\"callback\"' in prompt
 
 

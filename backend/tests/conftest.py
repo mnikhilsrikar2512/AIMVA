@@ -39,7 +39,7 @@ PASSWORD = "Sup3r-secret!"
 
 # Suites that save their own AI keys act as the platform owner (only the owner may manage AI engines now).
 BYOK_SUITES = {"test_content", "test_gemini", "test_image_edit", "test_providers", "test_ai_engine", "test_brand", "test_flow",
-               "test_quality", "test_showcase", "test_templates", "test_onboarding", "test_integrations"}
+               "test_quality", "test_page_score", "test_page_ideas", "test_showcase", "test_templates", "test_onboarding", "test_integrations"}
 
 
 NON_OWNER_TESTS = {"test_owner_metrics", "test_platform_review_publishes_for_everyone"}

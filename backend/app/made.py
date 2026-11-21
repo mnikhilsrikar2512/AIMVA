@@ -416,6 +416,27 @@ def _with_campaign(link: str, cid: int) -> str:
     return f"{link}{'&' if '?' in link else '?'}aimva_c={cid}"
 
 
+_ASK = re.compile(r"^\s*(?:please\s+)?(?:run|make|create|draft|start|launch|set up|give me|i want|i need)?\s*(?:me\s+)?(?:an?\s+|some\s+)?"
+                  r"(?:(?:₹|rs\.?\s*)?[\d,]+k?\s+)?(?:(?:meta|facebook|instagram|google|linkedin|whats ?app)\s+)?(?:ads?|campaigns?|promotion)\b\s*(?:for|about|on|of|to promote)?\s*", re.I)
+_NOISE = re.compile(r"\b(?:₹|rs\.?|inr)?\s*[\d,]+\s*(?:k)?\s*(?:a|per)?\s*(?:day|daily|budget|rupees)\b|\bthis week\b|\btoday\b|"
+                    r"\b(?:within|in|around|near)\s+\d+\s*km\b.*$", re.I)
+
+
+def offer_in(prompt: str) -> str:
+    """What the owner wants advertised, from their own sentence: "Run an ad for our Sankranti offer: 20% off membership"
+    -> "Sankranti offer: 20% off membership". Empty when the sentence only asks for an ad ("run ads", "₹500 ad this week")."""
+    t = _ASK.sub("", prompt or "", count=1)
+    t = _NOISE.sub("", t)
+    if re.match(r"\s*(?:that|which|to)\s+(?:brings?|sends?|takes?|gets?)\b", t, re.I):
+        return ""  # "an ad that brings people to my page": about where it goes, not what is offered
+    if re.match(r"\s*(?:in|at|near|around|within|across)\b", t, re.I):
+        return ""  # "ads in Kukatpally": a place, read separately by place_in
+    t = re.sub(r"^\s*(?:our|my|the)\s+", "", t, flags=re.I).strip(" .,:;-")
+    t = re.sub(r"\s+(?:ads?|campaigns?)\s*$", "", t, flags=re.I)
+    words = [w for w in re.findall(r"[^\W\d_]{2,}", t) if w.lower() not in {"run", "make", "an", "ad", "ads", "rupees", "rs", "inr", "please"}]
+    return t[:120] if len(words) >= 2 else ""
+
+
 def draft_campaign(db: Session, user: User, prompt: str, platform: str, asset_id: Optional[int] = None) -> Campaign:
     from .agents.launch import _ad_copy
     from .quality import match_playbook
@@ -426,7 +447,8 @@ def draft_campaign(db: Session, user: User, prompt: str, platform: str, asset_id
     playbook = match_playbook(profile.get("industry", ""), user.industry)
     # The ad speaks about the business, never repeats the owner's instructions back ("A Meta campaign for...").
     site = db.scalar(select(Site).where(Site.user_id == user.id).order_by(Site.id.desc()))
-    offer = (profile.get("offer") or ((site.brief or {}).get("offer") if site else "") or "").strip()
+    # The owner's own words win: "an ad for our Sankranti offer" is about Sankranti, not the offer saved at setup.
+    offer = (offer_in(prompt) or profile.get("offer") or ((site.brief or {}).get("offer") if site else "") or "").strip()
     facts = {"business": business, "offer": offer or (f"{business} in {area}" if area else business), "location_line": area,
              "audience": where.get("interests", "")}
     copy = _ad_copy(db, user, facts, playbook)

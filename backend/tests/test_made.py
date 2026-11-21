@@ -248,3 +248,13 @@ def test_a_reel_prompt_gets_a_vertical_video(auth_client, db, mock_http):
         C._fal_key = key
     assert r.status_code == 200, r.text
     assert r.json()["params"]["aspect_ratio"] in ("9:16", "")  # models that pick their own shape leave it blank
+
+
+def test_ad_draft_uses_the_offer_in_the_owners_sentence(auth_client):
+    from app.made import offer_in
+    assert offer_in("Run an ad for our Sankranti offer: 20% off membership") == "Sankranti offer: 20% off membership"
+    assert offer_in("make a google ad for free dental checkup camp on Sunday") == "free dental checkup camp on Sunday"
+    for bare in ("run ads", "Run a ₹500 ad this week", "ads chalao 2000 ka budget", "An ad that brings people to my page", "Ads in Kukatpally"):
+        assert offer_in(bare) == ""
+    c = auth_client.post("/api/campaigns/draft", json={"prompt": "Run an ad for our Sankranti offer: 20% off membership", "platform": "meta"}).json()
+    assert "Sankranti" in c["creative"]["headline"] + c["creative"]["text"]

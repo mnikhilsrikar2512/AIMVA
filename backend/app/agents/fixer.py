@@ -44,6 +44,10 @@ def fix_html(html: str, brief: dict) -> tuple:
     if n:
         fixed.append(f"Added alt text to {n} image{'s' if n != 1 else ''}")
 
+    # A picture slot with nothing in it shows as a broken image with its alt text: take the empty slot out.
+    html, empty = re.subn(r"<img\b(?=[^>]*\bsrc\s*=\s*([\"'])\s*\1)[^>]*>|<img\b(?![^>]*\bsrc\s*=)[^>]*>", "", html, flags=re.I)
+    if empty:
+        fixed.append(f"Removed {empty} empty picture slot{'s' if empty != 1 else ''} that would show as broken")
     html, dead = re.subn(r"(<a\b[^>]*href\s*=\s*)([\"'])\s*#?\s*\2", r'\1"#contact"', html, flags=re.I)
     if dead:
         fixed.append(f"Pointed {dead} empty link{'s' if dead != 1 else ''} at the enquiry form")
@@ -59,9 +63,12 @@ def fix_design(html: str) -> tuple:
     failing = {k for k, ok, *_ in design_checks(html) if not ok}
     css, fixed = [], []
     if "contrast" in failing:
-        bad = button_contrast(html)
-        css += [f"{sel}{{color:{on_color(bg)}!important}}" for sel, bg, _fg, _r in bad]
-        fixed.append(f"Made the text on {len(bad)} button style{'s' if len(bad) != 1 else ''} readable (your button colour is unchanged)")
+        # Only where the text colour actually changes: some colours are too mid-tone for white or black to reach 4.5:1,
+        # and claiming a fix we didn't make would hide that from the owner.
+        bad = [(sel, bg) for sel, bg, fg, _r in button_contrast(html) if on_color(bg) != fg]
+        css += [f"{sel}{{color:{on_color(bg)}!important}}" for sel, bg in bad]
+        if bad:
+            fixed.append(f"Made the text on {len(bad)} button style{'s' if len(bad) != 1 else ''} readable (your button colour is unchanged)")
     if "input_size" in failing:
         css.append("@media(max-width:640px){input,select,textarea{font-size:16px!important}}")
         fixed.append("Set form text to 16px on phones so iPhones don't zoom in")
