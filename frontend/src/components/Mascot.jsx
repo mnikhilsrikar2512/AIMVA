@@ -32,6 +32,10 @@ const FACES = {
   pointing: () => oval(18, 26, 12, 6),  // looking right, at the words and the button beside him
   sleepy: () => arc("M-20 4 Q0 14 20 4"),
 };
+// Real poses (owner's Gemini art, cut out 2026-11-21), used up to 200px wide where the art stays sharp. Above that, and
+// for moods without a pose, he is the front body with eyes drawn on the visor (which can also follow the pointer).
+const POSES = { hello: "wave", happy: "happy", cheer: "cheer", thinking: "thinking", sorry: "sorry", surprised: "surprised",
+  wink: "wink", cheeky: "giggle", pointing: "point", confused: "confused", sit: "sit", peek: "peek" };
 const BLINKS = new Set(["hello", "thinking", "surprised", "pointing", "cheeky"]);
 
 /** The face on its own, for places too small for the body (a 24px badge, a toast). */
@@ -51,13 +55,15 @@ function Face({ mood, look = [0, 0], blink }) {
 
 /**
  * <Mascot mood="hello" size={96} />
- *  mood     hello | happy | cheer | thinking | sorry | surprised | wink | cheeky | pointing | sleepy
+ *  mood     hello | happy | cheer | thinking | sorry | surprised | wink | cheeky | pointing | sleepy | confused | sit | peek
+ *  face     true = always the drawn face (the landing hero, where he is too big for the pose art)
  *  size     width in px; changing it makes him grow or shrink (spring), which is how he "turns big or small"
  *  arrive   "hop" jumps in from below and lands with a squash (use when he lands on a card), "pop" scales in
  *  watch    eyes follow the pointer around the page (Home only; it's the mischievous bit)
  *  say      a short line in a bubble; onTap makes him hop and lets the caller change mood or line
  */
-export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false, say = null, sayAlign = "left", onTap, className, label }) {
+export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false, say = null, sayAlign = "left", onTap, className, label, face = false }) {
+  const pose = !face && size <= 200 ? POSES[mood] : null;
   const ref = useRef(null);
   const body = useAnimationControls();
   const [blink, setBlink] = useState(false);
@@ -117,10 +123,14 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
         <Tag ref={ref} type={onTap ? "button" : undefined} onClick={onTap ? tap : undefined} animate={body}
           aria-label={onTap ? (label || "AIMVA") : undefined} aria-hidden={onTap ? undefined : true}
           style={{ originY: 1 }} className={cx("block w-full", onTap && "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-2xl")}>
-          <svg viewBox={`0 0 ${W} ${H}`} className="block w-full overflow-visible">
-            <image href="/mascot/body.webp" width={W} height={H} />
-            <Face mood={mood} look={look} blink={blink} />
-          </svg>
+          {pose ? (
+            <img src={`/mascot/poses/${pose}.webp`} alt="" draggable={false} className="block h-auto w-full" />
+          ) : (
+            <svg viewBox={`0 0 ${W} ${H}`} className="block w-full overflow-visible">
+              <image href="/mascot/body.webp" width={W} height={H} />
+              <Face mood={FACES[mood] ? mood : "hello"} look={look} blink={blink} />
+            </svg>
+          )}
         </Tag>
       </motion.div>
     </MotionConfig>

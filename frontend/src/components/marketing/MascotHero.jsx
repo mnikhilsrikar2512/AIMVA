@@ -173,7 +173,7 @@ export default function MascotHero({ user }) {
           <div className="relative order-1 flex items-center justify-center lg:order-2 lg:h-full">
             <motion.div style={{ scale: mascotScale }} className="relative">
               <motion.div animate={{ y: [0, -12, 0] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}>
-                <Mascot mood={s.mood} size={stage === 0 ? 400 : 330} arrive="pop" watch={stage === 0} className={cx(stage === 0 ? "max-w-[44vw]" : "max-w-[26vw]", "sm:max-w-[40vw] lg:max-w-none")} />
+                <Mascot face mood={s.mood} size={stage === 0 ? 400 : 330} arrive="pop" watch={stage === 0} className={cx(stage === 0 ? "max-w-[44vw]" : "max-w-[26vw]", "sm:max-w-[40vw] lg:max-w-none")} />
               </motion.div>
               {/* The ring under him glows marigold while he works */}
               <motion.span aria-hidden className="pointer-events-none absolute bottom-[1%] left-1/2 h-6 w-[38%] -translate-x-1/2 rounded-full blur-md"
