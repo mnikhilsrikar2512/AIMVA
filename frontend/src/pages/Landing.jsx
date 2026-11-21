@@ -7,7 +7,7 @@ import { ArrowRight, AudioLines, BarChart3, Check, ChevronDown, Globe, Image, Me
 import { FinalCta, Heading, MarketingLayout, cx, signupHref, useSeo } from "../components/marketing/Site";
 import { USE_CASES } from "../components/marketing/useCases";
 import { useAuth } from "../lib/auth";
-import MascotHero from "../components/marketing/MascotHero";
+import MascotHero, { Story } from "../components/marketing/MascotHero";
 import { Mascot } from "../components/Mascot";
 import ReplyScene from "../components/marketing/ReplyScene";
 
@@ -108,6 +108,9 @@ export default function Landing() {
             <Steps />
           </div>
         </section>
+
+        {/* The story the hero used to tell, read at your own pace */}
+        <Story user={user} />
 
         {/* The reply: the lead's language in, the same language out */}
         <section id="reply" className="scroll-mt-20 border-t border-line">

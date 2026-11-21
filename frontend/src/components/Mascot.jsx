@@ -3,14 +3,20 @@
 // lines of SVG instead of another image. Rules kept from the plan: small and calm by default, motion only to say
 // something (arrive, react, celebrate), still for people who ask their phone for less motion, never cheeky about money,
 // errors or customers waiting.
-import { MotionConfig, motion, useAnimationControls, useReducedMotion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion, useAnimationControls, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import cx from "clsx";
 
-const W = 760, H = 649;                 // body.png's drawing space
-const EYES = [[303, 217], [459, 219]];  // visor eye centres in that space
+// One drawing space for every picture (owner 2026-11-21: "it should not look like two different mascots"). Each pose
+// and the plain face body were placed on the same 360x300 canvas at the same body height, so swapping mood never
+// changes his size or where he stands. BOX is the part of that canvas his body fills: `size` is that box's width, and
+// hands, beams and speed lines may reach outside it without pushing the layout around.
+const W = 360, H = 300;
+const BOX = { x: 80, y: 55, w: 200, h: 240 };
+const EYES = [[153.2, 121.1], [199.5, 117.4]];  // visor eye centres on face-body.webp
 const GLOW = "#8BF6F1";
-const EYE_SCALE = 1.6;                  // owner 2026-11-21: "make the eyes big"
+const EYE_SCALE = 0.47;                         // owner 2026-11-21: "make the eyes big" (1.6x on the old 760 body)
+const LOOK = 0.3;                               // how far the eyes travel, in canvas units per pointer unit
 
 // One eye per mood, drawn around (0,0). `side` is -1 for the left eye, 1 for the right, so shapes can mirror.
 const oval = (rx, ry, dx = 0, dy = 0) => <ellipse cx={dx} cy={dy} rx={rx} ry={ry} fill={GLOW} />;
@@ -33,14 +39,22 @@ const FACES = {
   sleepy: () => arc("M-20 4 Q0 14 20 4"),
   shy: () => arc("M-22 2 Q0 16 22 2"),  // eyes politely shut while you type a password
 };
-// Real poses (owner's Gemini art, cut out 2026-11-21), used up to 200px wide where the art stays sharp. Above that, and
-// for moods without a pose, he is the front body with eyes drawn on the visor (which can also follow the pointer).
+// Real poses (owner's Gemini art, cut out 2026-11-21). For moods without a pose, while you type, and with `face`, he is
+// the idle body with the eyes drawn on the visor (which can follow the pointer). Pose swaps crossfade.
 const POSES = { hello: "wave", happy: "happy", cheer: "cheer", thinking: "thinking", sorry: "sorry", surprised: "surprised",
   wink: "wink", cheeky: "giggle", pointing: "point", confused: "confused", sit: "sit", peek: "peek",
   idle: "idle", calm: "calm", busy: "dash", focused: "focused", data: "hologram" };
 // Poses he can glance into for a moment while idle (a wink, a smile), then back.
 const GLANCE = { hello: "wink", happy: "wink", idle: "happy", calm: "wink", pointing: "happy" };
 const BLINKS = new Set(["hello", "thinking", "surprised", "pointing", "cheeky"]);
+
+/** Fetch every picture once, so the first swap to a new pose is a crossfade, not a blank frame. */
+let preloaded = false;
+function preload() {
+  if (preloaded || typeof Image === "undefined") return;
+  preloaded = true;
+  ["face-body", ...Object.values(POSES).map((p) => `poses/${p}`)].forEach((n) => { new Image().src = `/mascot/${n}.webp`; });
+}
 
 /** Where the caret is on screen, near enough: the end of the typed text (or of the last line in a box). */
 let measure;
@@ -63,9 +77,9 @@ function caretPoint(el) {
 function Face({ mood, look = [0, 0], blink }) {
   const draw = FACES[mood] || FACES.hello;
   return (
-    <g style={{ filter: `drop-shadow(0 0 10px ${GLOW}aa)` }}>
+    <g style={{ filter: `drop-shadow(0 0 3px ${GLOW}aa)` }}>
       {EYES.map(([x, y], i) => (
-        <motion.g key={i} initial={false} animate={{ x: x + look[0], y: y + look[1], scaleX: EYE_SCALE, scaleY: blink ? 0.15 : EYE_SCALE }}
+        <motion.g key={i} initial={false} animate={{ x: x + look[0] * LOOK, y: y + look[1] * LOOK, scaleX: EYE_SCALE, scaleY: blink ? 0.05 : EYE_SCALE }}
           transition={{ type: "spring", stiffness: 400, damping: 30, scaleY: { duration: 0.08 } }}>
           {draw(i === 0 ? -1 : 1)}
         </motion.g>
@@ -78,7 +92,7 @@ function Face({ mood, look = [0, 0], blink }) {
  * <Mascot mood="hello" size={96} />
  *  mood     hello | happy | cheer | thinking | sorry | surprised | wink | cheeky | pointing | sleepy | confused | sit | peek
  *  alive    floats gently and fidgets now and then (default on; still for reduced motion)
- *  face     true = always the drawn face (the landing hero, where he is too big for the pose art)
+ *  face     true = always the idle body with drawn eyes (so the eyes can follow you the whole time)
  *  size     width in px; changing it makes him grow or shrink (spring), which is how he "turns big or small"
  *  arrive   "hop" jumps in from below and lands with a squash (use when he lands on a card), "pop" scales in
  *  watch    eyes follow the pointer, and your typing anywhere on the page; eyes shut for passwords
@@ -88,7 +102,8 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
   const reduce = useReducedMotion();
   const [glance, setGlance] = useState(null);
   const [typingNow, setTypingNow] = useState(false);
-  const pose = !face && !typingNow && size <= 200 ? (glance || POSES[mood]) : null;
+  const pose = !face && !typingNow ? (glance || POSES[mood]) : null;
+  useEffect(preload, []);
   const ref = useRef(null);
   const body = useAnimationControls();
   const [blink, setBlink] = useState(false);
@@ -189,7 +204,7 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
   const Tag = onTap ? motion.button : motion.div;
   return (
     <MotionConfig reducedMotion="user">
-      <motion.div initial={false} animate={{ width: size }} transition={{ type: "spring", stiffness: 260, damping: 18 }}
+      <motion.div initial={false} animate={{ width: size }} transition={{ type: "spring", stiffness: 170, damping: 24 }}
         className={cx("relative inline-block shrink-0 select-none", className)}>
         {say && (
           <motion.p key={say} initial={{ opacity: 0, y: 6, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.25, delay: arrive ? 0.6 : 0 }}
@@ -203,14 +218,21 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
         <Tag ref={ref} type={onTap ? "button" : undefined} onClick={onTap ? tap : undefined} animate={body}
           aria-label={onTap ? (label || "AIMVA") : undefined} aria-hidden={onTap ? undefined : true}
           style={{ originY: 1 }} className={cx("block w-full", onTap && "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-2xl")}>
-          {pose ? (
-            <img src={`/mascot/poses/${pose}.webp`} alt="" draggable={false} className="block h-auto w-full" />
-          ) : (
-            <svg viewBox={`0 0 ${W} ${H}`} className="block w-full overflow-visible">
-              <image href="/mascot/body.webp" width={W} height={H} />
-              <Face mood={typing === "secret" ? "shy" : typing ? "hello" : FACES[mood] ? mood : "hello"} look={typing === "secret" ? [0, 6] : look} blink={blink} />
-            </svg>
-          )}
+          <span className="relative block" style={{ aspectRatio: `${BOX.w} / ${BOX.h}` }}>
+            <AnimatePresence initial={false}>
+              <motion.span key={pose || "face"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}
+                className="absolute block" style={{ left: `${(-BOX.x / BOX.w) * 100}%`, top: `${(-BOX.y / BOX.h) * 100}%`, width: `${(W / BOX.w) * 100}%` }}>
+                {pose ? (
+                  <img src={`/mascot/poses/${pose}.webp`} alt="" draggable={false} className="block h-auto w-full" />
+                ) : (
+                  <svg viewBox={`0 0 ${W} ${H}`} className="block w-full overflow-visible">
+                    <image href="/mascot/face-body.webp" width={W} height={H} />
+                    <Face mood={typing === "secret" ? "shy" : typing ? "hello" : FACES[mood] ? mood : "hello"} look={typing === "secret" ? [0, 6] : look} blink={blink} />
+                  </svg>
+                )}
+              </motion.span>
+            </AnimatePresence>
+          </span>
         </Tag>
         </motion.div>
       </motion.div>
