@@ -188,16 +188,17 @@ export function Chip({ tone = "slate", children, className }) {
  */
 export function Empty({ icon: Icon, title, text, action, secondary, preview = "rows", compact, filtered, className }) {
   const big = !(filtered || compact) && preview !== "icon";
-  // Owner 2026-11-21: not centred. Full-size empty lists put the mascot at the left, looking at the words and the
-  // next step beside him; compact and filtered ones stay a small centred note.
+  // Owner 2026-11-21: not centred. Full-size empty lists keep the words on the page's left edge and the mascot to
+  // their right, pointing back at the next step; compact and filtered ones stay a small centred note.
   if (big) return (
-    <div className={cx("flex items-start gap-5 px-1 py-12 sm:py-14", className)}>
-      <Mascot mood="pointing" size={88} arrive="pop" className="shrink-0" />
-      <div className="pt-1">
+    <div className={cx("flex items-center gap-6 py-12 sm:py-14", className)}>
+      <div className="min-w-0">
         <p className="text-lg font-semibold text-strong">{title}</p>
         {text && <p className="mt-1.5 max-w-md text-sm text-muted">{text}</p>}
         {(action || secondary) && <div className="mt-5 flex flex-wrap items-center gap-2">{action}{secondary}</div>}
       </div>
+      {/* Owner 2026-11-21: words line up with the page; he stands to their right, pointing back at them. */}
+      <Mascot mood="pointing" size={104} arrive="hop" className="hidden shrink-0 -scale-x-100 sm:block" />
     </div>
   );
   return (
