@@ -133,7 +133,8 @@ def _verify_fal(values: dict) -> None:
 def _verify_gemini(values: dict) -> None:
     """Listing models is free and needs a valid key: 200 when accepted, 400/403 for a bad key."""
     from ..services import GEMINI_API
-    r = httpx.get(f"{GEMINI_API}/models", params={"key": values["api_key"], "pageSize": 1}, timeout=20)
+    r = httpx.get(f"{GEMINI_API}/models", params={"pageSize": 1}, headers={"x-goog-api-key": values["api_key"]},
+                  timeout=20)
     if r.status_code in (400, 401, 403):
         raise HTTPException(400, "Google didn't accept this Gemini key. Copy it again from aistudio.google.com/apikey.")
 

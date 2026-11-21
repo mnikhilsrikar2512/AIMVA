@@ -45,14 +45,14 @@ def test_ad_copy_uses_the_users_own_key(auth_client, mock_http):
     connect(auth_client)
     r = auth_client.post("/api/content/ad-copy", json={"product": "Skyline Homes"}).json()
     assert r["source"] == "ai" and r["variants"][0]["headline"] == "Live by the sea"
-    assert route.calls[0].request.url.params["key"] == "AIza-user-key"
+    assert route.calls[0].request.headers["x-goog-api-key"] == "AIza-user-key"
 
 
 def test_server_key_used_when_user_has_none(auth_client, mock_http, monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "server-key")
     route = gemini_reply(mock_http, "1. Do more\n2. Spend less\n3. Call hot leads")
     r = auth_client.get("/api/analytics/insights").json()
-    assert r["source"] == "ai" and route.calls[0].request.url.params["key"] == "server-key"
+    assert r["source"] == "ai" and route.calls[0].request.headers["x-goog-api-key"] == "server-key"
 
 
 def test_no_key_means_templates_and_no_network(auth_client, mock_http):
@@ -78,7 +78,7 @@ def test_voice_agent_uses_owner_key(auth_client, mock_http):
     agent = auth_client.post("/api/voice/agents", json={"name": "Sales"}).json()
     cid = auth_client.post(f"/api/voice/agents/{agent['id']}/calls").json()["call"]["id"]
     r = auth_client.post(f"/api/voice/calls/{cid}/turn", json={"text": "I'm Priya"}).json()
-    assert r["reply"].startswith("Lovely to meet you") and route.calls[0].request.url.params["key"] == "AIza-user-key"
+    assert r["reply"].startswith("Lovely to meet you") and route.calls[0].request.headers["x-goog-api-key"] == "AIza-user-key"
 
 
 def test_keys_are_per_user(auth_client, other_client, mock_http):

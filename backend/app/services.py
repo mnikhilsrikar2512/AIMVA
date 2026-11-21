@@ -65,7 +65,8 @@ def _gemini_once(model: str, prompt: str, system: str, max_tokens: int, key: str
         if system:
             body["systemInstruction"] = {"parts": [{"text": system}]}
         try:
-            r = httpx.post(f"{GEMINI_API}/models/{model}:generateContent", params={"key": key}, json=body,
+            # Key in a header, never ?key=: URLs are written to logs (httpx logs every request URL at INFO).
+            r = httpx.post(f"{GEMINI_API}/models/{model}:generateContent", headers={"x-goog-api-key": key}, json=body,
                            timeout=GEMINI_TIMEOUT)
         except Exception:
             return None

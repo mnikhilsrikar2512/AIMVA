@@ -92,7 +92,7 @@ def _public_label(label: str, kind: str) -> str:
 
 
 def asset_out(a: Asset) -> dict:
-    params = {k: v for k, v in (a.params or {}).items() if not k.endswith("_url") and k not in ("job", "endpoint", "model_id")}
+    params = {k: v for k, v in (a.params or {}).items() if not k.endswith("_url") and k not in ("job", "endpoint", "model_id", "served_by", "retry")}
     if "provider" in params:
         params["provider"] = discreet.out_ref(params["provider"])
     if "provider_label" in params:
@@ -221,6 +221,36 @@ def _pollinations(url: str) -> bytes:
     return r.content
 
 
+def _image_backup(user: User, prompt: str, body: "ImageIn", w: int, h: int, reference: Optional[str],
+                  failure: HTTPException) -> tuple:
+    """The studio engine failed: Google's image model next, then the free engine where it is allowed (never in
+    production). Returns (results, model_label, served_by), or raises the studio's own error when nothing works,
+    so the customer sees the usual neutral message and never learns a backup exists (app/google_media.py)."""
+    from .. import google_media
+    log.warning("studio images failed (%s: %s); trying the backups", failure.status_code, failure.detail)
+    gkey = google_media.key()
+    if gkey:
+        try:
+            pics = google_media.generate_images(gkey, _styled(prompt, None, body.negative_prompt, inline_negative=True),
+                                                w, h, body.count, reference)
+            return [("bytes", b) for b in pics], google_media.image_model(), "google"
+        except P.ProviderError as e:
+            log.warning("backup image engine failed too (%s): %s%s", e.status, e.message,
+                        " - Google picture generation needs billing on the AI Studio project" if e.status in (400, 402, 429) else "")
+        except Exception:  # noqa: BLE001 - an unexpected answer is just another failure
+            log.warning("backup image engine answered in an unexpected way", exc_info=True)
+    if settings.free_ai:
+        seed = body.seed if body.seed is not None else random.randint(1, 10**9)
+        free_prompt = _styled(prompt, None, body.negative_prompt, inline_negative=True)
+        try:
+            data = _pollinations(f"https://image.pollinations.ai/prompt/{quote(free_prompt)}?width={w}&height={h}"
+                                 f"&seed={seed}&model=flux&nologo=true")
+            return [("bytes", data)], "pollinations/flux", "free"
+        except HTTPException as e:
+            log.warning("free image engine failed too (%s): %s", e.status_code, e.detail)
+    raise failure
+
+
 def _image_prompt(db: Session, user: User, body: "ImageIn", kit, product: bool = False):
     """(prompt, brief): the user's idea expanded into a structured brief when an AI writer is available."""
     from .. import image_brief
@@ -291,6 +321,7 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
     ref = body.provider or ("builtin:pollinations" if body.model.startswith("pollinations/") else "builtin:fal")
     reference = _reference(db, user, body.reference)
     results = []  # ("url", str) | ("bytes", bytes)
+    served_by = ""  # internal only: which backup stood in when the studio engine failed
     seed = body.seed
     brief, sent = None, None
     if body.keep_product:
@@ -314,15 +345,20 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
         aspect = next((k for k, v in SIZES.items() if v == (w, h)), body.size if body.size in SIZES else "1:1")
         opts = {"prompt": prompt, "negative_prompt": body.negative_prompt, "width": w, "height": h, "count": body.count,
                 "seed": body.seed, "aspect_ratio": aspect, "image_data_uri": reference}
+        failure = None
         try:
             results = P.generate_images(conn, opts)
         except P.ProviderError as e:
-            raise http_error(e)
+            failure = http_error(e)
         except (KeyError, IndexError, TypeError, ValueError):
-            raise HTTPException(502, f"{conn['name']} answered in an unexpected format. Check the model supports images.")
-        if not results:
-            raise HTTPException(502, f"{conn['name']} didn't return any images. Try a different prompt or model.")
+            failure = HTTPException(502, f"{conn['name']} answered in an unexpected format. Check the model supports images.")
+        if failure is None and not results:
+            failure = HTTPException(502, f"{conn['name']} didn't return any images. Try a different prompt or model.")
         model_label = conn["model"]
+        if failure is not None:
+            if ref != "builtin:fal":  # the backups stand in for AIMVA's own studio engine only
+                raise failure
+            results, model_label, served_by = _image_backup(user, prompt, body, w, h, reference, failure)
         if conn["adapter"] in ("replicate", "openai_images"):  # their links expire: keep our own copy
             try:
                 results = [r if r[0] == "bytes" else ("bytes", P.download(r[1], P.MAX_IMAGE_BYTES, conn["name"])) for r in results]
@@ -354,9 +390,10 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
                           "negative_prompt": body.negative_prompt, "reference": bool(reference), "batch": batch,
                           "kept_product": body.keep_product, "brief": brief, "prompt_sent": sent, "words": sense["words"],
                           "by_id": _by(req),
+                          **({"served_by": served_by} if served_by else {}),
                           **({"text_layers": layers, "text_plain_url": plain} if u != plain else {}),
                           "provider_label": "Your product, new scene" if body.keep_product
-                          else "Free FLUX" if ref == "builtin:pollinations" else model_label})
+                          else "Free FLUX" if ref == "builtin:pollinations" or served_by == "free" else model_label})
         db.add(a)
         assets.append(a)
     db.commit()
@@ -438,7 +475,12 @@ def _seconds(duration: str) -> float:
 
 
 def _fal_queue(key: str, model: str, payload: dict) -> dict:
-    r = httpx.post(f"https://queue.fal.run/{model}", headers={"Authorization": f"Key {key}"}, timeout=60, json=payload)
+    try:
+        r = httpx.post(f"https://queue.fal.run/{model}", headers={"Authorization": f"Key {key}"}, timeout=60, json=payload)
+    except httpx.TimeoutException:
+        raise HTTPException(504, "The video engine took too long to answer. Try again in a minute.")
+    except httpx.HTTPError:
+        raise HTTPException(502, "Couldn't reach the video engine. Try again in a minute.")
     if r.status_code >= 400:
         raise _fal_failed(r)
     return r.json()
@@ -487,6 +529,50 @@ def _start_image(db: Session, user: User, body: VideoIn) -> Optional[str]:
     return None
 
 
+def _start_ref(body: VideoIn) -> str:
+    """The start image as a reference the backup can load again later ('' for text-to-video)."""
+    if body.start_ref:
+        return body.start_ref
+    if body.start_image_id:
+        return f"brand:{body.start_image_id}"
+    if body.start_asset_id:
+        return f"asset:{body.start_asset_id}"
+    return ""
+
+
+def _video_backup(db: Session, user: User, retry: dict) -> Optional[dict]:
+    """The studio video engine failed: queue the same clip on Google Veo (app/google_media.py). Returns the job,
+    or None when the backup is off, has no key, or refuses too (a free key can't make video)."""
+    from .. import google_media
+    gkey = google_media.key()
+    if not gkey or not retry:
+        return None
+    try:
+        start = _reference(db, user, retry["start"]) if retry.get("start") else None
+        return google_media.start_video(gkey, retry["prompt"], retry.get("aspect_ratio") or "16:9",
+                                        retry.get("duration") or "8", retry.get("negative_prompt") or "", start)
+    except P.ProviderError as e:
+        log.warning("backup video engine failed too (%s): %s%s", e.status, e.message,
+                    " - Google video generation needs billing on the AI Studio project" if e.status in (400, 402, 429) else "")
+    except Exception:  # noqa: BLE001 - an unexpected answer is just another failure
+        log.warning("backup video engine couldn't start", exc_info=True)
+    return None
+
+
+def _switch_to_backup(db: Session, user: User, a: Asset, why: str) -> bool:
+    """A queued studio clip failed: hand it to the backup without the customer noticing. True if it took over."""
+    retry = (a.params or {}).get("retry")
+    if not retry or (a.params or {}).get("served_by"):
+        return False  # nothing to retry from, or the backup itself already failed
+    log.warning("studio video %s failed (%s); trying the backup", a.id, why)
+    job = _video_backup(db, user, retry)
+    if not job:
+        return False
+    a.model, a.status = job["model"], "queued"
+    a.params = {**a.params, "job": job, "stage": "video", "served_by": "google", "has_audio": True, "add_sound": False}
+    return True
+
+
 @router.post("/video")
 def generate_video(body: VideoIn, user: User = Depends(current_user), db: Session = Depends(get_db), req: Request = None):
     rate_limit(f"vid:{user.id}", 10, 600)
@@ -515,6 +601,9 @@ def generate_video(body: VideoIn, user: User = Depends(current_user), db: Sessio
             + ([f"- {asked}"] if asked else []))
     start = _start_image(db, user, body)
     spec = VIDEO_BY_ID.get(body.model) if ref == "builtin:fal" else None
+    # Enough to make the same clip on the backup engine if the studio fails now or later (server-side only).
+    retry = {"prompt": prompt, "aspect_ratio": body.aspect_ratio, "duration": body.duration,
+             "negative_prompt": body.negative_prompt, "start": _start_ref(body)} if ref == "builtin:fal" else None
 
     if spec:  # known fal model: tuned payload (durations, audio, image-to-video endpoint)
         key = _fal_key(db, user)
@@ -538,38 +627,67 @@ def generate_video(body: VideoIn, user: User = Depends(current_user), db: Sessio
             if model not in IMAGE_TO_VIDEO:
                 raise HTTPException(400, "This model can't start from an image.")
             model, payload["image_url"] = IMAGE_TO_VIDEO[model], start
-        q = _fal_queue(key, model, payload)
-        a = Asset(user_id=user.id, kind="video", prompt=title, model=model, status="queued",
-                  params={"aspect_ratio": body.aspect_ratio if spec["aspect_ratio"] else "", "duration": duration or "5",
-                          "brand": body.use_brand, "start_image": bool(start), "stage": "video", "provider": ref,
-                          "has_audio": spec["audio"], "add_sound": body.add_sound and not spec["audio"],
-                          "sound_prompt": body.sound_prompt.strip(), "camera": body.camera, "style": body.style,
-                          "status_url": q.get("status_url"), "response_url": q.get("response_url"), **lineage})
+        try:
+            q = _fal_queue(key, model, payload)
+        except HTTPException as e:
+            backup = _video_backup(db, user, retry)
+            if not backup:
+                raise
+            log.warning("studio video failed to queue (%s: %s); the backup took it", e.status_code, e.detail)
+            a = _backup_asset(user, title, backup, body, start, ref, retry, lineage)
+        else:
+            a = Asset(user_id=user.id, kind="video", prompt=title, model=model, status="queued",
+                      params={"aspect_ratio": body.aspect_ratio if spec["aspect_ratio"] else "", "duration": duration or "5",
+                              "brand": body.use_brand, "start_image": bool(start), "stage": "video", "provider": ref,
+                              "has_audio": spec["audio"], "add_sound": body.add_sound and not spec["audio"],
+                              "sound_prompt": body.sound_prompt.strip(), "camera": body.camera, "style": body.style,
+                              "status_url": q.get("status_url"), "response_url": q.get("response_url"), "retry": retry,
+                              **lineage})
     else:  # any model on fal, Replicate or a self-hosted ComfyUI
         conn = resolve(db, user, ref, "video", body.model)
         opts = {"prompt": prompt, "negative_prompt": body.negative_prompt, "seed": body.seed, "aspect_ratio": body.aspect_ratio,
                 "duration": body.duration, "resolution": body.resolution, "image_data_uri": start,
                 "generate_audio": body.generate_audio}
+        failure = None
         try:
             job = P.start_video(conn, opts)
         except P.ProviderError as e:
-            raise http_error(e)
+            failure = http_error(e)
         except (KeyError, TypeError, ValueError):
-            raise HTTPException(502, f"{conn['name']} answered in an unexpected format. Check the model makes videos.")
+            failure = HTTPException(502, f"{conn['name']} answered in an unexpected format. Check the model makes videos.")
+        backup = _video_backup(db, user, retry) if failure is not None else None
+        if failure is not None and not backup:
+            raise failure
         has_fal = bool(_fal_key(db, user))
-        a = Asset(user_id=user.id, kind="video", prompt=title, model=conn["model"] or conn["name"], status="queued",
-                  params={"aspect_ratio": body.aspect_ratio, "duration": body.duration, "brand": body.use_brand,
-                          "start_image": bool(start), "stage": "video", "provider": ref, "job": job,
-                          "has_audio": bool(body.generate_audio),
-                          "add_sound": body.add_sound and not body.generate_audio and has_fal,
-                          "sound_prompt": body.sound_prompt.strip(), "camera": body.camera, "style": body.style, **lineage})
+        if backup:
+            log.warning("studio video failed to queue (%s: %s); the backup took it", failure.status_code, failure.detail)
+            a = _backup_asset(user, title, backup, body, start, ref, retry, lineage)
+        else:
+            a = Asset(user_id=user.id, kind="video", prompt=title, model=conn["model"] or conn["name"], status="queued",
+                      params={"aspect_ratio": body.aspect_ratio, "duration": body.duration, "brand": body.use_brand,
+                              "start_image": bool(start), "stage": "video", "provider": ref, "job": job,
+                              "has_audio": bool(body.generate_audio),
+                              "add_sound": body.add_sound and not body.generate_audio and has_fal,
+                              "sound_prompt": body.sound_prompt.strip(), "camera": body.camera, "style": body.style,
+                              **({"retry": retry} if retry else {}), **lineage})
     db.add(a)
     db.commit()
     return asset_out(a)
 
 
+def _backup_asset(user: User, title: str, job: dict, body: VideoIn, start, ref: str, retry: dict, lineage: dict) -> Asset:
+    return Asset(user_id=user.id, kind="video", prompt=title, model=job["model"], status="queued",
+                 params={"aspect_ratio": body.aspect_ratio, "duration": body.duration, "brand": body.use_brand,
+                         "start_image": bool(start), "stage": "video", "provider": ref, "job": job, "served_by": "google",
+                         "has_audio": True, "add_sound": False, "sound_prompt": body.sound_prompt.strip(),
+                         "camera": body.camera, "style": body.style, "retry": retry, **lineage})
+
+
 def _finish_video(db: Session, user: User, a: Asset) -> None:
-    """Poll a provider-agnostic job (custom fal model, Replicate, ComfyUI)."""
+    """Poll a provider-agnostic job (custom fal model, Replicate, ComfyUI, or the backup engine)."""
+    if a.params["job"].get("adapter") == "google":
+        _finish_backup_video(user, a)
+        return
     try:
         conn = resolve(db, user, a.params["provider"], "video", a.model if a.params["job"].get("adapter") != "comfyui" else "")
         r = P.poll_video(conn, a.params["job"])
@@ -583,6 +701,8 @@ def _finish_video(db: Session, user: User, a: Asset) -> None:
     if r["state"] == "running":
         return
     if r["state"] == "failed":
+        if a.params["job"].get("adapter") == "fal" and _switch_to_backup(db, user, a, r.get("error", "")):
+            return
         a.status, a.params = "failed", {**a.params, "error": r.get("error", "The provider couldn't finish.")}
         return
     try:
@@ -601,6 +721,32 @@ def _finish_video(db: Session, user: User, a: Asset) -> None:
             _start_sound(a, _fal_key(db, user), a.params.get("sound_prompt", ""))
         except HTTPException:
             a.params = {**a.params, "audio_error": True}
+
+
+def _finish_backup_video(user: User, a: Asset) -> None:
+    from .. import google_media
+    gkey = google_media.key()
+    if not gkey:
+        a.status, a.params = "failed", {**a.params, "error": "The video couldn't be made. Try again in a minute."}
+        return
+    try:
+        r = google_media.poll_video(gkey, a.params["job"])
+    except P.ProviderError as e:
+        log.warning("backup video %s poll failed (%s): %s", a.id, e.status, e.message)
+        if e.status in (400, 401, 403, 404):  # won't fix itself by waiting
+            a.status, a.params = "failed", {**a.params, "error": "The video couldn't be made. Try again in a minute."}
+        return
+    if r["state"] == "running":
+        return
+    if r["state"] == "failed":
+        a.status, a.params = "failed", {**a.params, "error": r.get("error", "The video couldn't be made.")}
+        return
+    try:
+        a.url = "/api/files/" + save_media(user.id, r["bytes"], "video")
+    except BadImage as e:
+        a.status, a.params = "failed", {**a.params, "error": str(e)}
+        return
+    a.status = "done"
 
 
 @router.get("/video/{asset_id}")
@@ -628,7 +774,8 @@ def video_status(asset_id: int, user: User = Depends(current_user), db: Session 
             a.params = {**a.params, "stage": "done", "has_audio": bool(url), **({} if url else {"audio_error": True})}
             a.status = "done"
         elif not url:
-            a.status = "failed"
+            if not _switch_to_backup(db, user, a, "no video in the result"):
+                a.status = "failed"
         else:
             a.url, a.status = url, "done"
             if a.params.get("add_sound") and not a.params.get("has_audio"):
@@ -641,7 +788,7 @@ def video_status(asset_id: int, user: User = Depends(current_user), db: Session 
         if audio_stage:  # video is fine, only the sound failed
             a.url, a.status = a.params.get("silent_url", a.url), "done"
             a.params = {**a.params, "stage": "done", "audio_error": True}
-        else:
+        elif not _switch_to_backup(db, user, a, str(s.get("error") or s.get("status"))[:200]):
             a.status = "failed"
         db.commit()
     return asset_out(a)
