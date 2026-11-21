@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, Lock, Pause, Play } from "lucide-react";
+import { Lock, Pause, Play } from "lucide-react";
 import { cx } from "./ui";
 
 /*
@@ -355,11 +355,9 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
   const [hover, setHover] = useState(false);
   const frame = useRef(null);
   const screen = useRef(null);
-  // Owner 2026-11-21: "this should be scrollable". It always scrolled, but nothing showed it: a thin bar, a fade and a
-  // "Scroll for more" hint now say so, and touching the scroll pauses the rotation so the ad doesn't swap mid-read.
-  const [more, setMore] = useState(false);
+  // Owner 2026-11-21: scrolls, with no scrollbar and no hint; touching the scroll pauses the rotation so the ad doesn't
+  // swap mid-read.
   const [held, setHeld] = useState(false);
-  const measure = () => { const el = screen.current; if (el) setMore(el.scrollHeight - el.clientHeight - el.scrollTop > 8); };
   const current = available[Math.min(index, available.length - 1)] || PLACEMENTS[0];
 
   useEffect(() => { setIndex(0); }, [platform, available.length]);
@@ -368,7 +366,7 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
     const t = setTimeout(() => setIndex((i) => (i + 1) % available.length), DWELL_MS);
     return () => clearTimeout(t);
   }, [index, paused, hover, held, available.length]);
-  useEffect(() => { setHeld(false); const t = setTimeout(measure, 60); return () => clearTimeout(t); }, [current.key]);
+  useEffect(() => { setHeld(false); }, [current.key]);
 
   useEffect(() => {  // after a beat, scroll the feed like a person would, so the headline and button come into view
     const el = screen.current;
@@ -415,19 +413,14 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
           className={cx("relative mx-auto w-full max-w-[320px] overflow-hidden rounded-2xl ring-1 ring-line shadow-[0_12px_32px_-18px_rgba(0,0,0,0.3)]", current.dark ? "bg-black" : "bg-white")}
           style={SYSTEM_FONT}
         >
-          <div ref={screen} onScroll={measure} onWheel={() => setHeld(true)} onTouchStart={() => setHeld(true)} tabIndex={current.dark ? undefined : 0}
+          <div ref={screen} onWheel={() => setHeld(true)} onTouchStart={() => setHeld(true)} tabIndex={current.dark ? undefined : 0}
             aria-label={current.dark ? undefined : `${current.label} preview, scrollable`}
-            className={cx("relative overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(0,0,0,.25)_transparent] focus-visible:outline-2 focus-visible:outline-brand",
+            className={cx("relative overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-brand",
               current.dark ? "h-[540px] overflow-hidden" : "max-h-[560px] overflow-y-auto")}>
             <div key={current.key} className={cx("flex min-h-full flex-col [&>*]:flex-1", !reduceMotion && "animate-[adin_450ms_cubic-bezier(.2,.8,.2,1)]")}>
               <Render ad={ad} />
             </div>
           </div>
-          {more && !current.dark && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-16 items-end justify-center bg-gradient-to-t from-white via-white/80 to-transparent pb-2">
-              <span className="flex items-center gap-1 rounded-full bg-ink/75 px-2.5 py-1 text-xs font-medium text-white"><ChevronDown className="size-3.5" /> Scroll for more</span>
-            </div>
-          )}
         </div>
       </div>
 
