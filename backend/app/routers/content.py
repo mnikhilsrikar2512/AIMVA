@@ -222,13 +222,13 @@ def _pollinations(url: str) -> bytes:
 
 
 def _image_backup(user: User, prompt: str, body: "ImageIn", w: int, h: int, reference: Optional[str],
-                  failure: HTTPException) -> tuple:
+                  failure: HTTPException, skip_google: bool = False) -> tuple:
     """The studio engine failed: Google's image model next, then the free engine where it is allowed (never in
     production). Returns (results, model_label, served_by), or raises the studio's own error when nothing works,
     so the customer sees the usual neutral message and never learns a backup exists (app/google_media.py)."""
     from .. import google_media
     log.warning("studio images failed (%s: %s); trying the backups", failure.status_code, failure.detail)
-    gkey = google_media.key()
+    gkey = "" if skip_google else google_media.key()
     if gkey:
         try:
             pics = google_media.generate_images(gkey, _styled(prompt, None, body.negative_prompt, inline_negative=True),
@@ -324,14 +324,44 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
     served_by = ""  # internal only: which backup stood in when the studio engine failed
     seed = body.seed
     brief, sent = None, None
-    if body.keep_product:
+    _briefs = {}
+
+    def _brief():  # the writer runs once even when the first engine fails and the next one draws
+        if "v" not in _briefs:
+            _briefs["v"] = _image_prompt(db, user, body, kit)
+        return _briefs["v"]
+
+    # Google draws first for AIMVA's own engines (owner decision 2026-11-21, app/google_media.py). A customer's own
+    # connection, and "keep my product" (cutout + paste-back on fal), keep their usual route.
+    from .. import google_media
+    gkey = google_media.primary_key() if not body.keep_product and ref in ("builtin:fal", "builtin:pollinations") else ""
+    google_failed = False
+    if gkey:
+        base, brief = _brief()
+        sent = _styled(base, body.style, body.negative_prompt, inline_negative=True)
+        try:
+            results = [("bytes", b) for b in google_media.generate_images(gkey, sent, w, h, body.count, reference)]
+            model_label = google_media.image_model() if reference else google_media.picture_model()
+            served_by = "google"
+        except P.ProviderError as e:
+            google_failed = True
+            log.warning("google pictures failed (%s): %s%s; trying fal", e.status, e.message,
+                        " - Google picture generation needs billing on the AI Studio project" if e.status in (400, 402, 429) else "")
+        except Exception:  # noqa: BLE001 - an unexpected answer is just another failure
+            google_failed = True
+            log.warning("google pictures answered in an unexpected way; trying fal", exc_info=True)
+        if google_failed and ref == "builtin:pollinations" and _fal_key(db, user):
+            ref = "builtin:fal"  # the paid studio, not the free engine, stands in for a paid engine
+    if results:
+        pass
+    elif body.keep_product:
         results, sent, brief = _product_images(db, user, body, reference, kit, w, h)
         model_label = "product-keep"
     elif ref == "builtin:pollinations":
         variant = body.model.split("/", 1)[1] if body.model.startswith("pollinations/") else (body.model or "flux")
         if variant not in ("flux", "turbo"):
             raise HTTPException(400, "The free provider supports the “flux” and “turbo” models.")
-        base, brief = _image_prompt(db, user, body, kit)
+        base, brief = _brief()
         prompt = _styled(base, body.style, body.negative_prompt, inline_negative=True)
         sent = prompt
         seed = body.seed if body.seed is not None else random.randint(1, 10**9)
@@ -340,7 +370,7 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
         model_label = f"pollinations/{variant}"
     else:
         conn = resolve(db, user, ref, "image", "" if body.model.startswith("pollinations/") else body.model)
-        base, brief = _image_prompt(db, user, body, kit)
+        base, brief = _brief()
         prompt = sent = _styled(base, body.style)
         aspect = next((k for k, v in SIZES.items() if v == (w, h)), body.size if body.size in SIZES else "1:1")
         opts = {"prompt": prompt, "negative_prompt": body.negative_prompt, "width": w, "height": h, "count": body.count,
@@ -358,7 +388,8 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
         if failure is not None:
             if ref != "builtin:fal":  # the backups stand in for AIMVA's own studio engine only
                 raise failure
-            results, model_label, served_by = _image_backup(user, prompt, body, w, h, reference, failure)
+            results, model_label, served_by = _image_backup(user, prompt, body, w, h, reference, failure,
+                                                            skip_google=google_failed)
         if conn["adapter"] in ("replicate", "openai_images"):  # their links expire: keep our own copy
             try:
                 results = [r if r[0] == "bytes" else ("bytes", P.download(r[1], P.MAX_IMAGE_BYTES, conn["name"])) for r in results]
@@ -1162,7 +1193,19 @@ def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), 
                 out = IE.free_redraw(_pollinations, img, pins, base_prompt, (src.params or {}).get("seed"), _free_variant(src), masks)
             else:
                 out = IE.openai_edit(conn, img, pins, base_prompt, masks)
-        if instruction:
+        google_done = False
+        if instruction and ref in ("builtin:fal", "builtin:pollinations"):
+            # Whole-image sentence: Google's image model first (owner decision 2026-11-21), fal Kontext if it fails.
+            from .. import google_media
+            gk = google_media.primary_key()
+            if gk:
+                try:
+                    edited = IE.open_rgb(google_media.edit_image(gk, IE.png_bytes(out), instruction))
+                    out = edited.resize(out.size, Image.LANCZOS) if edited.size != out.size else edited
+                    google_done = True
+                except Exception:  # noqa: BLE001 - any failure hands the edit to the usual engine
+                    log.warning("google whole-image edit failed; trying the usual engine", exc_info=True)
+        if instruction and not google_done:
             if key:
                 out = IE.instruct(key, out, instruction)
             elif ref == "builtin:pollinations":
