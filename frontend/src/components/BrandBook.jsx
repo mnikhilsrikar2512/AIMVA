@@ -6,13 +6,12 @@ import { get, put } from "../lib/api";
 
 // The rest of the brand book. Name, tagline, colours, voice, style, audience and avoid are edited in the kit above,
 // so they are not repeated here (one place per fact, or the two would fight).
+// Fonts are left out on purpose (owner 2026-11-21: "a bit excess"): they still come from the page's design.
 const TEXT = [
   ["what", "What you do", "We build 2 and 3 BHK flats near the metro", true],
   ["offer", "Your offer right now", "Free site visit this weekend"],
   ["area", "Where you work", "Kukatpally and Miyapur, Hyderabad"],
   ["phone", "Phone customers call", "+91 98xxxxxx10"],
-  ["font_heading", "Heading font", "Poppins"],
-  ["font_body", "Body font", "Inter"],
 ];
 const LISTS = [
   ["languages", "Languages your customers speak", "Telugu, Hindi, English"],
