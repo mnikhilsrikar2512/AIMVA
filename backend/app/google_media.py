@@ -1,9 +1,13 @@
-"""Google as the BACKUP picture and video engine. Server-side only.
+"""Google picture engine (main) and video engine (backup). Server-side only.
 
-Owner decision (2026-11-15): fal stays the main engine because it is cheaper. Google is tried only after fal has
-failed (down, slow, out of credit, key rejected, nothing returned), so a normal day costs exactly what it did.
+Owner decision (2026-11-21, replaces 2026-11-15 for pictures): Google makes pictures and whole-image edits first,
+because Imagen 4 Fast (~Rs 1.8) and the Gemini image model are cheaper than fal's finished-picture models. fal stays
+the main VIDEO engine, because Veo costs more per second than fal's LTX-2.
 
-Order for pictures:  fal  ->  Google image model  ->  free engine (only where FREE_AI is on; off in production)
+Order for pictures:  Google (Imagen from words, Gemini image model with a reference)  ->  fal  ->  free engine
+                     (free only where FREE_AI is on; off in production). Set PICTURE_ENGINE=fal to go back to fal first.
+Order for edits:     whole-image sentence: Google Gemini image model -> fal Kontext. Spot edits, eraser, cutout,
+                     "keep my product" and upscale stay on fal (they need masks, which Google's model doesn't take).
 Order for video:     fal  ->  Google Veo
 
 Google is not used when fal isn't set up at all: that is a setup gap, not a failure, and silently paying Google for
@@ -14,7 +18,9 @@ or "billed users only"); that refusal is an ordinary failure here, so the caller
 its usual neutral message. Nothing in this module ever reaches the browser: no key, no model name, no "Google".
 
 Settings (backend/.env):
-  GOOGLE_MEDIA_FALLBACK  true (default) / false - switch the backup off entirely
+  PICTURE_ENGINE         google (default) / fal - which engine makes pictures and whole-image edits first
+  GOOGLE_PICTURE_MODEL   default imagen-4.0-fast-generate-001 (pictures from words only)
+  GOOGLE_MEDIA_FALLBACK  true (default) / false - switch Google off as the backup (video, and pictures when fal is first)
   GOOGLE_MEDIA_API_KEY   optional; defaults to the platform Gemini key (GEMINI_API_KEY or TEXT_/AI_ gemini key)
   GOOGLE_IMAGE_MODEL     default gemini-3.1-flash-image
   GOOGLE_VIDEO_MODEL     default veo-3.1-fast-generate-preview
@@ -33,8 +39,10 @@ from . import providers as P
 log = logging.getLogger(__name__)
 
 API = "https://generativelanguage.googleapis.com/v1beta"
-NAME = "the backup engine"  # what ProviderError messages say; they are logged, never shown to customers
-DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image"
+NAME = "the Google engine"  # what ProviderError messages say; they are logged, never shown to customers
+DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image"  # with a reference picture, and for edits
+DEFAULT_PICTURE_MODEL = "imagen-4.0-fast-generate-001"  # from words only: the cheapest finished picture
+IMAGEN_ASPECTS = ("1:1", "3:4", "4:3", "9:16", "16:9")
 DEFAULT_VIDEO_MODEL = "veo-3.1-fast-generate-preview"
 IMAGE_ASPECTS = ("1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9")
 _OPERATION_RE = re.compile(r"^models/[A-Za-z0-9._-]+/operations/[A-Za-z0-9._-]+$")
@@ -49,15 +57,30 @@ def enabled() -> bool:
     return _env("GOOGLE_MEDIA_FALLBACK", "true").lower() not in ("false", "0", "no", "off")
 
 
-def key() -> str:
-    """The platform's Google key for the backup, or '' when the backup is off or no key is set."""
-    if not enabled():
-        return ""
+def _platform_key() -> str:
     own = _env("GOOGLE_MEDIA_API_KEY")
     if own:
         return own
     from . import ai_registry
     return ai_registry.key_for("text", "gemini")
+
+
+def key() -> str:
+    """The platform's Google key for the backup, or '' when the backup is off or no key is set."""
+    return _platform_key() if enabled() else ""
+
+
+def pictures_first() -> bool:
+    return _env("PICTURE_ENGINE", "google").lower() == "google"
+
+
+def primary_key() -> str:
+    """The Google key when Google makes pictures first (PICTURE_ENGINE=google), else ''."""
+    return _platform_key() if pictures_first() else ""
+
+
+def picture_model() -> str:
+    return _env("GOOGLE_PICTURE_MODEL", DEFAULT_PICTURE_MODEL)
 
 
 def image_model() -> str:
@@ -100,8 +123,41 @@ def closest_aspect(w: int, h: int, allowed=IMAGE_ASPECTS) -> str:
 # ---- pictures ---------------------------------------------------------------------------------------------------
 def generate_images(k: str, prompt: str, width: int, height: int, count: int = 1,
                     reference: Optional[str] = None) -> list:
-    """List of PNG/JPEG bytes. The image model makes one picture per call, so `count` calls (capped).
+    """List of PNG/JPEG bytes: Imagen from words alone, the Gemini image model when there's a reference picture.
     Raises P.ProviderError on any failure, including a free key that can't make pictures."""
+    if not reference:
+        return imagen_images(k, prompt, width, height, count)
+    return gemini_images(k, prompt, width, height, count, reference)
+
+
+def imagen_images(k: str, prompt: str, width: int, height: int, count: int = 1) -> list:
+    """Imagen makes up to 4 pictures in one call."""
+    model = picture_model()
+    body = {"instances": [{"prompt": prompt}],
+            "parameters": {"sampleCount": max(1, min(count, MAX_IMAGES)),
+                           "aspectRatio": closest_aspect(width, height, IMAGEN_ASPECTS)}}
+    data = _post(f"models/{model}:predict", k, body, timeout=150)
+    got = [p.get("bytesBase64Encoded") for p in (data.get("predictions") or []) if isinstance(p, dict)]
+    got = [g for g in got if g]
+    if not got:
+        reason = next((p.get("raiFilteredReason") for p in (data.get("predictions") or []) if isinstance(p, dict)
+                       and p.get("raiFilteredReason")), "")
+        raise P.ProviderError(f"{NAME} returned no picture ({reason or 'empty answer'}).", 502)
+    return [base64.b64decode(g) for g in got]
+
+
+def edit_image(k: str, image_png: bytes, instruction: str) -> bytes:
+    """A whole-image change from a sentence ("make it night"). Returns the edited picture's bytes."""
+    uri = "data:image/png;base64," + base64.b64encode(image_png).decode()
+    from PIL import Image
+    import io
+    w, h = Image.open(io.BytesIO(image_png)).size
+    return gemini_images(k, instruction.strip(), w, h, 1, uri)[0]
+
+
+def gemini_images(k: str, prompt: str, width: int, height: int, count: int = 1,
+                  reference: Optional[str] = None) -> list:
+    """The Gemini image model makes one picture per call, so `count` calls (capped)."""
     model = image_model()
     parts = [{"text": prompt}]
     if reference:
