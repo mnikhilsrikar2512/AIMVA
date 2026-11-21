@@ -125,6 +125,7 @@ export default function Ads() {
     if (!c.external_id) c = await post(`/api/campaigns/${c.id}/publish`);
     c = await patch(`/api/campaigns/${c.id}`, { status: "active" });
     replace(c); setLaunching(false);
+    navigate(`/app/command?campaign=${c.id}`);  // straight to this campaign's overview (owner, 2026-11-21)
     return c;
   }, `Launched on ${PLATFORMS[platform]}.`);
   const remove = () => {
@@ -213,7 +214,7 @@ export default function Ads() {
         </DropdownMenuContent>
       </DropdownMenu>
       <Button variant="ghost" size="sm" onClick={() => setView("prompt")}><Plus className="size-3.5" /> New</Button>
-      {sel && sel.status !== "draft" && <Link to="/app/command" className="btn-ghost btn-sm"><BarChart3 className="size-3.5" /> See results</Link>}
+      {sel && sel.status !== "draft" && <Link to={`/app/command?campaign=${sel.id}`} className="btn-ghost btn-sm"><BarChart3 className="size-3.5" /> See results</Link>}
       {sel && sel.status !== "active" && (connected
         ? <Button variant="accent" size="sm" onClick={() => setLaunching(true)}>{sel.status === "paused" ? <><Play className="size-3.5" /> Resume</> : "Launch"}</Button>
         : <Link to="/app/settings?tab=integrations" className="btn-ghost btn-sm">Connect {PLATFORMS[platform]} to launch</Link>)}

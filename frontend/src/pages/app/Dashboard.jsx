@@ -105,6 +105,41 @@ function Today({ t, error, onRetry, isClient }) {
   );
 }
 
+/**
+ * What is live right now, one tap from its overview (owner, 2026-11-21: after launching and signing back in, it must be
+ * easy to find). Running campaigns with this week's numbers, then live pages. Nothing shows until something is live.
+ */
+function LiveNow() {
+  const { data } = useApi("/api/command/overview?days=7");
+  if (!data) return null;
+  const camps = [...(data.products || []).flatMap((p) => p.campaigns), ...(data.unassigned?.campaigns || [])].filter((c) => c.status === "active");
+  const pages = [...(data.products || []).flatMap((p) => p.pages), ...(data.unassigned?.pages || [])].filter((p) => p.published);
+  const rows = [
+    ...camps.map((c) => ({ key: `c${c.id}`, to: `/app/command?campaign=${c.id}`, title: c.name,
+      meta: `Ad · ${c.leads ? plural(c.leads, "lead") : "no leads yet"} · ${inr(c.period_spend || 0)} this week` })),
+    ...pages.map((p) => ({ key: `p${p.id}`, to: `/app/websites?site=${p.id}`, title: p.name, meta: `Page · ${plural(p.visits || 0, "visit")}` })),
+  ].slice(0, 4);
+  if (!rows.length) return null;
+  return (
+    <section aria-labelledby="live-h" className="mb-8 max-w-3xl">
+      <h2 id="live-h" className="mb-1 flex items-center gap-2 text-sm font-semibold text-strong"><span className="size-2 rounded-full bg-brand" aria-hidden /> Live now</h2>
+      <ul className="divide-y divide-line">
+        {rows.map((r) => (
+          <li key={r.key}>
+            <Link to={r.to} className="flex items-center gap-3 py-2.5 hover:bg-surface-2/50">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-strong">{r.title}</span>
+                <span className="block truncate text-xs text-muted">{r.meta}</span>
+              </span>
+              <span className="text-sm font-medium text-brand">Overview</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -158,6 +193,7 @@ export default function Dashboard() {
         </>
       ) : (
         <>
+          {!isClient && <LiveNow />}
           <Today t={data} error={error} onRetry={reload} isClient={isClient} />
           <div className="mt-10 max-w-3xl">
             <RecentWork limit={8} />
