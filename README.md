@@ -32,7 +32,7 @@ Node.js lives in `~/.local/node`. Add it to your PATH with `export PATH=$HOME/.l
 cd backend && .venv/bin/python -m pytest
 ```
 
-363 tests run against a throwaway database with all third-party APIs and DNS mocked (respx), so no keys or network are needed, on any date. They cover:
+About 880 tests run against a throwaway database with all third-party APIs and DNS mocked (respx), so no keys or network are needed, on any date. They cover:
 - auth security
 - per-user data isolation
 - every module's API
@@ -58,7 +58,8 @@ Five work agents (`backend/app/agents/`) take the busy work off people. There's 
 - **Lead Concierge** (switch on the Leads page): every new form or ad lead gets a WhatsApp welcome within seconds, then follow-ups on day 2 and day 7. They stop as soon as the lead replies, or is marked qualified, won or lost. Without a connected WhatsApp number nothing is faked: each message is drafted on the lead, ready to send. The message texts can be changed (`PUT /api/agents/concierge`).
 - **Campaign Autopilot** (switch in Command Center): checks campaigns every morning using the Command Center's own suggestions. *Suggest* changes nothing. *Fix safely* pauses campaigns spending with no leads and trims overspend by itself, at most 3 actions a day. It never raises budgets unless you allow it (capped at +20%) and never places calls. Every action appears in the decision log.
 - **Weekly Report**: Monday morning summary of leads, spend and next steps, emailed when SMTP is set up and always on the Dashboard feed.
-- **Page Fixer**: fixes the safe launch issues on every new page (mobile viewport tag, title, search description, image alt text, empty links). Wording, prices and claims are always left for you.
+- **Page Fixer**: fixes the safe launch issues on every new page (mobile viewport tag, title, search description, image alt text, empty links, unreadable button text, form labels). Wording, prices and claims are always left for you. It only reports a fix it actually made.
+- **Page score** (`backend/app/page_score.py`): every new page is marked out of 10 on six parts: the offer is clear, visitors know what to do next, nothing a visitor could doubt, works on a phone, easy for everyone to use, looks and sounds like the brand. A page passes at an average of 8 with nothing under 7. If a page the AI wrote still fails after the safe fixes, the writer gets up to three rewrites aimed at exactly what's missing, and a rewrite is kept only when the score rises and adds no must-fix problem. Showcase pages are never rewritten. The score shows in the page's checks panel (`GET /api/sites/{id}/audit`). Each rewrite is one extra AI call.
 - **Scheduler:** one background thread runs follow-ups every minute, Autopilot daily after 9:00 and the report on Mondays (`AGENTS_SCHEDULER`, `TZ_OFFSET_MINUTES` in `.env`).
 
 ## AI engine (no API key needed)
@@ -67,6 +68,13 @@ All AI writing goes through `backend/app/ai_engine.py`, one task each: page writ
 - **Engine chain:** each task tries your own provider, then the owner's shared key (`GEMINI_API_KEY`), then **AIMVA free AI** (keyless Pollinations text, `FREE_AI=true`), then built-in rules, which always work.
 - **Free AI limits:** it's shared by the whole server (about one reply every 30 s unless `POLLINATIONS_TOKEN` is set), so tasks skip it when it's busy instead of making people wait.
 - **Memory:** answers are remembered per user for 7 days, so the same request never calls an API twice. Live calls never wait on the free tier.
+
+## Brand book
+
+One page per project that says how the business looks and sounds (`backend/app/brand_book.py`). Pictures, videos, ad copy, landing pages (colours and fonts) and WhatsApp replies all read it, so they agree.
+- **Built, not filled in:** it's assembled from what the owner already gave: setup answers, the Brand Kit and their latest page. With no kit and no page yet, it uses the colours and fonts proven for that kind of business. Owner edits win over everything, and are stored in `onboarding_answers["brand_book"]` (no extra table).
+- **One question:** the Brand Kit page shows what was found as plain lines and asks only for *words you never use*, which are kept out of every ad, page and reply. Everything the backend can work out is never asked.
+- **API:** `GET/PUT /api/brand/book`, and `GET /api/brand/book.md` downloads it as a Markdown file to share with a designer.
 
 ## Showcase landing pages
 
@@ -77,6 +85,12 @@ The **Showcase** design (`backend/app/site_showcase.py`) is built to match premi
 - **Lead capture:** a gated brochure download, a sticky mobile Call / WhatsApp / Enquire bar, an announcement bar, approvals and disclaimers.
 - **SEO:** JSON-LD structured data.
 - **Where the facts come from:** the **Project details** tab in the brief, or the site importer. Any block without facts is left out, never invented. With AI on, the layout stays fixed and the AI writes only the words.
+
+## How the app looks and moves
+
+- **Make screens** (pictures, videos, pages, campaigns, calls) start from one prompt, already written from the business profile. The box sits at the bottom of the screen, chat-style, with the mascot and "what you'll get" above it. Asked from Home, a prompt runs straight away.
+- **The mascot** (`frontend/src/components/Mascot.jsx`) is one body with drawn eyes and real hand shapes; its mood changes the eyes and hands, never the picture. It works while something is being made, then asks a question with quick chips. It is never cheeky when a customer is waiting, money is involved, or something failed.
+- **Landing page** (`frontend/src/components/marketing/SkyHero.jsx`): a bright sky with AIMVA's own work floating in it (a WhatsApp reply, an ad, a lead, a call, a page, a rupee coin) around the headline, lifting away at different depths as you scroll, then a strip of the languages replies go out in, a scroll-driven story, the mascot on a call, and a sky finale. Laptops and tablets get everything plus smooth scrolling (Lenis); phones get the same sky with fewer objects and native scroll. Reduced motion keeps it all still.
 
 ## Templates
 
