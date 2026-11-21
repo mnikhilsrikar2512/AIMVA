@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { get } from "../lib/api";
 import { Button, cx } from "./ui";
+import { Mascot } from "./Mascot";
 
 const AUTO_KEY = "aimva_autorun";
 /** Home calls this before opening a module with ?prompt=: that module then runs the sentence without a second press. */
@@ -49,7 +50,8 @@ export function ModulePrompt({ moduleKey, given, outcome, submitLabel, onSubmit,
           value={prompt} onChange={(e) => setPrompt(e.target.value)} maxLength={1000} disabled={busy || loading} aria-label="What should it make?"
           placeholder={loading ? "" : "Say what you want, the way you'd tell a friend."}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) submit(e); }} />
-        <div className="flex items-center justify-end px-3 pb-3">
+        <div className="flex items-center justify-end gap-3 px-3 pb-3">
+          {busy && <span className="mr-auto flex items-center gap-2 text-sm text-muted" role="status"><Mascot mood="thinking" size={40} arrive="pop" /> On it…</span>}
           <Button type="submit" variant="accent" busy={busy} disabled={!prompt.trim() || loading || disabled}>{submitLabel} <ArrowRight className="size-4" /></Button>
         </div>
       </div>

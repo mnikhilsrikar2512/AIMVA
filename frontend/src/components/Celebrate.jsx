@@ -10,6 +10,7 @@ import { get } from "../lib/api";
 import { parseServerDate } from "../lib/hooks";
 import { useLeadEvents } from "../lib/live";
 import { MomentScene } from "./MomentScenes";
+import { Mascot } from "./Mascot";
 
 /* ---- milestones ----------------------------------------------------------------------------------- */
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -134,6 +135,7 @@ export function Celebrations({ onboarding }) {
   return createPortal(
     <div className="fixed inset-0 z-[70] grid place-items-center bg-bg p-6" onClick={() => setMoment(null)} role="status" aria-live="polite">
       <div className="max-w-md text-center" onClick={(e) => e.stopPropagation()}>
+        <Mascot mood="cheer" size={72} arrive="pop" className="mb-4" />
         <MomentScene id={moment.id} facts={moment.facts} />
         <p className="serif-moment text-[40px] leading-tight text-strong">{moment.title}</p>
         <p className="mt-4 inline-block rounded-md bg-accent-soft px-3 py-1.5 text-base text-strong">{moment.text}</p>

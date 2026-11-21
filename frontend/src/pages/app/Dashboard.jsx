@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MessageCircle } from "lucide-react";
-import { Modal } from "../../components/ui";
+import { Modal, cx } from "../../components/ui";
 import { useOnboarding, useProjectsContext } from "../../components/AppLayout";
 import { FirstLeadPath } from "../../components/Onboarding";
 import { post } from "../../lib/api";
@@ -13,6 +13,7 @@ import { RecentWork } from "../../components/RecentWork";
 import { answersFrom } from "../../lib/onboardingAnswers";
 import { LoadErrorBar } from "../../components/LoadError";
 import { AskBox } from "../../components/AskBox";
+import { Mascot, homeLine } from "../../components/Mascot";
 
 export const SOURCE_TONE = { website: "pink", meta: "blue", google: "green", linkedin: "cyan", whatsapp: "green", voice: "violet", manual: "slate" };
 
@@ -106,37 +107,58 @@ function Today({ t, error, onRetry, isClient }) {
 }
 
 /**
- * What is live right now, one tap from its overview (owner, 2026-11-21: after launching and signing back in, it must be
- * easy to find). Running campaigns with this week's numbers, then live pages. Nothing shows until something is live.
+ * Home's right side (owner 2026-11-21: "this side looks too free of space"). The mascot sits on top of what is live
+ * right now, one tap from its overview (after launching and signing back in it must be easy to find), then this
+ * week's numbers. Running campaigns first, then live pages. With nothing live, the mascot points at the box instead.
  */
-function LiveNow() {
+function HomeSide({ waiting = 0 }) {
   const { data } = useApi("/api/command/overview?days=7");
-  if (!data) return null;
-  const camps = [...(data.products || []).flatMap((p) => p.campaigns), ...(data.unassigned?.campaigns || [])].filter((c) => c.status === "active");
-  const pages = [...(data.products || []).flatMap((p) => p.pages), ...(data.unassigned?.pages || [])].filter((p) => p.published);
+  const [taps, setTaps] = useState(0);
+  const camps = data ? [...(data.products || []).flatMap((p) => p.campaigns), ...(data.unassigned?.campaigns || [])].filter((c) => c.status === "active") : [];
+  const pages = data ? [...(data.products || []).flatMap((p) => p.pages), ...(data.unassigned?.pages || [])].filter((p) => p.published) : [];
   const rows = [
     ...camps.map((c) => ({ key: `c${c.id}`, to: `/app/command?campaign=${c.id}`, title: c.name,
       meta: `Ad · ${c.leads ? plural(c.leads, "lead") : "no leads yet"} · ${inr(c.period_spend || 0)} this week` })),
     ...pages.map((p) => ({ key: `p${p.id}`, to: `/app/websites?site=${p.id}`, title: p.name, meta: `Page · ${plural(p.visits || 0, "visit")}` })),
   ].slice(0, 4);
-  if (!rows.length) return null;
+  const k = data?.kpis || {};
+  const line = homeLine({ waiting, live: rows.length, leads: k.leads || 0, taps });
   return (
-    <section aria-labelledby="live-h" className="mb-8 max-w-3xl">
-      <h2 id="live-h" className="mb-1 flex items-center gap-2 text-sm font-semibold text-strong"><span className="size-2 rounded-full bg-brand" aria-hidden /> Live now</h2>
-      <ul className="divide-y divide-line">
-        {rows.map((r) => (
-          <li key={r.key}>
-            <Link to={r.to} className="flex items-center gap-3 py-2.5 hover:bg-surface-2/50">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-strong">{r.title}</span>
-                <span className="block truncate text-xs text-muted">{r.meta}</span>
-              </span>
-              <span className="text-sm font-medium text-brand">Overview</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <aside aria-label="Live now and this week" className="lg:sticky lg:top-6 lg:pt-10">
+      <div className="relative z-10 -mb-5 flex justify-end pr-6">
+        {data && <Mascot mood={line.mood} say={line.say} sayAlign="side" size={taps % 5 === 4 ? 128 : 92} arrive="hop" watch onTap={() => setTaps((n) => n + 1)} label="Poke the mascot" />}
+      </div>
+      <div className="rounded-2xl bg-surface p-5 pt-7 ring-1 ring-line">
+        {rows.length > 0 ? (
+          <section aria-labelledby="live-h">
+            <h2 id="live-h" className="mb-1 flex items-center gap-2 text-sm font-semibold text-strong"><span className="size-2 rounded-full bg-brand" aria-hidden /> Live now</h2>
+            <ul className="-mx-2 divide-y divide-line">
+              {rows.map((r) => (
+                <li key={r.key}>
+                  <Link to={r.to} className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2/60">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-strong">{r.title}</span>
+                      <span className="block truncate text-xs text-muted">{r.meta}</span>
+                    </span>
+                    <span className="text-xs font-medium text-brand">Overview</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <p className="text-sm text-muted">{data ? "Nothing is live yet. Your pages and ads show here the moment they go live, one tap from their numbers." : "Loading…"}</p>
+        )}
+        {data && (
+          <dl className="mt-5 grid grid-cols-3 gap-2 border-t border-line pt-4">
+            {[["Leads", (k.leads || 0).toLocaleString("en-IN")], ["Spent", inr(k.spend || 0)], ["Sales", (k.won || 0).toLocaleString("en-IN")]].map(([a, b]) => (
+              <div key={a}><dt className="text-xs text-muted">{a}</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-strong">{b}</dd></div>
+            ))}
+          </dl>
+        )}
+        <Link to="/app/command" className="mt-4 inline-block text-sm font-medium text-brand hover:underline">This week in full</Link>
+      </div>
+    </aside>
   );
 }
 
@@ -162,8 +184,10 @@ export default function Dashboard() {
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const first = (user.name || "").split(" ")[0];
 
+  const side = !isClient && ob && !projectsLoading && !starting;
   return (
-    <div>
+    <div className={cx(side && "grid gap-10 lg:grid-cols-[minmax(0,48rem)_minmax(280px,340px)] lg:justify-between xl:gap-14")}>
+    <div className="min-w-0">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm text-muted">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
@@ -193,7 +217,6 @@ export default function Dashboard() {
         </>
       ) : (
         <>
-          {!isClient && <LiveNow />}
           <Today t={data} error={error} onRetry={reload} isClient={isClient} />
           <div className="mt-10 max-w-3xl">
             <RecentWork limit={8} />
@@ -202,6 +225,8 @@ export default function Dashboard() {
         </>
       )}
 
+    </div>
+      {side && <div><HomeSide waiting={data?.waiting?.count || 0} /></div>}
       <Modal open={launch} onClose={() => setLaunch(false)} title="Launch something new" wide>
         <p className="-mt-1 mb-4 text-sm text-muted">One link or sentence. AIMVA builds the page, ad drafts, call-back assistant and follow-ups. Ads always wait for you.</p>
         <LaunchCard />

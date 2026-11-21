@@ -8,6 +8,7 @@ import { FinalCta, Heading, MarketingLayout, cx, signupHref, useSeo } from "../c
 import { USE_CASES } from "../components/marketing/useCases";
 import { useAuth } from "../lib/auth";
 import HeroStage from "../components/marketing/HeroStage";
+import { Mascot } from "../components/Mascot";
 import ReplyScene from "../components/marketing/ReplyScene";
 
 
@@ -118,7 +119,11 @@ export default function Landing() {
               </motion.div>
               <motion.p variants={rise} className="mt-6 text-sm text-faint">Free while in early access · No card · Connect WhatsApp and Twilio when you're ready</motion.p>
             </motion.div>
-            <HeroStage />
+            <div className="relative">
+              {/* The mascot hops onto the stage and says hello (owner 2026-11-21). */}
+              <span className="absolute left-14 top-14 z-20 hidden lg:block"><Mascot mood="wink" size={104} arrive="hop" watch say="Psst. I do the boring bits." sayAlign="right" /></span>
+              <HeroStage />
+            </div>
           </div>
         </section>
 

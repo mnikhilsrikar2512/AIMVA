@@ -7,6 +7,7 @@ import { NAV } from "../lib/modules";
 import { parseServerDate } from "../lib/hooks";
 import { Loader2 } from "lucide-react";
 import clsx from "clsx";
+import { Mascot } from "./Mascot";
 
 export const cx = clsx;
 
@@ -186,37 +187,22 @@ export function Chip({ tone = "slate", children, className }) {
  * action that clears the filters instead.
  */
 export function Empty({ icon: Icon, title, text, action, secondary, preview = "rows", compact, filtered, className }) {
-  const sketch = filtered || compact ? null : preview;
+  const big = !(filtered || compact) && preview !== "icon";
+  // Owner 2026-11-21: not centred. Full-size empty lists put the mascot at the left, looking at the words and the
+  // next step beside him; compact and filtered ones stay a small centred note.
+  if (big) return (
+    <div className={cx("flex items-start gap-5 px-1 py-12 sm:py-14", className)}>
+      <Mascot mood="pointing" size={88} arrive="pop" className="shrink-0" />
+      <div className="pt-1">
+        <p className="text-lg font-semibold text-strong">{title}</p>
+        {text && <p className="mt-1.5 max-w-md text-sm text-muted">{text}</p>}
+        {(action || secondary) && <div className="mt-5 flex flex-wrap items-center gap-2">{action}{secondary}</div>}
+      </div>
+    </div>
+  );
   return (
     <div className={cx("flex flex-col items-center justify-center text-center", compact ? "px-4 py-10" : "px-6 py-14 sm:py-16", className)}>
-      {sketch === "rows" && (
-        <div aria-hidden className="mb-6 w-full max-w-xs space-y-2 opacity-70">
-          {[0.9, 0.7, 0.5].map((o, i) => (
-            <div key={i} className="flex items-center gap-2.5" style={{ opacity: o }}>
-              <span className="grid size-7 shrink-0 place-items-center rounded-md bg-surface-2 text-muted">{Icon && i === 0 ? <Icon className="size-3.5" /> : null}</span>
-              <span className="h-2 flex-1 rounded-full bg-surface-2" style={{ maxWidth: `${80 - i * 18}%` }} />
-              <span className="h-2 w-8 rounded-full bg-surface-2" />
-            </div>
-          ))}
-        </div>
-      )}
-      {sketch === "tiles" && (
-        <div aria-hidden className="mb-6 grid w-full max-w-[220px] grid-cols-3 gap-1.5 opacity-80">
-          {[1, 0.75, 0.5, 0.75, 0.5, 0.3].map((o, i) => (
-            <span key={i} className="grid aspect-square place-items-center rounded-md bg-surface-2 text-muted" style={{ opacity: o }}>{Icon && i === 0 ? <Icon className="size-4" /> : null}</span>
-          ))}
-        </div>
-      )}
-      {sketch === "chat" && (
-        <div aria-hidden className="mb-6 w-full max-w-[220px] space-y-1.5 opacity-80">
-          <span className="block h-6 w-3/5 rounded-xl rounded-bl-sm bg-surface-2" />
-          <span className="ml-auto block h-6 w-1/2 rounded-xl rounded-br-sm bg-warm-soft" />
-          <span className="block h-6 w-2/5 rounded-xl rounded-bl-sm bg-surface-2 opacity-60" />
-        </div>
-      )}
-      {(!sketch || sketch === "icon") && Icon && (
-        <div className="mb-4 grid size-10 place-items-center rounded-xl bg-surface-2 text-muted"><Icon className="size-5" /></div>
-      )}
+      {Icon && <div className="mb-4 grid size-10 place-items-center rounded-xl bg-surface-2 text-muted"><Icon className="size-5" /></div>}
       <p className={cx(filtered || compact ? "text-[15px] font-semibold" : "text-lg font-semibold", "text-strong")}>{title}</p>
       {text && <p className="mt-1.5 max-w-sm text-sm text-muted">{text}</p>}
       {(action || secondary) && (

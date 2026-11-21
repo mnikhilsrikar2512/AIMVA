@@ -2,7 +2,46 @@
 // Results opens on it with ?campaign=ID: after Launch, from "See results", and from Home's "Live now".
 import { Link } from "react-router-dom";
 import { ArrowRight, Pencil, Users } from "lucide-react";
-import { Sparkline } from "./Motion";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+
+const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
+/** Leads per day as bars (one series, one axis); the tooltip adds that day's spend. */
+function LeadsChart({ trend, days }) {
+  const data = trend.map((t) => ({ ...t, label: day(t.day) }));
+  const total = data.reduce((n, t) => n + (t.leads || 0), 0);
+  const best = data.reduce((b, t) => ((t.leads || 0) > (b?.leads || 0) ? t : b), null);
+  return (
+    <figure className="mt-5">
+      <figcaption className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-sm font-medium text-strong">Leads per day</span>
+        <span className="text-xs text-muted">{total} in the last {days} days{best?.leads > 1 ? ` · best day ${best.label} (${best.leads})` : ""}</span>
+      </figcaption>
+      <div className="h-48 w-full">
+        <ResponsiveContainer>
+          <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={2}>
+            <CartesianGrid vertical={false} stroke="var(--color-line)" />
+            <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--color-line-strong)" }} interval="preserveStartEnd" minTickGap={28}
+              tick={{ fontSize: 12, fill: "var(--color-muted)" }} />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} tick={{ fontSize: 12, fill: "var(--color-muted)" }} />
+            <Tooltip cursor={{ fill: "var(--color-surface-2)" }} content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const t = payload[0].payload;
+              return (
+                <div className="rounded-md bg-surface px-3 py-2 text-xs shadow-[var(--shadow-lift)] ring-1 ring-line">
+                  <p className="text-muted">{t.label}</p>
+                  <p className="font-semibold text-strong">{t.leads} lead{t.leads === 1 ? "" : "s"}</p>
+                  <p className="text-muted">{inr(t.spend)} spent</p>
+                </div>
+              );
+            }} />
+            <Bar dataKey="leads" fill="var(--color-brand)" radius={[4, 4, 0, 0]} maxBarSize={18} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </figure>
+  );
+}
 
 const inr = (v) => `₹${Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 const PLATFORM = { meta: "Facebook and Instagram", google: "Google", linkedin: "LinkedIn" };
@@ -43,12 +82,7 @@ export function CampaignFocus({ c, days, onAll }) {
               </div>
             ))}
           </dl>
-          {c.trend?.length > 1 && (
-            <div className="mt-4">
-              <p className="mb-1 text-xs text-muted">Leads per day, last {days} days</p>
-              <Sparkline points={c.trend.map((t) => t.leads)} height={44} className="w-full" />
-            </div>
-          )}
+          {c.trend?.length > 1 && <LeadsChart trend={c.trend} days={days} />}
         </>
       )}
 

@@ -367,7 +367,6 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(reduceMotion);
   const [hover, setHover] = useState(false);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const frame = useRef(null);
   const screen = useRef(null);
   const current = available[Math.min(index, available.length - 1)] || PLACEMENTS[0];
@@ -403,12 +402,6 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
   };
   const Render = RENDER[current.key];
 
-  const onMove = (e) => {
-    if (reduceMotion) return;
-    const r = frame.current.getBoundingClientRect();
-    setTilt({ x: ((e.clientY - r.top) / r.height - 0.5) * -6, y: ((e.clientX - r.left) / r.width - 0.5) * 8 });
-  };
-
   return (
     <div className="flex flex-col items-center">
       <div className="mb-3 flex w-full items-center justify-between gap-2">
@@ -420,14 +413,13 @@ export default function AdPlacements({ creative = {}, brand, domain, logo, conne
         )}
       </div>
 
-      <div className="w-full [perspective:1200px]">
+      {/* Flat and still (owner, 2026-11-21: no 3D tilt on the preview). Hovering only pauses the rotation. */}
+      <div className="w-full">
         <div
           ref={frame}
-          onMouseMove={onMove}
           onMouseEnter={() => setHover(true)}
-          onMouseLeave={() => { setHover(false); setTilt({ x: 0, y: 0 }); }}
-          className="mx-auto w-full max-w-[300px] rounded-[2.6rem] bg-[#1b1b1f] p-[9px] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.55),inset_0_0_0_1.5px_#3a3a40] transition-transform duration-200 ease-out"
-          style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` }}
+          onMouseLeave={() => setHover(false)}
+          className="mx-auto w-full max-w-[300px] rounded-[2.6rem] bg-[#1b1b1f] p-[9px] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.35),inset_0_0_0_1.5px_#3a3a40]"
         >
           <div className={cx("relative overflow-hidden rounded-[2.1rem]", current.dark ? "bg-black" : "bg-white")} style={SYSTEM_FONT}>
             <StatusBar dark={current.dark} />

@@ -1,5 +1,6 @@
 import { CloudOff, RotateCw } from "lucide-react";
 import { Button, cx } from "./ui";
+import { Mascot } from "./Mascot";
 
 // Shown when a list or page couldn't be fetched. Never fall through to an empty state on an error:
 // "Your leads will land here" during an outage reads as lost data.
@@ -13,12 +14,23 @@ function reason(error) {
 
 export function LoadError({ error, what = "this", onRetry, compact, className }) {
   const retry = onRetry && error?.status !== 403;
-  return (
-    <div role="alert" className={cx("flex flex-col items-center justify-center text-center", compact ? "px-4 py-10" : "px-6 py-14", className)}>
+  if (compact) return (
+    <div role="alert" className={cx("flex flex-col items-center justify-center px-4 py-10 text-center", className)}>
       <div className="mb-3 grid size-10 place-items-center rounded-xl bg-surface-2 text-muted"><CloudOff className="size-5" /></div>
       <p className="text-[15px] font-semibold text-strong">Couldn't load {what}</p>
       <p className="mt-1 max-w-sm text-sm text-muted">{reason(error)}</p>
       {retry && <Button size="sm" variant="ghost" className="mt-4" onClick={onRetry}><RotateCw className="size-4" /> Try again</Button>}
+    </div>
+  );
+  // Owner 2026-11-21: keep the sorry mascot, but not in the centre. He stands at the left, the words beside him.
+  return (
+    <div role="alert" className={cx("flex items-start gap-5 px-1 py-12", className)}>
+      <Mascot mood="sorry" size={80} className="shrink-0" />
+      <div className="pt-2">
+        <p className="text-[15px] font-semibold text-strong">Couldn't load {what}</p>
+        <p className="mt-1 max-w-sm text-sm text-muted">{reason(error)}</p>
+        {retry && <Button size="sm" variant="ghost" className="-ml-3 mt-3" onClick={onRetry}><RotateCw className="size-4" /> Try again</Button>}
+      </div>
     </div>
   );
 }
