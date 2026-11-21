@@ -162,3 +162,36 @@ def test_text_versions_replace_old_text_instead_of_stacking(auth_client):
     bad = {**layer, "color": "red"}
     assert auth_client.post(f"/api/content/image/{up['id']}/text", json={"layers": [bad]}).status_code == 422
     assert auth_client.post("/api/content/image/999999/text", json={"layers": [layer]}).status_code == 404
+
+
+# ---- ad briefs without a fixed structure (owner rule 2026-11-21) ------------------------------------------------
+def test_free_prose_brief_is_used_as_written_after_the_owners_words():
+    prose = ("A steaming cup of filter coffee in a steel dabara on a sunlit Chennai doorstep, morning steam catching "
+             "the light, the cup filling most of the frame")
+    out, brief = B.brief_prompt(lambda *a, **k: json.dumps({"prompt": prose}), "Filter coffee for my cafe")
+    assert brief == {"prompt": prose}
+    assert out == f"Filter coffee for my cafe. {prose}."
+    assert "Setting:" not in out and "Camera:" not in out  # no forced sections
+
+
+def test_prose_that_already_opens_with_the_idea_isnt_repeated():
+    prose = "Filter coffee for my cafe, served in a steel tumbler on a banana leaf, close up so it fills a phone screen."
+    out, _ = B.brief_prompt(lambda *a, **k: json.dumps({"prompt": prose}), "Filter coffee for my cafe")
+    assert out == prose
+
+
+def test_too_short_prose_falls_back_to_the_idea():
+    assert B.brief_prompt(lambda *a, **k: '{"prompt": "coffee"}', "Filter coffee") == ("Filter coffee", None)
+
+
+def test_writer_is_asked_for_what_sells_not_a_template():
+    asked = {}
+
+    def write(prompt, system="", max_tokens=0):
+        asked["prompt"], asked["system"] = prompt, system
+        return json.dumps({"prompt": "x" * 60})
+    B.brief_prompt(write, "Diwali sweets box", hint="warm festive colours", for_ad=True)
+    sys = asked["system"]
+    assert "not by a template" in sys and "hero" in sys and "stops the scroll" in sys
+    assert "subject" not in sys and "lower third" not in asked["prompt"]
+    assert "use only if it fits" in asked["prompt"]

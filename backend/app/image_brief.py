@@ -1,41 +1,49 @@
-"""Structured image briefs: turn the user's short sentence into a full description before it reaches the image model.
+"""Ad image briefs: turn the owner's short sentence into an image prompt that sells, before it reaches the model.
 
-Image models follow concrete scene details (subject, setting, light, lens) far better than a one-line idea. The AI
-writer fills a fixed set of fields as JSON, and we write the prompt from those fields ourselves, so the result is
-predictable and always starts with the user's own words. If no writer is available, or it answers with something
-we can't use, the user's prompt goes through unchanged.
+Owner rule (2026-11-21): no fixed structure. What matters is what makes an ad work on Instagram, Facebook, WhatsApp
+or Google: what is being sold is the hero, the customer can see why they'd want it, one clear focal point that stops
+the scroll on a phone. The AI writer answers in free prose, shaped by the idea, and we always put the owner's own
+words first. Older writers that still answer with the field set (subject, setting, ...) keep working. If no writer is
+available, or it answers with something we can't use, the owner's prompt goes through unchanged.
 """
 import json
 import re
 from typing import Callable, Optional, Tuple
 
-FIELDS = ("subject", "setting", "composition", "lighting", "camera", "colours", "mood")
+FIELDS = ("subject", "setting", "composition", "lighting", "camera", "colours", "mood")  # older writers' answer shape
 MAX_FIELD = 220
+MAX_PROSE = 1200
+MIN_PROSE = 40  # anything shorter adds nothing to the idea
 
-SYSTEM = ("You write image briefs for a marketing image generator. Answer with one JSON object only, no prose, "
-          "with these string fields: " + ", ".join(FIELDS) + ". "
-          "Be concrete and visual: materials, surfaces, time of day, light direction, lens and angle. "
-          "Keep every fact from the idea. Don't invent brand names, people's names, prices or other numbers. "
-          "Never ask for text, letters, words or logos inside the image.")
+SYSTEM = ("You write the picture for a small business's ad that will run on Instagram, Facebook, WhatsApp or Google. "
+          "Answer with one JSON object only, no prose around it: {\"prompt\": \"...\"}. "
+          "The prompt is one natural paragraph for an image model, shaped by the idea, not by a template: "
+          "say only what helps this ad sell. What matters most: what is being sold is the hero and instantly "
+          "recognisable; show it the way the customer wants it (in use, the result, the moment it's enjoyed); "
+          "one clear focal point that stops the scroll on a small phone screen; a look that suits the business "
+          "and, when the idea is local, feels real to Indian customers without clichés. Mention light, angle or "
+          "colours only where they make the ad stronger. Keep every fact from the idea. Don't invent brand names, "
+          "people's names, prices, offers or other numbers. Never ask for text, letters, words or logos inside the "
+          "image: those are added afterwards.")
 
 
 def _ask(idea: str, hint: str, brand: str, for_ad: bool, product: bool) -> str:
     bits = [f"Idea: {idea.strip()}"]
     if product:
-        bits.append("A real product photo will be placed in the centre afterwards, unchanged. Describe only the scene "
-                    "around it: the surface it stands on, the background, props and light. In 'subject', write "
-                    "'the product' and where it sits; don't describe or change the product itself.")
+        bits.append("A real product photo will be placed in the picture afterwards, unchanged. Describe only the "
+                    "scene around it: what it stands on, the background, props and light. Refer to it as 'the "
+                    "product'; don't describe or change the product itself.")
     if for_ad:
-        bits.append("Leave clean empty space in the lower third for a headline that is added later.")
+        bits.append("Keep one calm area of the picture where a short headline can sit later.")
     if hint:
-        bits.append(f"Style hint for this industry: {hint}")
+        bits.append(f"What tends to work for this kind of business (use only if it fits): {hint}")
     if brand:
         bits.append(f"Brand: {brand}")
     return "\n".join(bits)
 
 
 def parse(text: Optional[str]) -> Optional[dict]:
-    """The fields from the writer's answer, or None if it isn't a usable brief."""
+    """The writer's brief, or None if it isn't usable: {"prompt": prose} or the older field set."""
     if not text:
         return None
     m = re.search(r"\{.*\}", text, re.S)
@@ -47,6 +55,11 @@ def parse(text: Optional[str]) -> Optional[dict]:
         return None
     if not isinstance(data, dict):
         return None
+    prose = data.get("prompt")
+    if isinstance(prose, str):
+        prose = re.sub(r"\s+", " ", prose).strip()
+        if len(prose) >= MIN_PROSE:
+            return {"prompt": prose[:MAX_PROSE]}
     out = {}
     for f in FIELDS:
         v = data.get(f)
@@ -56,7 +69,13 @@ def parse(text: Optional[str]) -> Optional[dict]:
 
 
 def render(idea: str, brief: dict) -> str:
-    """The prompt we send: the user's words first, then the brief in a fixed order."""
+    """The prompt we send: the owner's words first, then the writer's picture."""
+    words = idea.strip().rstrip(".")
+    if "prompt" in brief:
+        prose = brief["prompt"].strip()
+        if prose.lower().startswith(words.lower()):  # the writer already opened with the owner's words
+            return prose if prose.endswith(".") else prose + "."
+        return f"{words}. {prose}" + ("" if prose.endswith(".") else ".")
     labels = {"subject": "", "setting": "Setting", "composition": "Composition", "lighting": "Lighting",
               "camera": "Camera", "colours": "Colours", "mood": "Mood"}
     parts = [idea.strip().rstrip(".")]

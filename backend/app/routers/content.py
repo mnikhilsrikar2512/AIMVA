@@ -930,7 +930,7 @@ def _rule_enhance(body: EnhanceIn, hint: str, kit) -> str:
     if body.kind == "image":
         bits.append("clear single subject, professional composition, high detail, true-to-life colours")
         if body.for_ad:
-            bits.append("generous empty space in the lower third for a headline, no text in the image")
+            bits.append("one calm area where a short headline can sit, no text in the image")
     else:
         bits.append("smooth steady camera movement, natural motion, realistic lighting, cinematic, no on-screen text")
     return brand_prompt(", ".join(bits), kit)
