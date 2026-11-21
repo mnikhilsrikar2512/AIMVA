@@ -118,7 +118,7 @@ export function Mascot({ mood = "hello", size = 96, arrive = null, watch = false
           aria-label={onTap ? (label || "AIMVA") : undefined} aria-hidden={onTap ? undefined : true}
           style={{ originY: 1 }} className={cx("block w-full", onTap && "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-2xl")}>
           <svg viewBox={`0 0 ${W} ${H}`} className="block w-full overflow-visible">
-            <image href="/mascot/body.png" width={W} height={H} />
+            <image href="/mascot/body.webp" width={W} height={H} />
             <Face mood={mood} look={look} blink={blink} />
           </svg>
         </Tag>

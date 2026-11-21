@@ -63,7 +63,7 @@ function TopBar({ from }) {
 
   return (
     // Always a background (never see-through over the page); a hairline appears once you scroll.
-    <header className={cx("sticky top-0 z-40 border-b bg-bg/90 backdrop-blur-md transition-colors supports-[backdrop-filter]:bg-bg/80",
+    <header className={cx("sticky top-0 z-40 border-b bg-bg transition-colors",
       scrolled || open ? "border-line-strong" : "border-transparent")}>
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:h-16 sm:gap-4 sm:px-6">
         <Logo />

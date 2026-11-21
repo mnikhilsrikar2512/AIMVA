@@ -1,13 +1,13 @@
 // Home: one promise, how it works, what's inside, who it's for, questions. Each section says something new.
 import { useRef, useState } from "react";
+import { useInView } from "framer-motion";
 import { MotionConfig, motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowRight, AudioLines, BarChart3, Check, ChevronDown, Globe, Image, Megaphone, MessageCircle, Users } from "lucide-react";
-import { rise, stagger } from "../components/Motion";
 import { FinalCta, Heading, MarketingLayout, cx, signupHref, useSeo } from "../components/marketing/Site";
 import { USE_CASES } from "../components/marketing/useCases";
 import { useAuth } from "../lib/auth";
-import HeroStage from "../components/marketing/HeroStage";
+import MascotHero from "../components/marketing/MascotHero";
 import { Mascot } from "../components/Mascot";
 import ReplyScene from "../components/marketing/ReplyScene";
 
@@ -68,16 +68,11 @@ function Steps() {
   );
 }
 
-/** A saffron line draws under the promise once, on load; it follows the words across line breaks. */
-function Underlined({ children }) {
-  const reduce = useReducedMotion();
-  const line = (w) => ({ backgroundImage: "linear-gradient(var(--color-peach), var(--color-peach))", backgroundRepeat: "no-repeat", backgroundPosition: "0 94%", backgroundSize: `${w} 0.07em` });
-  return (
-    <motion.em className="text-warm" style={{ paddingBottom: "0.04em" }}
-      initial={reduce ? false : line("0%")} animate={line("100%")} transition={{ duration: 1, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}>
-      {children}
-    </motion.em>
-  );
+/** The mascot hops in when its section scrolls into view (owner: "he can jump on boxes"). */
+function Perch({ mood, say, size = 84, sayAlign = "left", className }) {
+  const ref = useRef(null);
+  const seen = useInView(ref, { once: true, margin: "-20% 0px" });
+  return <div ref={ref} className={cx("hidden md:block", className)} style={{ width: size }}>{seen && <Mascot mood={mood} size={size} arrive="hop" say={say} sayAlign={sayAlign} />}</div>;
 }
 
 function Faq() {
@@ -101,36 +96,15 @@ export default function Landing() {
   return (
     <MotionConfig reducedMotion="user">
       <MarketingLayout from="home">
-        {/* Hero */}
-        <section className="relative">
-          <div className="mk-aura pointer-events-none absolute inset-x-0 top-0 h-[640px]" aria-hidden />
-          <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-12 pt-8 sm:gap-12 sm:px-6 sm:pb-20 sm:pt-12 lg:grid-cols-[1fr_1.05fr] lg:pb-28 lg:pt-20">
-            <motion.div variants={stagger} initial={false} animate="show">{/* visible without waiting for an animation frame */}
-              <motion.p variants={rise} className="text-sm font-semibold text-warm">Marketing and lead replies for growing businesses</motion.p>
-              <motion.h1 variants={rise} className="serif-moment mt-4 text-[44px] leading-[1.02] text-strong sm:text-6xl xl:text-[72px]">
-                From ad to sale, <Underlined>in one calm place.</Underlined>
-              </motion.h1>
-              <motion.p variants={rise} className="mt-5 max-w-xl text-base leading-relaxed text-muted sm:mt-6 sm:text-lg">
-                AIMVA writes your page and your ads. Every new lead gets a WhatsApp hello in seconds and a call back from your AI assistant. You just close.
-              </motion.p>
-              <motion.div variants={rise} className="mt-7 flex flex-col gap-2 sm:mt-9 sm:flex-row sm:gap-3">
-                <Link to={user ? "/app" : signupHref("home")} className="mk-go btn-primary h-12 px-7 text-[15px]">{user ? "Open app" : "Start free"} <ArrowRight className="size-4" /></Link>
-                <Link to="/tour" className="btn-subtle h-12 px-5 text-[15px]">See how it works</Link>
-              </motion.div>
-              <motion.p variants={rise} className="mt-6 text-sm text-faint">Free while in early access · No card · Connect WhatsApp and Twilio when you're ready</motion.p>
-            </motion.div>
-            <div className="relative">
-              {/* The mascot hops onto the stage and says hello (owner 2026-11-21). */}
-              <span className="absolute left-14 top-14 z-20 hidden lg:block"><Mascot mood="wink" size={104} arrive="hop" watch say="Psst. I do the boring bits." sayAlign="right" /></span>
-              <HeroStage />
-            </div>
-          </div>
-        </section>
+        <MascotHero user={user} />
 
         {/* How it works */}
         <section id="how" className="scroll-mt-20 border-t border-line">
           <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
-            <Heading label="How it works" title="Three steps, and the middle one runs itself." />
+            <div className="flex items-end justify-between gap-6">
+              <Heading label="How it works" title="Three steps, and the middle one runs itself." />
+              <Perch mood="cheeky" say="The middle one is me." className="mr-10" />
+            </div>
             <Steps />
           </div>
         </section>
@@ -190,7 +164,10 @@ export default function Landing() {
         {/* Questions */}
         <section id="faq" className="scroll-mt-20 border-t border-line">
           <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
-            <Heading label="Questions" title="Good to know." />
+            <div className="flex items-end justify-between gap-6">
+              <Heading label="Questions" title="Good to know." />
+              <Perch mood="thinking" say="Ask me anything. Really." size={72} />
+            </div>
             <Faq />
           </div>
         </section>
