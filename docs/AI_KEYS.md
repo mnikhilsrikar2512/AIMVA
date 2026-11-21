@@ -27,10 +27,12 @@ transcription; openai = writing, images) → the fallback.
 Owner decision (2026-11-21): Google makes pictures and whole-image edits first because it is cheaper there; the
 studio engine (`FAL_KEY`) stays first for video because Veo costs more per second.
 
-- Pictures from words: Google Imagen (`GOOGLE_PICTURE_MODEL`, default `imagen-4.0-fast-generate-001`, about
-  $0.02 a picture, up to 4 per call) → studio → free images (only where `FREE_AI` is on, off in production).
+- Pictures from words: Google's Lite image model (`GOOGLE_PICTURE_MODEL`, default `gemini-3.1-flash-lite-image`,
+  about $0.034 a picture) → studio → free images (only where `FREE_AI` is on, off in production). Set an
+  `imagen-*` model there to use Imagen (about $0.02, 4 per call) on keys that offer it: on 2026-11-21 ListModels
+  showed no Imagen or Veo models for our key, so check before switching.
 - Pictures with a reference photo, and whole-image edits ("make it night"): Google image model
-  (`GOOGLE_IMAGE_MODEL`, default `gemini-3.1-flash-image`) → studio (Kontext for edits).
+  (`GOOGLE_IMAGE_MODEL`, default `gemini-3.1-flash-lite-image`) → studio (Kontext for edits).
 - Spot edits, eraser, object select, cutout, "keep my product" and upscale stay on the studio: they need masks.
 - Video: studio → Google Veo (`GOOGLE_VIDEO_MODEL`, default `veo-3.1-fast-generate-preview`, 720p). A clip that
   the studio accepts and later fails is handed to Veo too.

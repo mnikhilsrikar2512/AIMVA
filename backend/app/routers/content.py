@@ -345,11 +345,11 @@ def generate_image(body: ImageIn, user: User = Depends(current_user), db: Sessio
             served_by = "google"
         except P.ProviderError as e:
             google_failed = True
-            log.warning("google pictures failed (%s): %s%s; trying fal", e.status, e.message,
+            log.warning("google pictures failed (%s): %s%s; trying the next engine", e.status, e.message,
                         " - Google picture generation needs billing on the AI Studio project" if e.status in (400, 402, 429) else "")
         except Exception:  # noqa: BLE001 - an unexpected answer is just another failure
             google_failed = True
-            log.warning("google pictures answered in an unexpected way; trying fal", exc_info=True)
+            log.warning("google pictures answered in an unexpected way; trying the next engine", exc_info=True)
         if google_failed and ref == "builtin:pollinations" and _fal_key(db, user):
             ref = "builtin:fal"  # the paid studio, not the free engine, stands in for a paid engine
     if results:
@@ -1179,8 +1179,12 @@ def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), 
     pins = [IE.Pin(p.x, p.y, p.r, p.text, p.mode, p.action) for p in body.pins]
     base_prompt = src.prompt or "a photo"
     fal_key = _fal_key(db, user)
+    # Words typeset by AIMVA ride on top of the picture: edit the picture without them, then put them back, so a
+    # change like "add mint leaves" never loses the price or headline (found in the 2026-11-21 sample run).
+    layers = (src.params or {}).get("text_layers") or []
+    plain_url = (src.params or {}).get("text_plain_url") if layers else None
     try:
-        img = IE.open_rgb(_asset_bytes(src))
+        img = IE.open_rgb(_asset_bytes(SimpleNamespace(url=plain_url) if plain_url else src))
         resolved = IE.resolve_masks(img, pins, IE.fal_segmenter(fal_key) if fal_key else None) if pins else []
         masks = [r["mask"] for r in resolved]
         conn = resolve(db, user, ref, "image") if ref.startswith("conn:") else None
@@ -1203,6 +1207,8 @@ def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), 
                     edited = IE.open_rgb(google_media.edit_image(gk, IE.png_bytes(out), instruction))
                     out = edited.resize(out.size, Image.LANCZOS) if edited.size != out.size else edited
                     google_done = True
+                except P.ProviderError as e:
+                    log.warning("google whole-image edit failed (%s): %s; trying the usual engine", e.status, e.message)
                 except Exception:  # noqa: BLE001 - any failure hands the edit to the usual engine
                     log.warning("google whole-image edit failed; trying the usual engine", exc_info=True)
         if instruction and not google_done:
@@ -1218,7 +1224,15 @@ def edit_image(asset_id: int, body: EditIn, user: User = Depends(current_user), 
     except IE.EditFailed as e:
         raise _edit_error(e)
     edits = [{**p.model_dump(), "action": pin.does, "selected": r["selected"]} for p, pin, r in zip(body.pins, pins, resolved)]
-    a = _save_version(db, user, src, out, {"edits": edits, "instruction": typed, "restyle": style["name"] if style else None,
+    words = {}
+    if plain_url:
+        from .. import text_layers as TL
+        try:
+            words = {"text_layers": layers, "text_plain_url": "/api/files/" + save_media(user.id, IE.png_bytes(out), "image")}
+        except BadImage as e:
+            raise HTTPException(502, str(e))
+        out = TL.render(out, layers)
+    a = _save_version(db, user, src, out, {**words, "edits": edits, "instruction": typed, "restyle": style["name"] if style else None,
                                            "edit_engine": engine["name"],
                                            "edit_precise": engine["precise"], "edit_kind": "style" if style and not pins else "comments",
                                            "by_id": _by(req)},

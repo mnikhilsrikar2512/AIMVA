@@ -14,7 +14,7 @@ from PIL import Image
 from app.discreet import leaks
 
 G = "https://generativelanguage.googleapis.com/v1beta"
-IMG_URL = f"{G}/models/gemini-3.1-flash-image:generateContent"
+IMG_URL = f"{G}/models/gemini-3.1-flash-lite-image:generateContent"
 IMAGEN_URL = f"{G}/models/imagen-4.0-fast-generate-001:predict"
 VEO_URL = f"{G}/models/veo-3.1-fast-generate-preview:predictLongRunning"
 OP = "models/veo-3.1-fast-generate-preview/operations/op123"
@@ -38,6 +38,7 @@ def imagen_answer(n=1):
 @pytest.fixture(autouse=True)
 def fal_first(monkeypatch):
     monkeypatch.setenv("PICTURE_ENGINE", "fal")  # this file covers Google as the backup
+    monkeypatch.setenv("GOOGLE_PICTURE_MODEL", "imagen-4.0-fast-generate-001")  # Imagen where a key offers it
 
 
 @pytest.fixture

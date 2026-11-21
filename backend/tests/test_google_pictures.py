@@ -14,7 +14,7 @@ from app.discreet import leaks
 
 G = "https://generativelanguage.googleapis.com/v1beta"
 IMAGEN_URL = f"{G}/models/imagen-4.0-fast-generate-001:predict"
-GEMINI_IMG_URL = f"{G}/models/gemini-3.1-flash-image:generateContent"
+GEMINI_IMG_URL = f"{G}/models/gemini-3.1-flash-lite-image:generateContent"
 SCHNELL = "https://fal.run/fal-ai/flux/schnell"
 POLL = "https://image.pollinations.ai/prompt/"
 
@@ -32,6 +32,11 @@ def imagen_answer(n=1, color=(200, 80, 40)):
 def gemini_answer(color=(10, 10, 40), size=(64, 64)):
     return {"candidates": [{"content": {"parts": [{"inlineData": {"mimeType": "image/png",
                                                                   "data": base64.b64encode(png(color, size)).decode()}}]}}]}
+
+
+@pytest.fixture(autouse=True)
+def imagen_configured(monkeypatch):
+    monkeypatch.setenv("GOOGLE_PICTURE_MODEL", "imagen-4.0-fast-generate-001")  # most tests here use Imagen
 
 
 @pytest.fixture
@@ -55,6 +60,15 @@ def test_google_draws_first_and_fal_is_not_charged(both_keys, mock_http):
     a = r.json()[0]
     assert a["url"].startswith("/api/files/")  # our own copy
     assert not leaks(str(a)) and "served_by" not in a["params"] and "google" not in str(a).lower()
+
+
+def test_default_picture_model_is_the_gemini_lite_image_model(both_keys, mock_http, monkeypatch):
+    monkeypatch.setenv("GOOGLE_PICTURE_MODEL", "")  # Imagen isn't offered to every key, so it isn't the default
+    imagen = mock_http.post(IMAGEN_URL).respond(json=imagen_answer())
+    lite = mock_http.post(GEMINI_IMG_URL).respond(json=gemini_answer())
+    r = both_keys.post("/api/content/image", json={"prompt": "a cat", "count": 2, "smart_prompt": False})
+    assert r.status_code == 200, r.text
+    assert len(r.json()) == 2 and lite.call_count == 2 and not imagen.called
 
 
 def test_free_engine_choice_also_goes_to_google(both_keys, mock_http):

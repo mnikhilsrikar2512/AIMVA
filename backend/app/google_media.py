@@ -4,7 +4,7 @@ Owner decision (2026-11-21, replaces 2026-11-15 for pictures): Google makes pict
 because Imagen 4 Fast (~Rs 1.8) and the Gemini image model are cheaper than fal's finished-picture models. fal stays
 the main VIDEO engine, because Veo costs more per second than fal's LTX-2.
 
-Order for pictures:  Google (Imagen from words, Gemini image model with a reference)  ->  fal  ->  free engine
+Order for pictures:  Google (Gemini Lite image model, or Imagen if configured)  ->  fal  ->  free engine
                      (free only where FREE_AI is on; off in production). Set PICTURE_ENGINE=fal to go back to fal first.
 Order for edits:     whole-image sentence: Google Gemini image model -> fal Kontext. Spot edits, eraser, cutout,
                      "keep my product" and upscale stay on fal (they need masks, which Google's model doesn't take).
@@ -19,10 +19,10 @@ its usual neutral message. Nothing in this module ever reaches the browser: no k
 
 Settings (backend/.env):
   PICTURE_ENGINE         google (default) / fal - which engine makes pictures and whole-image edits first
-  GOOGLE_PICTURE_MODEL   default imagen-4.0-fast-generate-001 (pictures from words only)
+  GOOGLE_PICTURE_MODEL   default gemini-3.1-flash-lite-image (pictures from words only; imagen-* also works)
   GOOGLE_MEDIA_FALLBACK  true (default) / false - switch Google off as the backup (video, and pictures when fal is first)
   GOOGLE_MEDIA_API_KEY   optional; defaults to the platform Gemini key (GEMINI_API_KEY or TEXT_/AI_ gemini key)
-  GOOGLE_IMAGE_MODEL     default gemini-3.1-flash-image
+  GOOGLE_IMAGE_MODEL     default gemini-3.1-flash-lite-image
   GOOGLE_VIDEO_MODEL     default veo-3.1-fast-generate-preview
   GOOGLE_VIDEO_RESOLUTION default 720p (cheapest)
 """
@@ -40,8 +40,10 @@ log = logging.getLogger(__name__)
 
 API = "https://generativelanguage.googleapis.com/v1beta"
 NAME = "the Google engine"  # what ProviderError messages say; they are logged, never shown to customers
-DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image"  # with a reference picture, and for edits
-DEFAULT_PICTURE_MODEL = "imagen-4.0-fast-generate-001"  # from words only: the cheapest finished picture
+DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-lite-image"  # with a reference picture, and for edits
+# From words only. Imagen isn't offered to every key (checked 2026-11-21: ListModels shows no imagen-* models), so the
+# default is the Gemini Lite image model; set GOOGLE_PICTURE_MODEL=imagen-... to use Imagen where it is available.
+DEFAULT_PICTURE_MODEL = "gemini-3.1-flash-lite-image"
 IMAGEN_ASPECTS = ("1:1", "3:4", "4:3", "9:16", "16:9")
 DEFAULT_VIDEO_MODEL = "veo-3.1-fast-generate-preview"
 IMAGE_ASPECTS = ("1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9")
@@ -126,7 +128,9 @@ def generate_images(k: str, prompt: str, width: int, height: int, count: int = 1
     """List of PNG/JPEG bytes: Imagen from words alone, the Gemini image model when there's a reference picture.
     Raises P.ProviderError on any failure, including a free key that can't make pictures."""
     if not reference:
-        return imagen_images(k, prompt, width, height, count)
+        if picture_model().startswith("imagen"):
+            return imagen_images(k, prompt, width, height, count)
+        return gemini_images(k, prompt, width, height, count, model=picture_model())
     return gemini_images(k, prompt, width, height, count, reference)
 
 
@@ -156,9 +160,9 @@ def edit_image(k: str, image_png: bytes, instruction: str) -> bytes:
 
 
 def gemini_images(k: str, prompt: str, width: int, height: int, count: int = 1,
-                  reference: Optional[str] = None) -> list:
+                  reference: Optional[str] = None, model: Optional[str] = None) -> list:
     """The Gemini image model makes one picture per call, so `count` calls (capped)."""
-    model = image_model()
+    model = model or image_model()
     parts = [{"text": prompt}]
     if reference:
         try:
