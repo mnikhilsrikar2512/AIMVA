@@ -1,13 +1,12 @@
 // Home: one promise, how it works, what's inside, who it's for, questions. Each section says something new.
-import { useRef, useState } from "react";
-import { useInView } from "framer-motion";
-import { MotionConfig, motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, MotionConfig, motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowRight, AudioLines, BarChart3, Check, ChevronDown, Globe, Image, Megaphone, MessageCircle, Users } from "lucide-react";
 import { Heading, MarketingLayout, cx, signupHref, useSeo } from "../components/marketing/Site";
 import { USE_CASES } from "../components/marketing/useCases";
 import { useAuth } from "../lib/auth";
-import MascotHero, { Finale, Story } from "../components/marketing/MascotHero";
+import MascotHero, { Finale, StoryFilm } from "../components/marketing/MascotHero";
 import { Mascot } from "../components/Mascot";
 import ReplyScene from "../components/marketing/ReplyScene";
 
@@ -68,11 +67,52 @@ function Steps() {
   );
 }
 
-/** The mascot hops in when its section scrolls into view (owner: "he can jump on boxes"). */
-function Perch({ mood, say, size = 84, sayAlign = "left", className }) {
+/** Each section plays in as you scroll to it: it rises, comes into focus and settles, exactly with your scroll. */
+function Scene({ children }) {
   const ref = useRef(null);
-  const seen = useInView(ref, { once: true, margin: "-20% 0px" });
-  return <div ref={ref} className={cx("hidden md:block", className)} style={{ width: size }}>{seen && <Mascot mood={mood} size={size} arrive="hop" say={say} sayAlign={sayAlign} />}</div>;
+  const reduce = useReducedMotion();
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "start 0.35"] });
+  const p = useSpring(scrollYProgress, { stiffness: 120, damping: 30, mass: 0.4 });
+  const y = useTransform(p, [0, 1], [90, 0]);
+  const opacity = useTransform(p, [0, 0.7], [0, 1]);
+  const scale = useTransform(p, [0, 1], [0.96, 1]);
+  const filter = useTransform(p, [0, 0.8], ["blur(8px)", "blur(0px)"]);
+  if (reduce) return <div ref={ref}>{children}</div>;
+  return <motion.div ref={ref} style={{ y, opacity, scale, filter }}>{children}</motion.div>;
+}
+
+// He travels down the page with you (owner: "an animated story when scrolling down"): one small companion in the
+// corner who reacts to the part you are reading. He steps aside where he is already on stage (the hero, the film, the end).
+const BEATS = {
+  how: { mood: "pointing", say: "Three steps. The middle one is me." },
+  reply: { mood: "happy", say: "Hindi, Telugu, Hinglish. I reply in theirs." },
+  features: { mood: "data", say: "Every lead, one list. Tidy." },
+  who: { mood: "wink", say: "If you'd rather do the work, I'm yours." },
+  faq: { mood: "thinking", say: "Ask me anything. Really." },
+};
+function Companion() {
+  const [beat, setBeat] = useState(null);
+  useEffect(() => {
+    const ids = ["hero", "how", "story", "reply", "features", "who", "faq", "finale"];
+    const els = ids.map((id) => document.getElementById(id)).filter(Boolean);
+    const io = new IntersectionObserver((entries) => {
+      const vis = entries.filter((e) => e.isIntersecting).sort((x, y) => y.intersectionRatio - x.intersectionRatio)[0];
+      if (vis) setBeat(BEATS[vis.target.id] ? vis.target.id : null);
+    }, { threshold: [0, 0.25, 0.5], rootMargin: "-35% 0px -35% 0px" });
+    els.forEach((e) => io.observe(e));
+    return () => io.disconnect();
+  }, []);
+  const b = beat && BEATS[beat];
+  return (
+    <AnimatePresence>
+      {b && (
+        <motion.div key="companion" initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 60 }}
+          transition={{ type: "spring", stiffness: 160, damping: 18 }} className="pointer-events-none fixed bottom-6 right-6 z-30 hidden md:block">
+          <Mascot mood={b.mood} say={b.say} size={92} key={beat} arrive="hop" />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 function Faq() {
@@ -97,32 +137,37 @@ export default function Landing() {
     <MotionConfig reducedMotion="user">
       <MarketingLayout from="home">
         <MascotHero user={user} />
+        <Companion />
 
         {/* How it works */}
         <section id="how" className="scroll-mt-20 border-t border-line">
+          <Scene>
           <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
             <div className="flex items-end justify-between gap-6">
               <Heading label="How it works" title="Three steps, and the middle one runs itself." />
-              <Perch mood="cheeky" say="The middle one is me." className="mr-10" />
             </div>
             <Steps />
           </div>
+          </Scene>
         </section>
 
         {/* The story the hero used to tell, read at your own pace */}
-        <Story user={user} />
+        <StoryFilm user={user} />
 
         {/* The reply: the lead's language in, the same language out */}
         <section id="reply" className="scroll-mt-20 border-t border-line">
+          <Scene>
           <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
             <Heading label="While you're busy" title="A WhatsApp hello in their language, within seconds."
               sub="When a lead writes in Hindi, Telugu, Hinglish or another language, the hello goes back in the same one. Then your AI assistant calls them back." />
             <ReplyScene />
           </div>
+          </Scene>
         </section>
 
         {/* What's inside: a list, not a grid of boxes */}
         <section id="features" className="scroll-mt-20 border-t border-line">
+          <Scene>
           <div className="mx-auto grid max-w-6xl gap-8 px-4 py-14 sm:gap-12 sm:px-6 sm:py-20 lg:grid-cols-[0.8fr_1.2fr] lg:py-24">
             <div className="lg:sticky lg:top-28 lg:self-start">
               <Heading label="What's inside" title="Seven tools that share one lead list." sub="A lead from an ad, a page, a call or a WhatsApp message is the same person in every tool, with one history." />
@@ -144,10 +189,12 @@ export default function Landing() {
               ))}
             </ul>
           </div>
+          </Scene>
         </section>
 
         {/* Who it's for: a teaser, the detail lives on /use-cases */}
-        <section className="border-t border-line">
+        <section id="who" className="border-t border-line">
+          <Scene>
           <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
             <Heading label="Who it's for" title="Built for people who'd rather be doing the work." />
             <ul className="mt-8 grid gap-x-12 gap-y-6 sm:mt-12 md:grid-cols-3 md:gap-y-0">
@@ -162,17 +209,19 @@ export default function Landing() {
               ))}
             </ul>
           </div>
+          </Scene>
         </section>
 
         {/* Questions */}
         <section id="faq" className="scroll-mt-20 border-t border-line">
+          <Scene>
           <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
             <div className="flex items-end justify-between gap-6">
               <Heading label="Questions" title="Good to know." />
-              <Perch mood="thinking" say="Ask me anything. Really." size={72} />
             </div>
             <Faq />
           </div>
+          </Scene>
         </section>
 
         <Finale user={user} />

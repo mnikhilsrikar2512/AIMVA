@@ -140,7 +140,7 @@ export default function MascotHero({ user }) {
   );
 
   return (
-    <section ref={ref} aria-label="AIMVA" onPointerMove={onMove} className="relative overflow-hidden bg-[#0b1b20] text-white">
+    <section id="hero" ref={ref} aria-label="AIMVA" onPointerMove={onMove} className="relative overflow-hidden bg-[#0b1b20] text-white">
       {/* Slow aurora: two soft lights drifting behind everything */}
       <motion.div aria-hidden style={{ y: glowY }} className="pointer-events-none absolute inset-0">
         <motion.div className="absolute left-[55%] top-[10%] size-[760px] rounded-full opacity-25 blur-3xl"
@@ -260,7 +260,7 @@ export function Finale({ user }) {
   const [settled, setSettled] = useState(false);
   useEffect(() => { if (!seen) return undefined; const t = setTimeout(() => setSettled(true), 2600); return () => clearTimeout(t); }, [seen]);
   return (
-    <section ref={ref} aria-labelledby="finale-h" className="relative overflow-hidden bg-[#0b1b20] text-white">
+    <section id="finale" ref={ref} aria-labelledby="finale-h" className="relative overflow-hidden bg-[#0b1b20] text-white">
       <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 size-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl"
         style={{ background: `radial-gradient(circle, ${CYAN} 0%, transparent 62%)` }} />
       {STARS.slice(0, 16).map((st, i) => (
@@ -277,6 +277,93 @@ export function Finale({ user }) {
           <Link to="/tour" className="inline-flex h-12 items-center justify-center rounded-xl px-5 text-[15px] font-medium text-white/80 ring-1 ring-white/20 hover:text-white hover:ring-white/40">Take the product tour</Link>
         </div>
         <p className="mt-5 text-sm text-white/50">Free while in early access. No card needed.</p>
+      </div>
+    </section>
+  );
+}
+
+/** One step of the film: its words and card enter, hold, and leave as you scroll through its quarter. Everything is a
+ *  direct function of scroll position, so it moves exactly as fast as you scroll and never jumps. */
+function FilmStep({ step, i, n, p }) {
+  const a = i / n, b = (i + 1) / n, w = b - a;
+  const inS = [a, a + w * 0.25, b - w * 0.25, b];
+  const first = i === 0, last = i === n - 1;
+  const opacity = useTransform(p, inS, [first ? 1 : 0, 1, 1, last ? 1 : 0]);
+  const textY = useTransform(p, inS, [first ? 0 : 60, 0, 0, last ? 0 : -60]);
+  return (
+    <motion.div style={{ opacity, y: textY }} className="absolute inset-x-0 top-0">
+      <p className="text-sm font-semibold tracking-wide text-[#F2A33A]">{step.label}</p>
+      <h3 className="serif-moment mt-3 text-[26px] leading-[1.08] text-white sm:text-5xl">{step.title}</h3>
+      <p className="mt-3 max-w-md text-[15px] leading-relaxed text-white/70 sm:mt-4 sm:text-lg">{step.text}</p>
+    </motion.div>
+  );
+}
+
+/** The thing he made in that step: slides in from the right, tilts as it settles, leaves to the left. */
+function FilmCard({ step, i, n, p }) {
+  const a = i / n, b = (i + 1) / n, w = b - a;
+  const inS = [a, a + w * 0.25, b - w * 0.25, b];
+  const first = i === 0, last = i === n - 1;
+  const opacity = useTransform(p, inS, [first ? 1 : 0, 1, 1, last ? 1 : 0]);
+  const x = useTransform(p, inS, [first ? 0 : 180, 0, 0, last ? 0 : -180]);
+  const rotate = useTransform(p, inS, [first ? -2 : 8, -2, -2, last ? -2 : -10]);
+  const scale = useTransform(p, inS, [first ? 1 : 0.85, 1, 1, last ? 1 : 0.9]);
+  const Card = CARDS[step.key];
+  // mount the card only near its quarter, so its own little animation plays when it arrives
+  const [near, setNear] = useState(first);
+  useEffect(() => p.on("change", (v) => setNear(v > a - w * 0.1 && v < b + w * 0.1)), [p, a, b, w]);
+  return (
+    <motion.div style={{ opacity, x, rotate, scale }} className="absolute bottom-[3%] left-0 origin-bottom-left scale-[0.9] sm:scale-100 lg:bottom-auto lg:left-auto lg:right-0 lg:top-[44%]">
+      {near && <Card />}
+    </motion.div>
+  );
+}
+
+/** The story as a film you scroll: the stage stays, he works in the middle, and each step plays across it. */
+export function StoryFilm({ user }) {
+  const reduce = useReducedMotion();
+  const ref = useRef(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const p = useSpring(scrollYProgress, { stiffness: 140, damping: 32, mass: 0.4 });
+  const [step, setStep] = useState(0);
+  useEffect(() => p.on("change", (v) => setStep(Math.min(STEPS.length - 1, Math.max(0, Math.floor(v * STEPS.length * 0.999))))), [p]);
+  const light = useTransform(p, [0, 0.7, 1], [CYAN, CYAN, MARIGOLD]);
+  const lightBg = useTransform(light, (c) => `radial-gradient(circle, ${c} 0%, transparent 62%)`);
+  const himX = useTransform(p, [0, 0.25, 0.5, 0.75, 1], [0, -20, 10, -10, 0]);
+  const himY = useTransform(p, [0, 1], [10, -10]);
+  const bar = useTransform(p, [0, 1], ["0%", "100%"]);
+  const hero = useHeroSize();
+  const size = hero < 200 ? 100 : hero < 300 ? 150 : 190;
+  if (reduce) return <Story user={user} />;
+  return (
+    <section id="story" ref={ref} aria-labelledby="film-h" className="relative h-[420vh] scroll-mt-16 bg-[#0b1b20] text-white">
+      <div className="sticky top-14 h-[calc(100svh-3.5rem)] overflow-hidden sm:top-16 sm:h-[calc(100svh-4rem)]">
+        <motion.div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 size-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl lg:left-[62%]"
+          style={{ background: lightBg }} />
+        {STARS.map((st, i) => (
+          <span key={i} aria-hidden className="mk-star pointer-events-none absolute rounded-full bg-white" style={{ left: `${st.x}%`, top: `${st.y}%`, width: st.s, height: st.s, animationDelay: `${st.d}s` }} />
+        ))}
+        <div className="relative mx-auto flex h-full max-w-6xl flex-col px-4 pt-8 sm:px-6 sm:pt-12">
+          <p id="film-h" className="text-sm font-semibold tracking-wide text-[#5EE6F0]">One lead, start to finish</p>
+          <div className="relative mt-4 flex-1">
+            <div className="relative h-[220px] max-w-xl sm:h-[260px] lg:absolute lg:left-0 lg:top-[18%] lg:w-[46%]">
+              {STEPS.map((s, i) => <FilmStep key={s.key} step={s} i={i} n={STEPS.length} p={p} />)}
+            </div>
+            <motion.div style={{ x: himX, y: himY }} className="absolute bottom-[40%] right-0 lg:bottom-auto lg:right-auto lg:left-[56%] lg:top-[10%]">
+              <Mascot mood={STEPS[step].mood} size={size} />
+            </motion.div>
+            {/* the cards are positioned by FilmStep inside this same box */}
+            <div className="pointer-events-none absolute inset-0">
+              {STEPS.map((s, i) => <FilmCard key={s.key} step={s} i={i} n={STEPS.length} p={p} />)}
+            </div>
+          </div>
+          <div className="relative mb-5 flex items-center gap-3">
+            <span className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/15"><motion.span className="block h-full rounded-full bg-[#5EE6F0]" style={{ width: bar }} /></span>
+            <Link to={user ? "/app" : signupHref("home")} className="pointer-events-auto inline-flex h-10 items-center gap-2 rounded-xl bg-[#5EE6F0] px-5 text-sm font-semibold text-[#0b1b20] hover:bg-white">
+              {user ? "Open app" : "Start free"} <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        </div>
       </div>
     </section>
   );
